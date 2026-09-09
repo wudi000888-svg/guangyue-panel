@@ -13,6 +13,24 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import render
 import certificates
 import install
+from common import deployment_lock
+
+
+class LockTests(unittest.TestCase):
+    def test_concurrent_mutation_and_symlink_refused(self):
+        with tempfile.TemporaryDirectory() as temp:
+            lock = Path(temp) / 'lock'
+            with deployment_lock(lock):
+                with self.assertRaisesRegex(ValueError, 'another install'):
+                    with deployment_lock(lock):
+                        self.fail('a concurrent mutation acquired the lock')
+            with deployment_lock(lock):
+                pass
+            lock.unlink()
+            lock.symlink_to(Path(temp) / 'victim')
+            with self.assertRaises(OSError):
+                with deployment_lock(lock):
+                    self.fail('followed an untrusted lock symlink')
 
 
 class RenderTests(unittest.TestCase):

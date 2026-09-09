@@ -4,7 +4,7 @@
 
 ## 本地构建
 
-需要 Go 1.26.0+、Node 24 LTS、npm、Python 3、Git、curl、unzip。运行：
+需要 Go 1.26.0+、Node 24 LTS、npm、Python 3、Git、curl、unzip、OpenSSL 1.1.1+（推荐 3.x）。运行：
 
 ```bash
 bash scripts/check.sh
@@ -36,6 +36,8 @@ npm run dev
 - `core-patches/`：固定 Hysteria 补丁、上游许可证。
 - `scripts/`：构建、依赖获取、秘密/版本/链接检查、打包。
 - `docs/`：安装、使用、配置、运维、架构、发布与验收。
+
+macOS 自带 LibreSSL 不支持部署测试使用的 `x509 -checkhost`；完整部署测试应使用 OpenSSL 3 或在 Linux/CI 上运行，不应忽略证书校验。
 
 ## 验证要求
 

@@ -93,6 +93,7 @@ try:
         lines.append(hashlib.sha256((bad / name).read_bytes()).hexdigest() + '  ' + name)
     (bad / 'SHA256SUMS').write_text('\n'.join(lines) + '\n')
     assert run(sys.executable, str(bundle / 'deploy/upgrade.py'), '--bundle', str(bad), '--apply', success=False).returncode != 0
+    assert any(p.read_bytes() == b'#!/bin/sh\nexit 42\n' for p in Path('/root/guangyue-backups').glob('upgrade-*/failed-app/bin/guangyue')), 'fault did not reach rollback'
     install.health()
     _, cookie = api('/api/login', initial)
     restored, _ = api('/api/subscription', cookie=cookie)

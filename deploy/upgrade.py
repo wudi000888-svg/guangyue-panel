@@ -5,16 +5,19 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 sys.dont_write_bytecode = True
 from install import APP, STATE, CONFIG, UNITS, run, health, verify_bundle
+from common import deployment_lock
 
 
 def upgrade(bundle):
-    backup = Path('/root/guangyue-backups') / ('upgrade-' + time.strftime('%Y%m%d-%H%M%S'))
-    backup.mkdir(parents=True, mode=0o700)
-    os.chmod(backup.parent, 0o700)
+    backup_root = Path('/root/guangyue-backups')
+    backup_root.mkdir(mode=0o700, exist_ok=True)
+    os.chmod(backup_root, 0o700)
+    backup = Path(tempfile.mkdtemp(prefix='upgrade-' + time.strftime('%Y%m%d-%H%M%S') + '-', dir=backup_root))
     ready = False
     run('systemctl', 'stop', *UNITS)
     try:
@@ -91,6 +94,10 @@ def main():
 
 if __name__ == '__main__':
     try:
-        main()
+        if '--apply' in sys.argv:
+            with deployment_lock():
+                main()
+        else:
+            main()
     except (ValueError, OSError, subprocess.CalledProcessError) as exc:
         raise SystemExit('Upgrade failed: ' + (str(exc) if isinstance(exc, ValueError) else type(exc).__name__))

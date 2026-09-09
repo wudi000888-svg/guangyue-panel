@@ -13,6 +13,7 @@ import tempfile
 import time
 import uuid
 from pathlib import Path
+from common import deployment_lock
 
 
 def run(*args, data=None):
@@ -117,6 +118,11 @@ def main():
 
 if __name__ == '__main__':
     try:
-        main()
+        # --initial is only called by the installer while it owns the same lock.
+        if '--initial' in __import__('sys').argv:
+            main()
+        else:
+            with deployment_lock():
+                main()
     except Exception as exc:
         raise SystemExit('Certificate deployment failed: ' + type(exc).__name__)

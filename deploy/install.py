@@ -18,6 +18,7 @@ import urllib.request
 from pathlib import Path
 from render import domain, render
 from certificates import validate
+from common import deployment_lock
 
 APP = Path('/opt/guangyue-personal')
 STATE = Path('/var/lib/guangyue')
@@ -138,9 +139,10 @@ def health():
 
 def install(args):
     bundle = args.bundle.resolve()
-    backup = Path('/root/guangyue-backups') / ('install-' + time.strftime('%Y%m%d-%H%M%S'))
-    backup.mkdir(parents=True, mode=0o700)
-    os.chmod(backup.parent, 0o700)
+    backup_root = Path('/root/guangyue-backups')
+    backup_root.mkdir(mode=0o700, exist_ok=True)
+    os.chmod(backup_root, 0o700)
+    backup = Path(tempfile.mkdtemp(prefix='install-' + time.strftime('%Y%m%d-%H%M%S') + '-', dir=backup_root))
     shutil.copy2('/etc/nginx/nginx.conf', backup / 'nginx.conf')
     created = []
     try:
@@ -243,11 +245,13 @@ def main():
     p.add_argument('--key', required=True, type=Path)
     p.add_argument('--apply', action='store_true')
     args = p.parse_args()
-    preflight(args)
-    print('Preflight passed. Ports, bundle, certificate, Nginx modules and worker identity checked.')
     if args.apply:
-        install(args)
+        with deployment_lock():
+            preflight(args)
+            print('Preflight passed. Ports, bundle, certificate, Nginx modules and worker identity checked.')
+            install(args)
     else:
+        preflight(args)
         print('Read-only check. Add --apply to install.')
 
 
