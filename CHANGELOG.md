@@ -8,6 +8,7 @@
 - Vue Router 页面懒加载、Pinia 偏好与权限状态、统一列表分页、中英文界面。
 - 增加双版本安装、SQLite→PostgreSQL 迁移、Pro 便携备份和数据库级升级回滚。
 - 主许可改为 LGPL-3.0-only；保留历史 MIT 和第三方许可。
+- 验证双版本 systemd 安装与回滚、现有站点 Pro 迁移及真实 VLESS/HY2 TCP/UDP；修复 PostgreSQL 流量汇总字段歧义。
 
 
 ## 0.14.0 — 开源准备版

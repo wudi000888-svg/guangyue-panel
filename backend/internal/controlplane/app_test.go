@@ -280,19 +280,29 @@ func TestTrafficCheckpointRestartAndQuota(t *testing.T) {
 		t.Fatal("duplicate sample double counted")
 	}
 	c.Value = 350
-	_ = a.store.account([]Counter{c})
+	if err := a.store.account([]Counter{c}); err != nil {
+		t.Fatal(err)
+	}
 	c.Generation = "2"
 	c.Value = 200
-	_ = a.store.account([]Counter{c})
+	if err := a.store.account([]Counter{c}); err != nil {
+		t.Fatal(err)
+	}
 	r, _ = a.store.record(u.ID)
 	if r.Download != 550 || r.Active() {
 		t.Fatal("restart counter or quota incorrect")
 	}
 	c.Value = 10
-	_ = a.store.account([]Counter{c})
+	if err := a.store.account([]Counter{c}); err != nil {
+		t.Fatal(err)
+	}
 	r, _ = a.store.record(u.ID)
 	if r.Download != 560 {
 		t.Fatal("counter reset lost traffic")
+	}
+	var total int64
+	if err := a.store.db.QueryRow("SELECT SUM(download) FROM traffic WHERE user_id=?", u.ID).Scan(&total); err != nil || total != 560 {
+		t.Fatalf("traffic history does not match accounted usage: %d, %v", total, err)
 	}
 }
 func TestEncryptedSecretsAndTampering(t *testing.T) {

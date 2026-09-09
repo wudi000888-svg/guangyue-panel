@@ -16,6 +16,8 @@ func TestPostgresBehaviors(t *testing.T) {
 		run  func(*testing.T)
 	}{
 		{"authentication", TestUserIsolationAndCSRF},
+		{"traffic_checkpoints", TestTrafficCheckpointRestartAndQuota},
+		{"no_logs_accounting", TestRuntimeNoLogsPreservesAccountingAndExistingHistory},
 		{"subscription_rotation", TestSubscriptionsAndCredentialRotation},
 		{"pool_encryption", TestPoolAuthorizationEncryptionAndDuplicateProtection},
 		{"source_cascade", TestSourceDeletionCascadesOwnedExitsNodesAndCredentials},

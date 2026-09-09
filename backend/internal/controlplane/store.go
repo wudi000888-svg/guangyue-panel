@@ -262,7 +262,7 @@ func (s *Store) account(counters []Counter) error {
 			return err
 		}
 		if recordHistory {
-			if _, err = tx.Exec("INSERT INTO traffic(hour,user_id,upload,download) VALUES(?,?,?,?) ON CONFLICT(hour,user_id) DO UPDATE SET upload=upload+excluded.upload,download=download+excluded.download", time.Now().Unix()/3600*3600, id, d.up, d.down); err != nil {
+			if _, err = tx.Exec("INSERT INTO traffic(hour,user_id,upload,download) VALUES(?,?,?,?) ON CONFLICT(hour,user_id) DO UPDATE SET upload=traffic.upload+excluded.upload,download=traffic.download+excluded.download", time.Now().Unix()/3600*3600, id, d.up, d.down); err != nil {
 				return err
 			}
 		}

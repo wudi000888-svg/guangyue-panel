@@ -1,4 +1,6 @@
-# 0.14.0 发布验收记录
+# 发布验收记录
+
+## 0.14.0 历史基线
 
 本版本由独立源码树构建，没有上传生产状态。以下记录具体检查与边界。
 
@@ -13,7 +15,7 @@
 | 发布目录检查 | 版本一致、相对文档链接、禁止文件和私人路径检查通过 |
 | 本地 UI | 使用合成账号/流量检查中文/English、简易/专业导航与工作台；没有使用生产截图 |
 
-完整安装基线：[CI 34372630967](https://github.com/wudi000888-svg/guangyue-panel/actions/runs/34372630967)。最终提交的最新验证结果请查看[仓库 Actions](https://github.com/wudi000888-svg/guangyue-panel/actions)。这些链接在仓库私有阶段需要访问权限。
+完整安装基线：[CI 34372630967](https://github.com/wudi000888-svg/guangyue-panel/actions/runs/34372630967)。最终提交的最新验证结果请查看[仓库 Actions](https://github.com/wudi000888-svg/guangyue-panel/actions)。
 
 ## 部署和验证边界
 
@@ -29,7 +31,7 @@ CI 与源码构建固定使用 Go 1.26.8，发布包包含 Go BSD-3-Clause 许�
 
 `govulncheck v1.1.4`（Go 1.26.8）未发现被本面板调用的漏洞，也未发现被导入包的漏洞。模块级别提示 GO-2026-5932：`golang.org/x/crypto/openpgp` 已停止维护；本面板不导入该包，使用同模块的 bcrypt 等维护包。此结果不等于所有第三方代理核心都经过完整安全审计。
 
-## GitHub 设置边界
+## 0.14.0 私有准备阶段的 GitHub 设置（历史记录）
 
 仓库创建为 Private。已配置依赖更新与告警；私密漏洞报告 API 在私有阶段返回不可用（404），不能记录成已启用。主分支保护 API 明确要求 GitHub Pro 或公开仓库，当前未开启。转公开时按 RELEASE.md 再启用可用的安全与分支保护功能。不会自动更改 visibility。
 
@@ -44,4 +46,14 @@ CI 与源码构建固定使用 Go 1.26.8，发布包包含 Go BSD-3-Clause 许�
 - 当前待发布源码与 Git 历史 gitleaks 扫描无泄露。测试数据与下载的上游测试密钥仅在被排除的开发缓存中，不在发布树。
 - govulncheck 实际调用路径无已知漏洞。模块级另标记未被本项目使用的 `golang.org/x/crypto/openpgp`（GO-2026-5932，无修复版本）；本项目不导入该包。
 
-部署 CI、生产切换与客户端实测结果在完成后追加。上述结果仅适用于本次改动，不能代替未来版本验证。
+### 安装、迁移与真实网络
+
+- [双版本安装 CI 34391028327](https://github.com/wudi000888-svg/guangyue-panel/actions/runs/34391028327) 全部成功：Ubuntu 22.04 Lite 安装、Lite→Pro 迁移与升级；Ubuntu 24.04 Pro 安装与升级；两条路径均验证注入故障后的回滚。
+- Debian 13.2 amd64 现有站点已完成 SQLite→PostgreSQL Pro 升级，使用专属 PostgreSQL 17 schema 与回环 Redis 缓存，设置数据库、缓存与控制器内存上限。迁移前后原用户身份、密码哈希、订阅凭据（解密后比较）、主密钥、节点和出口资源保持一致；受限离线备份保留。
+- 使用升级前导出的同一份真实客户端配置，从 macOS 分别完成 VLESS Reality/Vision 和 HY2 的 HTTPS 出口核验、SOCKS5 UDP DNS 查询与 1 MiB 下载。两种协议均成功，出口符合预期；没有把短下载样本当作持续带宽性能承诺。
+- 本机现有 TUN 路径导致 VLESS 收到伪装站证书；SSH 转发隔离和实际网卡绑定对照成功。最终 VLESS 使用 Xray 绑定物理网卡直连完成验收，未修改服务端 Reality 密钥或 SNI。
+- 线上 Chromium 使用原管理员登录，验证 14 个页面、Pro 品牌、PostgreSQL/Redis 状态、无控制器错误，以及 390px 手机宽度无横向溢出。生产截图、凭据与服务器配置没有进入源码或发布包。
+- 修复迁移站点的历史证书域名配置，仅保留该站点实际解析到本机的域名；真实证书重新签发成功，Certbot 自动续期模拟与部署钩子验证通过。
+- 线上流量采样揭示 PostgreSQL `ON CONFLICT` 中累加字段必须限定表名，已修复。补充真实 PostgreSQL 的计费检查点、计数器重置、配额和普通/无日志模式切换回归，SQLite 与 PostgreSQL 均通过。
+
+最终 tag 对应的全量测试、安装与发布包来源，以[仓库 Actions](https://github.com/wudi000888-svg/guangyue-panel/actions)和 [v0.15.0 Release](https://github.com/wudi000888-svg/guangyue-panel/releases/tag/v0.15.0) 为准。上述结果仅适用于本次改动，不能代替未来版本验证。

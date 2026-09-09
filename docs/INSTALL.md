@@ -57,12 +57,13 @@ sudo certbot certonly --webroot -w /var/www/html \
 
 ### 从 GitHub Release 获取
 
-仓库处于私有阶段时，先通过 GitHub CLI 登录有访问权限的账号。草稿 Release 也需要仓库权限；公开后可以直接从 Releases 下载同名文件。不要把访问令牌写进命令历史或脚本。
+正式版本可直接从公开的 GitHub Releases 下载，无需 GitHub 账号。以下命令下载固定版本和校验文件。
 
 ```bash
-# 在工作电脑或服务器执行；请使用已经发布/准备好的固定版本。
-gh release download v0.15.0 --repo wudi000888-svg/guangyue-panel \
-  --pattern 'guangyue-panel-0.15.0-linux-amd64.tar.gz' --pattern 'SHA256SUMS'
+# 在工作电脑或服务器执行。
+release_url=https://github.com/wudi000888-svg/guangyue-panel/releases/download/v0.15.0
+curl -fL --retry 3 -O "$release_url/guangyue-panel-0.15.0-linux-amd64.tar.gz"
+curl -fL --retry 3 -O "$release_url/SHA256SUMS"
 # Linux：
 sha256sum --ignore-missing -c SHA256SUMS
 # macOS 对已下载文件可用 shasum -a 256，并与 SHA256SUMS 对照。
