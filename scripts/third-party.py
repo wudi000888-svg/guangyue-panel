@@ -32,7 +32,7 @@ def collect(name, version, directory, ecosystem, license_id='NOASSERTION'):
 
 def go_modules(directory):
     go = os.environ.get('GY_GO', 'go')
-    subprocess.run([go, 'mod', 'download'], cwd=directory, check=True)
+    subprocess.run([go, 'mod', 'download', 'all'], cwd=directory, check=True)
     raw = subprocess.check_output([go, 'list', '-m', '-json', 'all'], cwd=directory).decode()
     decoder = json.JSONDecoder()
     while raw.strip():

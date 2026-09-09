@@ -20,8 +20,12 @@
 - 支持标准 Debian 12/13、Ubuntu 22.04/24.04 amd64 部署路径；完整 systemd 安装矩阵实际覆盖 Ubuntu 22.04/24.04。Debian 容器验证了 Python/OpenSSL 部署用例，未声称完成 Debian 全套 systemd 安装。
 - 核心 QUIC/TCP/UDP 测试与真实 Nginx HTTPS 已执行；本次没有改动现有生产服务器，也没有将开发模式 health 或模拟流量当作公网吞吐实测。
 - 恢复备份相关的 Go 回归在本版本通过；跨文件恢复不是断电原子事务。
-- 191 个锁定依赖记录与许可证汇总由构建脚本生成；SPDX 未自动识别项保留 NOASSERTION，不冒充人工法律审计。
+- 全部模块图对应的锁定依赖记录与许可证汇总由构建脚本生成，数量以 Release 的 SBOM 为准；SPDX 未自动识别项保留 NOASSERTION，不冒充人工法律审计。
 - 当前发布未配置独立离线签名；产物有 SHA256 与版本来源记录。
+
+## Go 依赖漏洞扫描
+
+`govulncheck v1.1.4`（Go 1.26.8）未发现被本面板调用的漏洞，也未发现被导入包的漏洞。模块级别提示 GO-2026-5932：`golang.org/x/crypto/openpgp` 已停止维护；本面板不导入该包，使用同模块的 bcrypt 等维护包。此结果不等于所有第三方代理核心都经过完整安全审计。
 
 ## GitHub 设置边界
 
