@@ -13,6 +13,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import render
 import certificates
 import install
+import infrastructure
+import json
 from common import deployment_lock
 
 
@@ -130,3 +132,22 @@ class BundleTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+class EditionTests(unittest.TestCase):
+    def test_missing_infrastructure_and_downgrade_refused(self):
+        with self.assertRaises(ValueError):infrastructure.edition_config({},'pro','site_a')
+        with self.assertRaises(ValueError):infrastructure.edition_config({'edition':'pro'},'lite','site_a')
+        for site in ['../../outside','UPPER','site-a','a'*41]:
+            with self.assertRaises(ValueError):infrastructure.edition_config({},'lite',site)
+    def test_profile_permissions_and_resource_budgets(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path=Path(temp)/'profile.json'
+            path.write_text(json.dumps({'database':{'driver':'postgres','dsn':'postgres://localhost/fixture'},'redis_url':'redis://localhost/0'}))
+            path.chmod(0o644)
+            with self.assertRaises(ValueError):infrastructure.read_profile(path)
+            path.chmod(0o600)
+            pro=infrastructure.edition_config({'reality_public':'stable'},'pro','site_a',path)
+            self.assertEqual(pro['reality_public'],'stable')
+            unit=Path(install.__file__).parent/'guangyue.service'
+            self.assertIn('MemoryMax=384M',infrastructure.service_text(unit,'pro'))
+            self.assertIn('MemoryMax=160M',infrastructure.service_text(unit,'lite'))

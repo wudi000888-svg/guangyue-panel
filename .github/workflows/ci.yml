@@ -14,6 +14,21 @@ jobs:
   check:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: ci-fixture-only
+          POSTGRES_DB: guangyue_test
+        ports: ['5432:5432']
+        options: --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 12
+      redis:
+        image: redis:8-alpine
+        ports: ['6379:6379']
+        options: --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      GY_TEST_POSTGRES_DSN: postgres://postgres:ci-fixture-only@127.0.0.1:5432/guangyue_test?sslmode=disable # gitleaks:allow ephemeral CI fixture
+      GY_TEST_REDIS_URL: redis://127.0.0.1:6379/0
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -54,9 +69,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, ubuntu-24.04]
+        include:
+          - os: ubuntu-22.04
+            edition: lite
+          - os: ubuntu-24.04
+            edition: pro
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - name: Download build artifact using GitHub CLI
@@ -74,5 +93,7 @@ jobs:
           cd guangyue-panel-*-linux-amd64
           GY_BIN_DIR="$PWD/bin" bash scripts/fetch-xray.sh
           GY_BIN_DIR="$PWD/bin" bash scripts/fetch-mihomo.sh
-      - name: Real systemd installation, certificate rotation, upgrade and rollback
-        run: sudo --preserve-env=GITHUB_ACTIONS python3 deploy/tests/integration.py "$(realpath build/releases/guangyue-panel-*-linux-amd64)"
+      - name: Real systemd installation, certificate rotation, edition migration and rollback
+        env:
+          GY_INTEGRATION_EDITION: ${{ matrix.edition }}
+        run: sudo --preserve-env=GITHUB_ACTIONS,GY_INTEGRATION_EDITION python3 deploy/tests/integration.py "$(realpath build/releases/guangyue-panel-*-linux-amd64)"

@@ -2,7 +2,7 @@
 
 **A next-generation enterprise solution for cross-border e-commerce teams.**
 
-A lightweight, single-VPS console for users, proxy nodes, private egress resources and a separate public proxy pool. Built with Go, SQLite and Vue 3; Redis, PostgreSQL and Docker are not required.
+A network resource console for cross-border commerce teams. Lite uses Go, SQLite and Vue 3 on one VPS. Pro adds PostgreSQL, Redis, durable background tasks and authenticated management of independent VPS sites. See [edition selection and Pro setup](docs/EDITIONS.md).
 
 [中文](README.md) · [Installation](docs/INSTALL.md) · [User guide](docs/USER_GUIDE.md) · [Operations](docs/OPERATIONS.md)
 
@@ -36,4 +36,4 @@ Quality reports retain provider, timestamp, unavailable and conflicting results.
 
 See [CONTRIBUTING](CONTRIBUTING.md) for tests and reproducible build instructions, [architecture](docs/ARCHITECTURE.md), [configuration](docs/CONFIGURATION.md), [security](SECURITY.md), and [release preparation](docs/RELEASE.md).
 
-The panel is MIT licensed, retaining the original fake-ui notice. The custom Hysteria patch is MIT. Xray is MPL-2.0 and Mihomo is GPL-3.0; see [third-party notices](THIRD_PARTY_NOTICES.md). Documentation structure is inspired by Sub2API; its branding and screenshots are not included.
+The panel is LGPL-3.0-only licensed from 0.15.0, retaining the original fake-ui MIT notice in `licenses/guangyue-legacy-MIT.txt`. The accompanying GPL-3.0 text is included. The custom Hysteria patch is MIT. Xray is MPL-2.0 and Mihomo is GPL-3.0; see [third-party notices](THIRD_PARTY_NOTICES.md). Documentation structure is inspired by Sub2API; its branding and screenshots are not included.

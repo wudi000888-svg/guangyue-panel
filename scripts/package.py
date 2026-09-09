@@ -23,6 +23,8 @@ for src, dest in [('frontend/dist', 'web'), ('deploy', 'deploy'), ('scripts', 's
 for file in ['VERSION', 'README.md', 'README_EN.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'CHANGELOG.md', 'SECURITY.md', 'CONTRIBUTING.md']:
     shutil.copyfile(root / file, bundle / file)
 shutil.copyfile(root / 'LICENSE', bundle / 'licenses/PANEL-LICENSE.txt')
+for license_file in (root / 'licenses').iterdir():
+    if license_file.is_file(): shutil.copyfile(license_file, bundle / 'licenses' / license_file.name)
 for path in (root / 'core-patches').glob('*LICENSE*'):
     shutil.copyfile(path, bundle / 'licenses' / path.name)
 manifest = []

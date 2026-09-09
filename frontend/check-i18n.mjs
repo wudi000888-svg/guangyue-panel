@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 const en=JSON.parse(fs.readFileSync(new URL('./src/locales/en.json',import.meta.url),'utf8'));
 const missing=new Set();
-for(const file of fs.readdirSync(new URL('./src/',import.meta.url)).filter(x=>x.endsWith('.vue'))){
+for(const file of fs.readdirSync(new URL('./src/',import.meta.url),{recursive:true}).filter(x=>/\.(vue|ts)$/.test(x)&&!x.endsWith('.test.ts'))){
  const text=fs.readFileSync(new URL('./src/'+file,import.meta.url),'utf8');
  for(const m of text.matchAll(/\bt\(\s*(['"])([^'"\n]+)\1\s*\)/g))if(/[\u3400-\u9fff]/u.test(m[2])&&!en[m[2]])missing.add(file+': '+m[2]);
 }

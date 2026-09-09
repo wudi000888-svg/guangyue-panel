@@ -9,7 +9,9 @@ sudo systemctl show guangyue guangyue-xray guangyue-hy2 -p MemoryCurrent -p Memo
 sudo ss -lntup
 ```
 
-面板 Go 软内存目标为 48 MiB；systemd 面板限制为 MemoryHigh=96M / MemoryMax=160M，Xray 与 HY2 各 128M / 256M。这些是控制参数，不是总占用承诺。代理桥接进程属于面板 cgroup，导入大量机场资源时需要观察整体内存。内存不足可能被 OOM 终止。
+Lite 面板 Go 软内存目标为 48 MiB；systemd 面板限制为 MemoryHigh=96M / MemoryMax=160M，Xray 与 HY2 各 128M / 256M。这些是控制参数，不是总占用承诺。代理桥接进程属于面板 cgroup，导入大量机场资源时需要观察整体内存。内存不足可能被 OOM 终止。
+
+Pro 面板软内存目标 192 MiB，MemoryHigh=256M / MemoryMax=384M；Redis 实例 maxmemory=64 MiB / MemoryMax=128M，PostgreSQL shared_buffers=128 MiB、40 个连接上限。数据库实际内存随连接和查询变化。
 
 需要调整时用 `systemctl edit guangyue` 添加 override，再 daemon-reload 和 restart；不要改发布包内 unit 作为持久配置。先降低公共采集并发、数量、测速频率，再评估提高限额。不要盲目开启无限并发。
 
@@ -34,6 +36,8 @@ sudo python3 deploy/upgrade.py --bundle "$PWD" --apply
 
 **备份不是断电原子事务。** 升级期间不要重启主机。回滚失败、磁盘 I/O 错误或异常断电时，使用保留的目录人工恢复，并逐项验证。跨版本数据库迁移以变更日志为准，不保证任意降级。
 
+Pro 升级还会保存站点专属 `postgres.dump`（含 schema）与便携备份；失败时先恢复数据库 schema，再启动旧应用。仅还原状态目录不能回滚 Pro 数据库。Lite→Pro 操作参见[版本迁移](EDITIONS.md)。
+
 ### 人工回滚
 
 `/root/guangyue-backups/upgrade-<时间>/` 包含 `state/`、`app/`、`config.json`、`units/`。停止三个服务，先把当前目录另存，然后将备份复制回原路径。状态目录递归归属 `guangyue:guangyue`、权限 0700，配置归属 `root:guangyue`、权限 0640。复制服务文件，daemon-reload 后启动，并验证 Nginx、面板、两种协议与用户权限。
@@ -42,7 +46,7 @@ sudo python3 deploy/upgrade.py --bundle "$PWD" --apply
 
 ## 完整备份和恢复
 
-管理员在面板下载完整备份，放到加密存储。备份包含数据库、主密钥和必要状态，是敏感资产。SQLite 数据库目前有 64 MiB 恢复上限；超出时需要先制定迁移方案，不要强行修改归档。
+管理员在面板下载完整备份，放到加密存储。备份包含数据库、主密钥和必要状态，是敏感资产。便携备份中的 SQLite 数据库目前有 64 MiB 恢复上限（Pro 导出也使用该格式）；超出时需要先制定迁移方案，不要强行修改归档。
 
 恢复必须离线：
 

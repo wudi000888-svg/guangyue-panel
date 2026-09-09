@@ -12,7 +12,7 @@ errors = []
 version = (root / 'VERSION').read_text().strip()
 if not re.fullmatch(r'\d+\.\d+\.\d+', version):
     errors.append('invalid VERSION')
-if 'const version = "' + version + '"' not in (root / 'backend/config.go').read_text():
+if 'const version = "' + version + '"' not in (root / 'backend/internal/controlplane/config.go').read_text():
     errors.append('Go version mismatch')
 for name in ['frontend/package.json', 'frontend/package-lock.json']:
     doc = json.loads((root / name).read_text())

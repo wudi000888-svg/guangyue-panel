@@ -10,6 +10,12 @@ export class ApiError extends Error {
 export const isCancelled = (error: unknown): boolean => error instanceof Error && error.name === 'AbortError';
 const aborted = () => new DOMException('Request cancelled', 'AbortError');
 let session = 0;
+let remoteSite = '';
+export function requestGeneration(): number { return session; }
+export function getRemoteSite(): string { return remoteSite; }
+export function setRemoteSite(id: string): void {
+  if (id !== remoteSite) { invalidateSession(); remoteSite = id; }
+}
 const active = new Set<AbortController>();
 const expired = new Set<() => void>();
 export function invalidateSession(): void {
@@ -31,6 +37,10 @@ async function request<T>(url: string, options: RequestInit, decode: (r: Respons
   const check = () => { if (controller.signal.aborted || generation !== session) throw aborted(); };
   try {
     check();
+    const localOnly = /^\/api\/(fleet(?:\/|$)|login$|logout$|password$|site$)/.test(url);
+    if (remoteSite && url.startsWith('/api/') && !localOnly && !new Headers(options.headers).has('X-Guangyue-Site')) {
+      options = { ...options, headers: { ...options.headers, 'X-Guangyue-Site': remoteSite } };
+    }
     const response = await fetch(url, { credentials: 'same-origin', cache: 'no-store', ...options, signal: controller.signal });
     check();
     if (!response.ok) {

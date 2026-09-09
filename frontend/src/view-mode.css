@@ -7,9 +7,10 @@
 @media(max-width:650px){
   .app-shell .topbar{height:auto;min-height:92px;flex-wrap:wrap;padding-top:10px;padding-bottom:9px;gap:7px 8px}
   .topbar .page-context{flex:1;min-width:0}
-  .topbar .top-actions{flex-basis:100%;justify-content:flex-end;margin-left:0;gap:7px}
+  .topbar .top-actions{flex-basis:100%;flex-wrap:wrap;min-width:0;justify-content:flex-end;margin-left:0;gap:7px}
   .topbar .top-actions .view-mode-switch{margin-right:auto}
-  .topbar .live-label{display:none}
+  .topbar .live-label,.topbar .inbox-bell{display:none}
+  .topbar .site-switch{max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .topbar .header-account>span:last-child{display:none}
   .topbar .language-switch select{width:75px}
 }

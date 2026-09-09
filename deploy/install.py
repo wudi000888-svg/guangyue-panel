@@ -19,6 +19,7 @@ from pathlib import Path
 from render import domain, render
 from certificates import validate
 from common import deployment_lock
+from infrastructure import edition_config, service_text
 
 APP = Path('/opt/guangyue-personal')
 STATE = Path('/var/lib/guangyue')
@@ -102,6 +103,7 @@ def preflight(args):
         if run('systemctl', 'show', unit, '--property=LoadState', '--value').strip() != 'not-found':
             raise ValueError('existing service: ' + unit)
     verify_bundle(args.bundle)
+    edition_config({},getattr(args,'edition','lite'),getattr(args,'site_id','default'),getattr(args,'infrastructure_file',None))
     render(args.panel_domain, args.node_domain, args.reality_sni, args.web_domain)
     validate(args.cert, args.key, {args.panel_domain, args.node_domain})
     nginx = run('nginx', '-T')
@@ -175,6 +177,7 @@ def install(args):
         created.append(CONFIG)
         config = json.loads(CONFIG.read_text())
         config.update(public_url='https://' + args.panel_domain, vless_host=args.node_domain, hy2_host=args.node_domain, reality_sni=args.reality_sni, reality_target=args.reality_sni + ':443', cert=str(STATE / 'tls/current/fullchain.pem'), cert_key=str(STATE / 'tls/current/privkey.pem'))
+        config=edition_config(config,getattr(args,'edition','lite'),getattr(args,'site_id','default'),getattr(args,'infrastructure_file',None))
         CONFIG.write_text(json.dumps(config, indent=2) + '\n')
         os.chown(CONFIG, 0, user.pw_gid)
         os.chmod(CONFIG, 0o640)
@@ -198,7 +201,8 @@ def install(args):
         run('nginx', '-t')
         for unit in UNITS:
             path = Path('/etc/systemd/system') / (unit + '.service')
-            shutil.copyfile(DEPLOY / path.name, path)
+            path.write_text(service_text(DEPLOY / path.name,config["edition"]) if unit=="guangyue" else (DEPLOY / path.name).read_text())
+            path.chmod(0o644)
             created.append(path)
         hook = Path('/etc/letsencrypt/renewal-hooks/deploy/guangyue-panel')
         if hook.exists():
@@ -243,6 +247,9 @@ def main():
     p.add_argument('--web-domain', action='append', default=[], type=domain)
     p.add_argument('--cert', required=True, type=Path)
     p.add_argument('--key', required=True, type=Path)
+    p.add_argument('--edition',choices=['lite','pro'],default='lite')
+    p.add_argument('--site-id',default='default')
+    p.add_argument('--infrastructure-file',type=Path)
     p.add_argument('--apply', action='store_true')
     args = p.parse_args()
     if args.apply:

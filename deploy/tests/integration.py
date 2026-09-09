@@ -15,6 +15,7 @@ if os.geteuid() != 0 or os.environ.get('GITHUB_ACTIONS') != 'true':
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import install
+import infrastructure
 
 bundle = Path(sys.argv[1]).resolve()
 temp = Path(tempfile.mkdtemp(prefix='guangyue-integration-'))
@@ -46,6 +47,10 @@ def api(path, data=None, cookie=''):
 try:
     newcert()
     command = [sys.executable, str(bundle / 'deploy/install.py'), '--bundle', str(bundle), '--panel-domain', 'panel.example.com', '--node-domain', 'node.example.com', '--cert', str(cert), '--key', str(key)]
+    edition=os.environ.get('GY_INTEGRATION_EDITION','lite')
+    if edition=='pro':
+        run(sys.executable,str(bundle/'deploy/infrastructure.py'),'--apply')
+        command+=['--edition','pro','--site-id','ci_pro','--infrastructure-file',str(infrastructure.PROFILE)]
     run(*command)
     assert not install.CONFIG.exists(), 'preflight wrote production config'
     run(*command, '--apply')
@@ -99,6 +104,24 @@ try:
     restored, _ = api('/api/subscription', cookie=cookie)
     assert sorted(n['uri'] for n in restored['nodes']) == sorted(n['uri'] for n in state['nodes']), 'rollback changed credentials'
     print('PASS failed executable rollback and credential preservation')
+    if edition=='lite':
+        run(sys.executable,str(bundle/'deploy/infrastructure.py'),'--apply')
+        run(sys.executable,str(bundle/'deploy/upgrade.py'),'--bundle',str(bundle),'--edition','pro','--site-id','ci_migrated','--infrastructure-file',str(infrastructure.PROFILE),'--apply')
+        install.health()
+        _,cookie=api('/api/login',initial)
+        migrated,_=api('/api/subscription',cookie=cookie)
+        assert sorted(n['uri'] for n in migrated['nodes'])==sorted(n['uri'] for n in state['nodes'])
+        print('PASS Lite to Pro migration preserves live subscription URIs')
+    health,_=api('/api/health');assert health['edition']=='pro'
+    run(sys.executable,str(bundle/'deploy/upgrade.py'),'--bundle',str(bundle),'--apply')
+    assert run(sys.executable,str(bundle/'deploy/upgrade.py'),'--bundle',str(bad),'--apply',success=False).returncode!=0
+    install.health()
+    _,cookie=api('/api/login',initial)
+    restored,_=api('/api/subscription',cookie=cookie)
+    assert sorted(n['uri'] for n in restored['nodes'])==sorted(n['uri'] for n in state['nodes'])
+    assert list(Path('/root/guangyue-backups').glob('upgrade-*/postgres.dump'))
+    print('PASS Pro upgrade, PostgreSQL schema rollback and credential preservation')
+
 finally:
     # Runner is ephemeral; stop only our services. Do not emit or upload state.
     subprocess.run(['systemctl', 'stop', *install.UNITS], capture_output=True)

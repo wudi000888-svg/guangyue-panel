@@ -73,6 +73,11 @@ export type State = {
   ip_pool: IPResource[];
   totals: { upload: number; download: number; active: number };
   system: {
+    edition?: 'lite' | 'pro';
+    site_id?: string;
+    database?: string;
+    cache?: string;
+    cache_degraded?: boolean;
     version: string;
     uptime: number;
     heap: number;

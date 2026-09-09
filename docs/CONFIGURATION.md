@@ -4,6 +4,12 @@
 
 | 字段 | 默认/意义 | 注意 |
 | --- | --- | --- |
+| `edition` | `lite` / `pro` | Pro 必须同时配置 PostgreSQL 与 Redis |
+| `site_id` | `default` | 小写字母开头、字母数字下划线、最多 40 字符；生产启用后不可直接修改 |
+| `database.driver` | Lite: `sqlite` / Pro: `postgres` | 禁止用 Lite 连接 PostgreSQL |
+| `database.dsn` | PostgreSQL URI | 密码仅存私有配置；远程库使用 TLS 校验 |
+| `database.max_connections` | Pro: 8 | 范围 2–64，包含独占控制连接 |
+| `redis_url` | `redis://` 或 `rediss://` | 缓存实例凭据；故障降级为数据库查询 |
 | `state_dir` | `/var/lib/guangyue` | 数据库、主密钥、核心配置、初始密码、TLS |
 | `listen` | `127.0.0.1:19100` | 面板 HTTP，仅回环 |
 | `internal_listen` | `127.0.0.1:19101` | HY2 内部鉴权，仅回环 |
@@ -37,6 +43,8 @@
 | TCP 19101 | HY2 鉴权 | 回环 |
 | TCP 19185 | Xray 管理/统计 | 回环 |
 | TCP/UDP 19186 | 节点 DNS 网关 | 回环 |
+| TCP 25433 | Pro 独立 PostgreSQL cluster | 回环 |
+| TCP 26380 | Pro 独立 Redis | 回环 |
 | TCP 19199 | HY2 统计 | 回环 |
 | TCP 21000–21255 | 按需出口桥接监听 | 回环 |
 

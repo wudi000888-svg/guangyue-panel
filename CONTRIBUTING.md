@@ -49,4 +49,6 @@ Hysteria 补丁变更必须运行其真实 QUIC/TCP/UDP 集成测试。测试使
 
 保持改动集中，描述用户可见行为、触发条件、测试与限制。修复安全问题遵循 SECURITY.md；不要在公开 issue 粘贴利用凭证。同步更新 `VERSION`、Go 版本常量、前端 package/lock 版本、文档与变更记录。发布流程只创建草稿，不自动转公开仓库。
 
-提交代码表示你有权以项目 MIT 许可证贡献该代码；第三方代码需保留其原始许可与归属。
+提交代码表示你有权以项目 LGPL-3.0-only 许可证贡献该代码；第三方代码需保留其原始许可与归属。
+
+Pro changes must run the PostgreSQL and Redis integration tests using `GY_TEST_POSTGRES_DSN` and `GY_TEST_REDIS_URL`. Use disposable databases; tests create and drop site schemas. See [edition architecture](docs/EDITIONS.md).
