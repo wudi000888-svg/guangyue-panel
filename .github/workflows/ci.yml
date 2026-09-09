@@ -20,7 +20,7 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
-          go-version-file: backend/go.mod
+          go-version: '1.26.8'
           cache-dependency-path: backend/go.sum
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -28,6 +28,9 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: bash scripts/check.sh
+      - name: Scan reachable Go vulnerabilities
+        working-directory: backend
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
       - name: Scan source and all Git history
         run: |
           go install github.com/zricethezav/gitleaks/v8@v8.24.3

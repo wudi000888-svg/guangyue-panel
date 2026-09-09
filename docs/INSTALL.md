@@ -72,7 +72,7 @@ cd guangyue-panel-0.14.0-linux-amd64
 
 ### 从源码构建
 
-在开发机安装 Go 1.26.0+、Node.js 24 LTS、npm、Git、Python 3、curl、unzip，然后：
+在开发机安装 Go 1.26.8、Node.js 24 LTS、npm、Git、Python 3、curl、unzip，然后：
 
 ```bash
 git clone https://github.com/wudi000888-svg/guangyue-panel.git
@@ -85,7 +85,7 @@ python3 scripts/third-party.py
 python3 scripts/package.py
 ```
 
-输出位于 `build/releases/`。源码构建支持 macOS/Linux 开发机，部署产物固定为 Linux amd64。Go 工具链可能按 `go.mod` 自动获取版本。编译所需内存显著高于面板运行内存，建议在工作机或 CI 构建。
+输出位于 `build/releases/`。源码构建支持 macOS/Linux 开发机，部署产物固定为 Linux amd64。Go 工具链按 `go.mod` 的 toolchain 指令固定到 1.26.8。编译所需内存显著高于面板运行内存，建议在工作机或 CI 构建。
 
 ## 5. 下载代理核心
 

@@ -14,7 +14,7 @@ elif command -v go >/dev/null 2>&1; then
 else
   go_bin=go
 fi
-[[ -x "$go_bin" ]] || { printf 'Go 1.26+ is required; install Go or set GY_GO.\n' >&2; exit 1; }
+[[ -x "$go_bin" ]] || { printf 'Go 1.26.8+ is required; install Go or set GY_GO.\n' >&2; exit 1; }
 if ! test -d "$source_dir"; then
   git -c http.version=HTTP/1.1 clone --depth 1 --branch app/v2.9.2 https://github.com/apernet/hysteria.git "$source_dir"
 fi

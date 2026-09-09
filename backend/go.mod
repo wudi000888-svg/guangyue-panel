@@ -2,6 +2,8 @@ module github.com/wudi000888-svg/guangyue-panel/backend
 
 go 1.26.0
 
+toolchain go1.26.8
+
 require (
 	golang.org/x/crypto v0.56.0
 	golang.org/x/net v0.58.0

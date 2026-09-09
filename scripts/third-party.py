@@ -44,6 +44,11 @@ def go_modules(directory):
         collect(value['Path'], value.get('Version', 'local'), entry['Dir'], 'golang')
 
 
+go = os.environ.get('GY_GO', 'go')
+goroot = subprocess.check_output([go, 'env', 'GOROOT'], cwd=root / 'backend').decode().strip()
+go_version = subprocess.check_output([go, 'env', 'GOVERSION'], cwd=root / 'backend').decode().strip().removeprefix('go')
+collect('golang-go', go_version, goroot, 'generic', 'BSD-3-Clause')
+(out / 'GO-LICENSE.txt').write_text((Path(goroot) / 'LICENSE').read_text())
 go_modules(root / 'backend')
 for source in sorted((root / '.cache').glob('hysteria-node-*')):
     if (source / 'app/go.mod').is_file():

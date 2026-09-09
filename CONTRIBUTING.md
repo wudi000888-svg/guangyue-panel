@@ -4,7 +4,7 @@
 
 ## 本地构建
 
-需要 Go 1.26.0+、Node 24 LTS、npm、Python 3、Git、curl、unzip、OpenSSL 1.1.1+（推荐 3.x）。运行：
+需要 Go 1.26.8、Node 24 LTS、npm、Python 3、Git、curl、unzip、OpenSSL 1.1.1+（推荐 3.x）。运行：
 
 ```bash
 bash scripts/check.sh
