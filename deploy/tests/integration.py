@@ -39,7 +39,7 @@ def api(path, data=None, cookie=''):
     if cookie:
         headers['Cookie'] = cookie
     request = urllib.request.Request('http://127.0.0.1:19100' + path, data=json.dumps(data).encode() if data is not None else None, headers=headers)
-    with urllib.request.urlopen(request, timeout=15) as response:
+    with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(request, timeout=15) as response:
         return json.load(response), response.headers.get('Set-Cookie', '').split(';')[0]
 
 

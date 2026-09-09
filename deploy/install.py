@@ -127,7 +127,7 @@ def preflight(args):
 def health():
     for _ in range(20):
         try:
-            with urllib.request.urlopen('http://127.0.0.1:19100/api/health', timeout=2) as response:
+            with urllib.request.build_opener(urllib.request.ProxyHandler({})).open('http://127.0.0.1:19100/api/health', timeout=2) as response:
                 if response.status == 200:
                     run('systemctl', 'is-active', '--quiet', *UNITS, 'nginx')
                     return

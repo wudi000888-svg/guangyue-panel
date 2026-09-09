@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 """Validate and publish a matching certificate pair as one directory generation."""
 import argparse
+import hashlib
 import json
 import os
 import pwd
 import shutil
+import socket
+import ssl
 import subprocess
 import tempfile
+import time
 import uuid
 from pathlib import Path
 
@@ -54,6 +58,26 @@ def swap(base, target):
     os.replace(link, Path(base) / 'current')
 
 
+def wait_served_certificate(cert, hostname, timeout=8):
+    # Pin the entire expected leaf certificate on the local SNI entry. Trust-store
+    # validation is not needed for this readiness check; an exact DER match is.
+    expected = hashlib.sha256(run('openssl', 'x509', '-in', str(cert), '-outform', 'DER')).digest()
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    context.check_hostname = False
+    context.verify_mode = ssl.CERT_NONE
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            with socket.create_connection(('127.0.0.1', 443), timeout=0.5) as connection:
+                with context.wrap_socket(connection, server_hostname=hostname) as tls:
+                    if hashlib.sha256(tls.getpeercert(binary_form=True)).digest() == expected:
+                        return
+        except (OSError, ssl.SSLError):
+            pass
+        time.sleep(0.1)
+    raise ValueError('Nginx did not begin serving the new certificate')
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--initial', action='store_true')
@@ -72,6 +96,7 @@ def main():
         if not args.initial:
             run('nginx', '-t')
             run('systemctl', 'reload', 'nginx')
+            wait_served_certificate(cert, meta['domains'][0])
             run('systemctl', 'restart', 'guangyue-hy2')
             run('systemctl', 'is-active', '--quiet', 'guangyue-hy2')
     except Exception:
