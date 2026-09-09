@@ -1,0 +1,8 @@
+title = "Guangyue source and history scanning"
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Exact public Xray binary SHA256, misclassified as a JFrog identity token"
+regexTarget = "secret"
+regexes = ['''^8255dd939c34cf966cc91517b6324dd3c8d0bcf49ffac8beca049a38c46845ed$''']
