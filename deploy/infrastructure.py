@@ -7,6 +7,8 @@ import re
 import secrets
 import shutil
 import socket
+import sys
+sys.dont_write_bytecode = True
 from urllib.parse import urlparse, unquote, parse_qs
 import subprocess
 from pathlib import Path

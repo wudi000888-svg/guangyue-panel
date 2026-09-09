@@ -151,3 +151,13 @@ class EditionTests(unittest.TestCase):
             unit=Path(install.__file__).parent/'guangyue.service'
             self.assertIn('MemoryMax=384M',infrastructure.service_text(unit,'pro'))
             self.assertIn('MemoryMax=160M',infrastructure.service_text(unit,'lite'))
+
+class InfrastructureBundleTests(unittest.TestCase):
+    def test_help_does_not_write_into_verified_bundle(self):
+        import shutil
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp)
+            for name in ['infrastructure.py','common.py']:
+                shutil.copyfile(Path(install.__file__).parent/name,root/name)
+            subprocess.run([sys.executable,str(root/'infrastructure.py'),'--help'],check=True,capture_output=True)
+            self.assertFalse((root/'__pycache__').exists())

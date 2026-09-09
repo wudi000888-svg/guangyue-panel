@@ -27,7 +27,9 @@ def run(*args, success=True):
     p = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if success and p.returncode:
         # Never print a command's output: it may contain ephemeral credentials.
-        raise RuntimeError('command failed: ' + Path(args[0]).name + ' exit=' + str(p.returncode))
+        safe=[line for line in p.stderr.decode(errors='replace').splitlines() if line.startswith(('Installation failed:','Upgrade failed:','Infrastructure setup failed:'))]
+        detail=('; '+safe[-1][:300]) if safe else ''
+        raise RuntimeError('command failed: ' + Path(args[0]).name + ' exit=' + str(p.returncode)+detail)
     return p
 
 
