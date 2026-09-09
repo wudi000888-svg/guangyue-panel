@@ -12,7 +12,8 @@ python3 - "$tmp/xray.zip" "$tmp/xray" <<'PY'
 import hashlib,sys,zipfile
 from pathlib import Path
 archive=Path(sys.argv[1])
-assert hashlib.sha256(archive.read_bytes()).hexdigest() == '23cd9af937744d97776ee35ecad4972cf4b2109d1e0fe6be9930467608f7c8ae', 'Xray checksum mismatch'
+if hashlib.sha256(archive.read_bytes()).hexdigest() != '23cd9af937744d97776ee35ecad4972cf4b2109d1e0fe6be9930467608f7c8ae':
+    raise SystemExit('Xray checksum mismatch')
 with zipfile.ZipFile(archive) as z:
     Path(sys.argv[2]).write_bytes(z.read('xray'))
 PY
