@@ -1,0 +1,397 @@
+diff --git a/core/server/config.go b/core/server/config.go
+--- a/core/server/config.go
++++ b/core/server/config.go
+@@ -25,12 +25,15 @@
+ )
+ 
+ type Config struct {
+-	TLSConfig             TLSConfig
+-	QUICConfig            QUICConfig
+-	Conn                  net.PacketConn
+-	Cleanup               io.Closer
+-	RequestHook           RequestHook
+-	Outbound              Outbound
++	TLSConfig   TLSConfig
++	QUICConfig  QUICConfig
++	Conn        net.PacketConn
++	Cleanup     io.Closer
++	RequestHook RequestHook
++	Outbound    Outbound
++	// OutboundForUser selects an immutable connection route from the authenticated
++	// server identity. Returning nil rejects authentication; there is no fallback.
++	OutboundForUser       func(string) Outbound
+ 	CongestionConfig      CongestionConfig
+ 	BandwidthConfig       BandwidthConfig
+ 	IgnoreClientBandwidth bool
+diff --git a/core/server/server.go b/core/server/server.go
+--- a/core/server/server.go
++++ b/core/server/server.go
+@@ -7,6 +7,7 @@
+ 	"math/rand"
+ 	"net/http"
+ 	"sync"
++	"sync/atomic"
+ 	"time"
+ 
+ 	"github.com/apernet/quic-go"
+@@ -109,7 +110,7 @@
+ 	}
+ 	err := h3s.ServeQUICConn(conn)
+ 	// If the client is authenticated, we need to log the disconnect event
+-	if handler.authenticated {
++	if handler.authenticated.Load() {
+ 		if tl := s.config.TrafficLogger; tl != nil {
+ 			tl.LogOnlineState(handler.authID, false)
+ 		}
+@@ -124,19 +125,21 @@
+ 	config *Config
+ 	conn   *quic.Conn
+ 
+-	authenticated bool
++	authenticated atomic.Bool
+ 	authMutex     sync.Mutex
+ 	authID        string
+-	connID        uint32 // a random id for dump streams
++	outbound      Outbound // selected once after successful authentication
++	connID        uint32   // a random id for dump streams
+ 
+ 	udpSM *udpSessionManager // Only set after authentication
+ }
+ 
+ func newH3sHandler(config *Config, conn *quic.Conn) *h3sHandler {
+ 	return &h3sHandler{
+-		config: config,
+-		conn:   conn,
+-		connID: rand.Uint32(),
++		config:   config,
++		conn:     conn,
++		connID:   rand.Uint32(),
++		outbound: config.Outbound,
+ 	}
+ }
+ 
+@@ -144,7 +147,7 @@
+ 	if r.Method == http.MethodPost && r.Host == protocol.URLHost && r.URL.Path == protocol.URLPath {
+ 		h.authMutex.Lock()
+ 		defer h.authMutex.Unlock()
+-		if h.authenticated {
++		if h.authenticated.Load() {
+ 			// Already authenticated
+ 			protocol.AuthResponseToHeader(w.Header(), protocol.AuthResponse{
+ 				UDPEnabled: !h.config.DisableUDP,
+@@ -157,10 +160,14 @@
+ 		authReq := protocol.AuthRequestFromHeader(r.Header)
+ 		actualTx := authReq.Rx
+ 		ok, id := h.config.Authenticator.Authenticate(h.conn.RemoteAddr(), authReq.Auth, actualTx)
++		if ok && h.config.OutboundForUser != nil {
++			h.outbound = h.config.OutboundForUser(id)
++			ok = h.outbound != nil
++		}
+ 		if ok {
+ 			// Set authenticated flag
+-			h.authenticated = true
+ 			h.authID = id
++			h.authenticated.Store(true)
+ 			if h.config.IgnoreClientBandwidth {
+ 				// Ignore client bandwidth and use the configured congestion controller.
+ 				congestion.UseConfigured(h.conn, h.config.CongestionConfig.Type, h.config.CongestionConfig.BBRProfile)
+@@ -199,7 +206,7 @@
+ 			if !h.config.DisableUDP {
+ 				go func() {
+ 					sm := newUDPSessionManager(
+-						&udpIOImpl{h.conn, id, h.config.TrafficLogger, h.config.RequestHook, h.config.Outbound},
++						&udpIOImpl{h.conn, id, h.config.TrafficLogger, h.config.RequestHook, h.outbound},
+ 						&udpEventLoggerImpl{h.conn, id, h.config.EventLogger},
+ 						h.config.UDPIdleTimeout,
+ 					)
+@@ -218,7 +225,7 @@
+ }
+ 
+ func (h *h3sHandler) ProxyStreamHijacker(ft http3.FrameType, stream *quic.Stream, err error) (bool, error) {
+-	if err != nil || !h.authenticated {
++	if err != nil || !h.authenticated.Load() {
+ 		return false, nil
+ 	}
+ 
+@@ -287,7 +294,7 @@
+ 	}
+ 	// Dial target
+ 	streamStats.State.Store(StreamStateConnecting)
+-	tConn, err := h.config.Outbound.TCP(reqAddr)
++	tConn, err := h.outbound.TCP(reqAddr)
+ 	if err != nil {
+ 		if !hooked {
+ 			_ = protocol.WriteTCPResponse(stream, false, err.Error())
+diff --git a/app/cmd/server.go b/app/cmd/server.go
+--- a/app/cmd/server.go
++++ b/app/cmd/server.go
+@@ -64,25 +64,27 @@
+ }
+ 
+ type serverConfig struct {
+-	Listen                string                      `mapstructure:"listen"`
+-	Realm                 serverConfigRealm           `mapstructure:"realm"`
+-	Obfs                  serverConfigObfs            `mapstructure:"obfs"`
+-	TLS                   *serverConfigTLS            `mapstructure:"tls"`
+-	ACME                  *serverConfigACME           `mapstructure:"acme"`
+-	QUIC                  serverConfigQUIC            `mapstructure:"quic"`
+-	Congestion            serverConfigCongestion      `mapstructure:"congestion"`
+-	Bandwidth             serverConfigBandwidth       `mapstructure:"bandwidth"`
+-	IgnoreClientBandwidth bool                        `mapstructure:"ignoreClientBandwidth"`
+-	SpeedTest             bool                        `mapstructure:"speedTest"`
+-	DisableUDP            bool                        `mapstructure:"disableUDP"`
+-	UDPIdleTimeout        time.Duration               `mapstructure:"udpIdleTimeout"`
+-	Auth                  serverConfigAuth            `mapstructure:"auth"`
+-	Resolver              serverConfigResolver        `mapstructure:"resolver"`
+-	Sniff                 serverConfigSniff           `mapstructure:"sniff"`
+-	ACL                   serverConfigACL             `mapstructure:"acl"`
+-	Outbounds             []serverConfigOutboundEntry `mapstructure:"outbounds"`
+-	TrafficStats          serverConfigTrafficStats    `mapstructure:"trafficStats"`
+-	Masquerade            serverConfigMasquerade      `mapstructure:"masquerade"`
++	Listen                string                               `mapstructure:"listen"`
++	Realm                 serverConfigRealm                    `mapstructure:"realm"`
++	Obfs                  serverConfigObfs                     `mapstructure:"obfs"`
++	TLS                   *serverConfigTLS                     `mapstructure:"tls"`
++	ACME                  *serverConfigACME                    `mapstructure:"acme"`
++	QUIC                  serverConfigQUIC                     `mapstructure:"quic"`
++	Congestion            serverConfigCongestion               `mapstructure:"congestion"`
++	Bandwidth             serverConfigBandwidth                `mapstructure:"bandwidth"`
++	IgnoreClientBandwidth bool                                 `mapstructure:"ignoreClientBandwidth"`
++	SpeedTest             bool                                 `mapstructure:"speedTest"`
++	DisableUDP            bool                                 `mapstructure:"disableUDP"`
++	UDPIdleTimeout        time.Duration                        `mapstructure:"udpIdleTimeout"`
++	Auth                  serverConfigAuth                     `mapstructure:"auth"`
++	Resolver              serverConfigResolver                 `mapstructure:"resolver"`
++	Sniff                 serverConfigSniff                    `mapstructure:"sniff"`
++	ACL                   serverConfigACL                      `mapstructure:"acl"`
++	Outbounds             []serverConfigOutboundEntry          `mapstructure:"outbounds"`
++	NodeRouting           bool                                 `mapstructure:"nodeRouting"`
++	NodeOutbounds         map[string]serverConfigOutboundEntry `mapstructure:"nodeOutbounds"`
++	TrafficStats          serverConfigTrafficStats             `mapstructure:"trafficStats"`
++	Masquerade            serverConfigMasquerade               `mapstructure:"masquerade"`
+ }
+ 
+ type serverConfigRealm struct {
+@@ -1300,6 +1302,34 @@
+ 	return nil
+ }
+ 
++// Node routes use only the identity returned by the trusted authenticator.
++// The client cannot select a route independently of its node credential.
++func (c *serverConfig) fillNodeOutbounds(hyConfig *server.Config) error {
++	if !c.NodeRouting {
++		return nil
++	}
++	routes := make(map[string]server.Outbound, len(c.NodeOutbounds))
++	for node, entry := range c.NodeOutbounds {
++		if node == "" || strings.Contains(node, "@") {
++			return configError{Field: "nodeOutbounds", Err: errors.New("invalid node ID")}
++		}
++		candidate := &server.Config{}
++		cfg := serverConfig{Resolver: c.Resolver, Outbounds: []serverConfigOutboundEntry{entry}}
++		if err := cfg.fillOutboundConfig(candidate); err != nil {
++			return err
++		}
++		routes[node] = candidate.Outbound
++	}
++	hyConfig.OutboundForUser = func(id string) server.Outbound {
++		index := strings.LastIndexByte(id, '@')
++		if index <= 0 {
++			return nil
++		}
++		return routes[id[index+1:]]
++	}
++	return nil
++}
++
+ func (c *serverConfig) fillBandwidthConfig(hyConfig *server.Config) error {
+ 	var err error
+ 	if c.Bandwidth.Up != "" {
+@@ -1511,6 +1541,7 @@
+ 		c.fillQUICConfig,
+ 		c.fillRequestHook,
+ 		c.fillOutboundConfig,
++		c.fillNodeOutbounds,
+ 		c.fillCongestionConfig,
+ 		c.fillBandwidthConfig,
+ 		c.fillIgnoreClientBandwidth,
+diff --git a/app/cmd/node_outbounds_test.go b/app/cmd/node_outbounds_test.go
+new file mode 100644
+--- /dev/null
++++ b/app/cmd/node_outbounds_test.go
+@@ -0,0 +1,44 @@
++package cmd
++
++import (
++	"strings"
++	"testing"
++
++	"github.com/apernet/hysteria/core/v2/server"
++	"github.com/spf13/viper"
++)
++
++func TestNodeOutboundConfigAndUnknownIdentity(t *testing.T) {
++	v := viper.New()
++	v.SetConfigType("json")
++	if err := v.ReadConfig(strings.NewReader(`{"nodeRouting":true,"nodeOutbounds":{"hy2-main":{"name":"exit","type":"direct","direct":{"mode":4}},"hy2-proxy":{"name":"exit","type":"http","http":{"url":"http://127.0.0.1:8080"}}}}`)); err != nil {
++		t.Fatal(err)
++	}
++	var c serverConfig
++	if err := v.Unmarshal(&c); err != nil {
++		t.Fatal(err)
++	}
++	var config server.Config
++	if err := c.fillNodeOutbounds(&config); err != nil {
++		t.Fatal(err)
++	}
++	if config.OutboundForUser == nil {
++		t.Fatal("node routing was ignored")
++	}
++	a, b := config.OutboundForUser("u1.0.hash@hy2-main"), config.OutboundForUser("u1.0.hash@hy2-proxy")
++	if a == nil || b == nil || a == b {
++		t.Fatal("different nodes share the same outbound")
++	}
++	for _, id := range []string{"", "hy2-main", "@hy2-main", "u1@unknown", "u1@hy2-main@unknown"} {
++		if config.OutboundForUser(id) != nil {
++			t.Fatal("unknown identity fell back to an outbound")
++		}
++	}
++	c.NodeOutbounds = nil
++	if err := c.fillNodeOutbounds(&config); err != nil {
++		t.Fatal(err)
++	}
++	if config.OutboundForUser("u1@hy2-main") != nil {
++		t.Fatal("empty routing table failed open")
++	}
++}
+diff --git a/core/internal/integration_tests/node_outbound_test.go b/core/internal/integration_tests/node_outbound_test.go
+new file mode 100644
+--- /dev/null
++++ b/core/internal/integration_tests/node_outbound_test.go
+@@ -0,0 +1,126 @@
++package integration_tests
++
++import (
++	"errors"
++	"io"
++	"net"
++	"sync"
++	"testing"
++	"time"
++
++	"github.com/apernet/hysteria/core/v2/client"
++	"github.com/apernet/hysteria/core/v2/server"
++)
++
++type nodeTestAuth struct{}
++
++func (nodeTestAuth) Authenticate(_ net.Addr, auth string, _ uint64) (bool, string) { return true, auth }
++
++type nodeTestOutbound struct{ marker string }
++
++func (o *nodeTestOutbound) TCP(_ string) (net.Conn, error) {
++	a, b := net.Pipe()
++	go func() { defer b.Close(); _, _ = b.Write([]byte(o.marker)) }()
++	return a, nil
++}
++func (o *nodeTestOutbound) UDP(_ string) (server.UDPConn, error) {
++	return &nodeTestUDP{marker: o.marker, packets: make(chan string, 4), done: make(chan struct{})}, nil
++}
++func (o *nodeTestOutbound) CheckUDP(_ string) error { return nil }
++
++type nodeTestUDP struct {
++	marker  string
++	packets chan string
++	done    chan struct{}
++	once    sync.Once
++}
++
++func (u *nodeTestUDP) WriteTo(b []byte, addr string) (int, error) {
++	select {
++	case u.packets <- addr:
++		return len(b), nil
++	case <-u.done:
++		return 0, net.ErrClosed
++	}
++}
++func (u *nodeTestUDP) ReadFrom(b []byte) (int, string, error) {
++	select {
++	case addr := <-u.packets:
++		return copy(b, u.marker), addr, nil
++	case <-u.done:
++		return 0, "", net.ErrClosed
++	}
++}
++func (u *nodeTestUDP) Close() error { u.once.Do(func() { close(u.done) }); return nil }
++
++// Two concurrent clients use the same UDP listener but distinct authenticated
++// routes for both TCP streams and UDP datagrams. Unknown routes fail closed.
++func TestNodeOutboundIsolationTCPAndUDP(t *testing.T) {
++	conn, err := net.ListenPacket("udp", "127.0.0.1:0")
++	if err != nil {
++		t.Fatal(err)
++	}
++	routes := map[string]server.Outbound{"node-a": &nodeTestOutbound{"route-A"}, "node-b": &nodeTestOutbound{"route-B"}}
++	s, err := server.NewServer(&server.Config{TLSConfig: serverTLSConfig(), Conn: conn, Authenticator: nodeTestAuth{}, OutboundForUser: func(id string) server.Outbound { return routes[id] }})
++	if err != nil {
++		t.Fatal(err)
++	}
++	defer s.Close()
++	go s.Serve()
++	clients := []client.Client{}
++	for _, id := range []string{"node-a", "node-b"} {
++		c, _, e := client.NewClient(&client.Config{ServerAddr: conn.LocalAddr(), Auth: id, TLSConfig: client.TLSConfig{InsecureSkipVerify: true}})
++		if e != nil {
++			t.Fatal(e)
++		}
++		defer c.Close()
++		clients = append(clients, c)
++	}
++	for round := 0; round < 2; round++ {
++		for i, c := range clients {
++			want := []string{"route-A", "route-B"}[i]
++			tcp, e := c.TCP("target.invalid:443")
++			if e != nil {
++				t.Fatal(e)
++			}
++			_ = tcp.SetReadDeadline(time.Now().Add(5 * time.Second))
++			b := make([]byte, len(want))
++			_, e = io.ReadFull(tcp, b)
++			tcp.Close()
++			if e != nil || string(b) != want {
++				t.Fatalf("TCP route mismatch: %q %v", b, e)
++			}
++			udp, e := c.UDP()
++			if e != nil {
++				t.Fatal(e)
++			}
++			if e = udp.Send([]byte("probe"), "target.invalid:53"); e != nil {
++				t.Fatal(e)
++			}
++			result := make(chan error, 1)
++			go func() {
++				data, addr, e := udp.Receive()
++				if e == nil && (string(data) != want || addr != "target.invalid:53") {
++					e = errors.New("UDP route mismatch")
++				}
++				result <- e
++			}()
++			select {
++			case e = <-result:
++			case <-time.After(5 * time.Second):
++				e = errors.New("UDP timed out")
++			}
++			udp.Close()
++			if e != nil {
++				t.Fatal(e)
++			}
++		}
++	}
++	c, _, err := client.NewClient(&client.Config{ServerAddr: conn.LocalAddr(), Auth: "missing-node", TLSConfig: client.TLSConfig{InsecureSkipVerify: true}})
++	if c != nil {
++		c.Close()
++	}
++	if err == nil {
++		t.Fatal("unknown node authenticated through default route")
++	}
++}

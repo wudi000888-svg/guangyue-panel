@@ -1,0 +1,75 @@
+name: CI
+on:
+  push:
+    branches: [main, 'codex/**']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: bash scripts/check.sh
+      - name: Scan source and all Git history
+        run: |
+          go install github.com/zricethezav/gitleaks/v8@v8.24.3
+          scan_dir=$(mktemp -d)
+          git archive HEAD | tar -x -C "$scan_dir"
+          gitleaks dir "$scan_dir" --redact --no-banner
+          gitleaks git . --redact --no-banner --log-opts=--all
+      - run: bash scripts/build.sh
+      - run: bash scripts/build-hy2-core.sh --test
+      - run: python3 scripts/third-party.py && python3 scripts/package.py
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: linux-amd64
+          path: |
+            build/releases/*.tar.gz
+            build/releases/SHA256SUMS
+            build/releases/SBOM.spdx.json
+          retention-days: 7
+  installation:
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Download build artifact using GitHub CLI
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download "$GITHUB_RUN_ID" --name linux-amd64 --dir build/releases
+      - name: Prepare disposable runner
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y nginx libnginx-mod-stream certbot python3 curl unzip openssl
+          sudo systemctl enable --now nginx
+          cd build/releases
+          sha256sum -c SHA256SUMS
+          tar -xzf guangyue-panel-*-linux-amd64.tar.gz
+          cd guangyue-panel-*-linux-amd64
+          GY_BIN_DIR="$PWD/bin" bash scripts/fetch-xray.sh
+          GY_BIN_DIR="$PWD/bin" bash scripts/fetch-mihomo.sh
+      - name: Real systemd installation, certificate rotation, upgrade and rollback
+        run: sudo --preserve-env=GITHUB_ACTIONS python3 deploy/tests/integration.py "$(realpath build/releases/guangyue-panel-*-linux-amd64)"

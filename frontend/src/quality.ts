@@ -1,0 +1,4 @@
+export type QualityTag = { key: string; label: string; status: string; evidence: string; http_status?: number; latency_ms?: number; source?: string };
+export type QualityRiskScore = {name:string;value:number;label:string;scale:string};
+export type QualitySource = {name:string;status:string;country:string;country_code?:string;registered_country?:string;ip?:string;city?:string;region?:string;timezone?:string;network_cidr?:string;asn:string;organization:string;at:number;cached:boolean;network:QualityTag;signals?:Record<string,boolean|null>;rpki_status?:string;error?:string;risk_scores?:QualityRiskScore[]};
+export type IPQuality = {schema_version?:number;providers?:QualitySource[];at:number;ip:string;country_code:string;registered_country:string;asn:string;organization:string;city?:string;region?:string;timezone?:string;network_cidr?:string;tags:QualityTag[];streams:QualityTag[];ai?:QualityTag[];signals?:QualityTag[];sources:string[];error?:string};

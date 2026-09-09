@@ -1,0 +1,37 @@
+[Unit]
+Description=Guangyue Panel Hysteria2 2.9.2
+After=network-online.target guangyue.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=guangyue
+Group=guangyue
+ExecStart=/opt/guangyue-personal/bin/guangyue -run-core hy2
+KillMode=control-group
+TimeoutStopSec=15
+Restart=always
+RestartSec=1
+Environment=GOMEMLIMIT=64MiB
+Environment=GOMAXPROCS=2
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LockPersonality=true
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+MemoryHigh=128M
+MemoryMax=256M
+TasksMax=64
+LimitNOFILE=32768
+
+[Install]
+WantedBy=multi-user.target

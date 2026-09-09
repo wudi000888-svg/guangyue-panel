@@ -1,0 +1,44 @@
+name: Draft release
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag (for example v0.14.0)
+        required: true
+        type: string
+permissions:
+  contents: write
+jobs:
+  draft:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ inputs.tag }}
+          fetch-depth: 0
+      - name: Validate tag and version
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          test "$RELEASE_TAG" = "v$(cat VERSION)"
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: bash scripts/check.sh && bash scripts/build.sh && bash scripts/build-hy2-core.sh --test
+      - run: python3 scripts/third-party.py && python3 scripts/package.py
+      - name: Create draft only
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          gh release create "$RELEASE_TAG" --verify-tag --draft \
+            --title "广月面板 $RELEASE_TAG" --notes-file CHANGELOG.md \
+            build/releases/*.tar.gz build/releases/SHA256SUMS build/releases/SBOM.spdx.json

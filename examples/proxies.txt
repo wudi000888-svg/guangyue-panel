@@ -1,0 +1,3 @@
+# Documentation-only TEST-NET addresses. Select the actual protocol when importing.
+203.0.113.10:8080:demo_user:replace_this_password
+203.0.113.11:8080:demo_user:replace_this_password
