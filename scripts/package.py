@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Build a source-clean Linux amd64 release; excludes downloaded GPL/MPL binaries."""
+import gzip
 import hashlib
 import shutil
 import tarfile
@@ -35,8 +36,10 @@ def normalize(info):
     info.uname = info.gname = 'root'
     info.mtime = 0
     return info
-with tarfile.open(archive, 'w:gz') as tar:
-    tar.add(bundle, arcname=name, filter=normalize)
+with archive.open('wb') as output:
+    with gzip.GzipFile(filename='', mode='wb', fileobj=output, mtime=0) as compressed:
+        with tarfile.open(fileobj=compressed, mode='w') as tar:
+            tar.add(bundle, arcname=name, filter=normalize)
 shutil.copyfile(root / 'build/notices/SBOM.spdx.json', out / 'SBOM.spdx.json')
 (out / 'SHA256SUMS').write_text('\n'.join(hashlib.sha256(p.read_bytes()).hexdigest() + '  ' + p.name for p in [archive, out / 'SBOM.spdx.json']) + '\n')
 print('Packaged ' + archive.name + '; Xray and Mihomo must be fetched from upstream before installation.')

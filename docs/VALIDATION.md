@@ -7,13 +7,13 @@
 | Go | 158 个测试函数；完整 race 测试与 vet 通过 |
 | Vue / TypeScript | 10 个前端测试通过；1,427 项英文文案覆盖、类型检查、Vite 生产构建通过 |
 | Hysteria 补丁 | 从固定上游 commit 构建，配置、未知身份拒绝和真实 QUIC/TCP/UDP 路由隔离测试通过 |
-| Linux 部署行为 | 包校验/篡改拒绝、域名注入防护、证书匹配与成对切换已验证；后续新增互斥锁用例由同一 CI 执行 |
+| Linux 部署行为 | 包校验/篡改拒绝、域名注入防护、证书匹配与成对切换已验证；包括互斥锁与符号链接拒绝，共 10 项部署用例通过 |
 | Ubuntu 22.04 / 24.04 | 实际 systemd 安装、Nginx HTTPS、目录权限、私有/公共订阅分离、重复安装拒绝、证书轮换、正常升级和故障回滚通过 |
 | 秘密扫描 | Gitleaks 扫描源码和完整新历史；仅对已验证的公开 Xray SHA256 做精确误报例外 |
 | 发布目录检查 | 版本一致、相对文档链接、禁止文件和私人路径检查通过 |
-| 本地 UI | 使用合成账号/流量检查中文品牌、导航与工作台；没有使用生产截图 |
+| 本地 UI | 使用合成账号/流量检查中文/English、简易/专业导航与工作台；没有使用生产截图 |
 
-完整安装基线：[CI 34371632586](https://github.com/wudi000888-svg/guangyue-panel/actions/runs/34371632586)。最终提交的最新验证结果请查看[仓库 Actions](https://github.com/wudi000888-svg/guangyue-panel/actions)。这些链接在仓库私有阶段需要访问权限。
+完整安装基线：[CI 34372630967](https://github.com/wudi000888-svg/guangyue-panel/actions/runs/34372630967)。最终提交的最新验证结果请查看[仓库 Actions](https://github.com/wudi000888-svg/guangyue-panel/actions)。这些链接在仓库私有阶段需要访问权限。
 
 ## 部署和验证边界
 
@@ -25,4 +25,4 @@
 
 ## GitHub 设置边界
 
-仓库创建为 Private。已配置依赖更新与告警；私密漏洞报告 API 在私有阶段返回不可用（404），不能记录成已启用。转公开时按 RELEASE.md 再启用可用的安全与分支保护功能。不会自动更改 visibility。
+仓库创建为 Private。已配置依赖更新与告警；私密漏洞报告 API 在私有阶段返回不可用（404），不能记录成已启用。主分支保护 API 明确要求 GitHub Pro 或公开仓库，当前未开启。转公开时按 RELEASE.md 再启用可用的安全与分支保护功能。不会自动更改 visibility。

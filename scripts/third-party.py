@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Collect locked dependency license texts and a deterministic SPDX 2.3 inventory."""
+import datetime
 import hashlib
 import json
 import os
 import re
 import subprocess
 from pathlib import Path
+from urllib.parse import quote
 
 root = Path(__file__).resolve().parent.parent
 out = root / 'build/notices'
@@ -18,7 +20,7 @@ def collect(name, version, directory, ecosystem, license_id='NOASSERTION'):
     key = ecosystem + ':' + name + '@' + version
     if key in packages:
         return
-    package = {'name': name, 'SPDXID': 'SPDXRef-' + hashlib.sha256(key.encode()).hexdigest()[:20], 'versionInfo': version, 'downloadLocation': 'NOASSERTION', 'filesAnalyzed': False, 'licenseConcluded': 'NOASSERTION', 'licenseDeclared': license_id or 'NOASSERTION', 'copyrightText': 'NOASSERTION', 'externalRefs': [{'referenceCategory': 'PACKAGE-MANAGER', 'referenceType': 'purl', 'referenceLocator': 'pkg:' + ecosystem + '/' + name + '@' + version}]}
+    package = {'name': name, 'SPDXID': 'SPDXRef-' + hashlib.sha256(key.encode()).hexdigest()[:20], 'versionInfo': version, 'downloadLocation': 'NOASSERTION', 'filesAnalyzed': False, 'licenseConcluded': 'NOASSERTION', 'licenseDeclared': license_id or 'NOASSERTION', 'copyrightText': 'NOASSERTION', 'externalRefs': [{'referenceCategory': 'PACKAGE-MANAGER', 'referenceType': 'purl', 'referenceLocator': 'pkg:' + ecosystem + '/' + quote(name, safe='/') + '@' + quote(version, safe='')}]}
     packages[key] = package
     directory = Path(directory)
     licenses = sorted(p for p in directory.iterdir() if p.is_file() and re.match(r'(licen[cs]e|copying|notice|copyright)', p.name, re.I))
@@ -62,6 +64,11 @@ for name, value in lock['packages'].items():
     collect(meta['name'], value['version'], path, 'npm', license_id)
 (out / 'DEPENDENCY-LICENSES.txt').write_text('Generated from locked runtime dependencies. SPDX NOASSERTION means not automatically classified.\n' + '\n'.join(texts))
 version = (root / 'VERSION').read_text().strip()
-document = {'spdxVersion': 'SPDX-2.3', 'dataLicense': 'CC0-1.0', 'SPDXID': 'SPDXRef-DOCUMENT', 'name': 'Guangyue Panel ' + version + ' dependency inventory', 'documentNamespace': 'https://spdx.org/spdxdocs/guangyue-' + version + '-' + hashlib.sha256('\n'.join(sorted(packages)).encode()).hexdigest()[:16], 'creationInfo': {'creators': ['Tool: Guangyue third-party.py'], 'created': '2026-09-09T00:00:00Z'}, 'packages': list(packages.values())}
+try:
+    epoch = int(os.environ.get('SOURCE_DATE_EPOCH') or subprocess.check_output(['git', 'show', '-s', '--format=%ct', 'HEAD'], cwd=root).decode().strip())
+except (ValueError, subprocess.CalledProcessError):
+    epoch = int(datetime.datetime.now(datetime.timezone.utc).timestamp())
+created = datetime.datetime.fromtimestamp(epoch, datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+document = {'spdxVersion': 'SPDX-2.3', 'dataLicense': 'CC0-1.0', 'SPDXID': 'SPDXRef-DOCUMENT', 'name': 'Guangyue Panel ' + version + ' dependency inventory', 'documentNamespace': 'https://spdx.org/spdxdocs/guangyue-' + version + '-' + hashlib.sha256('\n'.join(sorted(packages)).encode()).hexdigest()[:16], 'creationInfo': {'creators': ['Tool: Guangyue third-party.py'], 'created': created}, 'packages': list(packages.values())}
 (out / 'SBOM.spdx.json').write_text(json.dumps(document, ensure_ascii=False, indent=2) + '\n')
 print('Collected', len(packages), 'dependency records and license texts; no local paths in generated output.')
