@@ -1600,5 +1600,11 @@
   "更新未完成，已尝试恢复原版本；请检查运行状态": "The operation did not complete. Recovery was attempted; check service health.",
   "自动恢复未完成，请通过 SSH 检查更新服务与离线备份": "Automatic recovery did not complete. Check the updater and offline backup over SSH.",
   "上次版本操作被中断，请核对当前版本后重试": "The previous operation was interrupted. Check the running version before retrying.",
-  "请先检查更新后再选择版本": "Check for updates before selecting a release."
+  "请先检查更新后再选择版本": "Check for updates before selecting a release.",
+  "关闭导航": "Close navigation",
+  "常用导航": "Quick navigation",
+  "显示与账户": "Display and account",
+  "密码至少 1 位，无复杂度要求，最多 72 字节。": "Use 1 or more characters, up to 72 bytes. No complexity rules.",
+  "密码不能为空，且不能超过 72 个字节": "Password is required and must not exceed 72 bytes.",
+  "账号需为 3–32 位字母、数字或 ._-，密码需非空且不超过 72 个字节，额度与到期时间需有效": "Use a 3–32 character account name (letters, numbers or ._-), a non-empty password of up to 72 bytes, and valid quota and expiry values."
 }

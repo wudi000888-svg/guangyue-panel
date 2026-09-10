@@ -14,7 +14,7 @@ import { t, locale, applyDefaultLocale } from "../i18n";
 import { type SiteSettings } from "../PanelSettings.vue";
 import type { IPQuality } from "../quality";
 import type { User, Node, IPResource, State, SpeedResult } from "../types";
-import "../view-mode.css";
+
 
 export function usePanel() {
 const router=useRouter(),route=useRoute();

@@ -17,7 +17,7 @@ import (
 	"path/filepath"
 )
 
-const version = "0.17.0"
+const version = "0.18.0"
 
 type Config struct {
 	Role            string              `json:"role,omitempty"`

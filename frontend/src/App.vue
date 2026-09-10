@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { provide } from "vue";
+import { computed, nextTick, onMounted, onBeforeUnmount, provide, ref, watch } from "vue";
 import { RouterView } from "vue-router";
 import { usePanel } from "./composables/usePanel";
 import { panelKey } from "./composables/panelContext";
@@ -7,11 +7,42 @@ import PanelDialogs from "./components/PanelDialogs.vue";
 import PanelUpdater from "./components/PanelUpdater.vue";
 const panel=usePanel();
 provide(panelKey,panel);
-const { selectedSite, selectedSiteName, switchSite, api, state, ready, busy, error, page, mobileNav, site, login, modal, theme, sideCollapsed, viewMode, simpleMode, toggleTheme, confirmation, owner, pendingHY, titles, pageDescriptions, navGroups, currentGroup, date, refresh, task, signIn, signOut, go } = panel;
-import { Bell, ArrowUpRight, ChevronRight, KeyRound, LoaderCircle, LogOut, Menu, Moon, Sun, PanelLeftClose, PanelLeftOpen, Building2, RadioTower, RefreshCw, ShieldCheck, X } from "lucide-vue-next";
+const { selectedSite, selectedSiteName, switchSite, api, state, ready, busy, error, page, mobileNav, site, login, modal, theme, sideCollapsed, viewMode, simpleMode, toggleTheme, confirmation, owner, pendingHY, titles, pageDescriptions, nav, navGroups, currentGroup, date, refresh, task, signIn, signOut, go } = panel;
+import { Bell, ArrowUpRight, ChevronRight, KeyRound, LoaderCircle, LogOut, Menu, Moon, Sun, PanelLeftClose, PanelLeftOpen, Building2, RadioTower, RefreshCw, ShieldCheck, SlidersHorizontal, X } from "lucide-vue-next";
 import { t } from "./i18n";
 import LanguageSwitcher from "./LanguageSwitcher.vue";
 import ViewModeSwitcher from "./ViewModeSwitcher.vue";
+const mobileTools = ref(false), drawer = ref<HTMLElement|null>(null), toolsDialog = ref<HTMLElement|null>(null);
+const quickNav = computed(() => ['overview','ips','nodes','users','subscription'].flatMap(id => nav.value.filter(item => item.id === id)));
+const mobileLayer = computed(() => mobileNav.value || mobileTools.value);
+let oldOverflow = '', oldFocus: HTMLElement|null = null, locked = false;
+const closeMobile = () => { mobileNav.value = false; mobileTools.value = false; };
+watch(mobileLayer, active => {
+  if (active && !locked) { oldFocus = document.activeElement as HTMLElement; oldOverflow = document.body.style.overflow; document.body.style.overflow = 'hidden'; locked = true; }
+  if (!active && locked) { document.body.style.overflow = oldOverflow; locked = false; oldFocus?.focus(); }
+}, {flush:'sync'});
+watch([mobileNav, mobileTools], async () => {
+  await nextTick();
+  const target = mobileTools.value ? toolsDialog.value : mobileNav.value ? drawer.value : null;
+  target?.focus();
+});
+watch([page, state, modal, confirmation], () => { if (!state.value || modal.value || confirmation.value) closeMobile(); });
+watch(page, closeMobile);
+function mobileKeys(e: KeyboardEvent) {
+  if (!mobileLayer.value || document.getElementById('app')?.inert) return;
+  if (e.key === 'Escape') { e.preventDefault(); closeMobile(); return; }
+  if (e.key !== 'Tab') return;
+  const box = mobileTools.value ? toolsDialog.value : drawer.value;
+  const items = Array.from(box?.querySelectorAll<HTMLElement>('button:not(:disabled),a[href],select:not(:disabled),[tabindex="0"]') || []).filter(el => el.getClientRects().length);
+  const first = items[0], last = items.at(-1), active = document.activeElement;
+  if (!first) { e.preventDefault(); box?.focus(); }
+  else if (e.shiftKey && (active === first || active === box)) { e.preventDefault(); last?.focus(); }
+  else if (!e.shiftKey && (active === last || !box?.contains(active))) { e.preventDefault(); first.focus(); }
+}
+let desktop: MediaQueryList;
+function onDesktop() { if (desktop.matches) closeMobile(); }
+onMounted(() => { desktop = matchMedia('(min-width: 901px)'); desktop.addEventListener('change', onDesktop); document.addEventListener('keydown', mobileKeys); });
+onBeforeUnmount(() => { closeMobile(); desktop?.removeEventListener('change', onDesktop); document.removeEventListener('keydown', mobileKeys); });
 </script>
 <template>
 
@@ -63,7 +94,8 @@ import ViewModeSwitcher from "./ViewModeSwitcher.vue";
     :inert="!!modal || !!confirmation"
   >
     <div v-if="mobileNav" class="nav-shade" @click="mobileNav = false"></div>
-    <aside :class="['sidebar', { open: mobileNav }]">
+    <aside id="mobile-navigation" ref="drawer" tabindex="-1" :class="['sidebar', { open: mobileNav }]" :role="mobileNav ? 'dialog' : undefined" :aria-modal="mobileNav ? true : undefined" :aria-label="t('主导航')" :inert="mobileTools">
+      <button class="icon drawer-close" :aria-label="t('关闭导航')" @click="mobileNav=false"><X :size="20"/></button>
       <a
         class="brand"
         href="#"
@@ -76,7 +108,7 @@ import ViewModeSwitcher from "./ViewModeSwitcher.vue";
           ></span
         ></a
       >
-      <PanelUpdater v-if="owner && !selectedSite" :version="state.system.version.split('-')[0]"/>
+      <PanelUpdater v-if="owner && !selectedSite" :version="state.system.version.split('-')[0]" @open="closeMobile"/>
       <div class="workspace">
         <span class="workspace-symbol"><Building2 :size="16" /></span>
         <div>
@@ -130,11 +162,11 @@ import ViewModeSwitcher from "./ViewModeSwitcher.vue";
         </button>
       </div>
     </aside>
-    <div class="main-area">
+    <div class="main-area" :inert="mobileLayer">
       <header class="topbar">
         <button
           class="icon mobile-menu"
-          :title="t('打开导航')"
+          :title="t('打开导航')" :aria-label="t('打开导航')" :aria-expanded="mobileNav" aria-controls="mobile-navigation"
           @click="mobileNav = !mobileNav"
         >
           <Menu :size="21" />
@@ -146,14 +178,14 @@ import ViewModeSwitcher from "./ViewModeSwitcher.vue";
           <p>{{ t(pageDescriptions[page]) }}</p>
         </div>
         <div class="top-actions">
- <button v-if="selectedSite" class="site-switch" @click="switchSite('')">{{selectedSiteName}} · {{t('返回本站')}}</button>
- <span v-else class="edition-badge">{{state.system.edition==='pro'?'PRO':'LITE'}}</span>
-          <ViewModeSwitcher v-model="viewMode"/>
+ <button v-if="selectedSite" class="site-switch desktop-action" @click="switchSite('')">{{selectedSiteName}} · {{t('返回本站')}}</button>
+ <span v-else class="edition-badge desktop-action">{{state.system.edition==='pro'?'PRO':'LITE'}}</span>
+          <ViewModeSwitcher class="desktop-action" v-model="viewMode"/>
           <LanguageSwitcher/>
           <button v-if="!simpleMode" class="icon inbox-bell" :title="t('站内信')" :aria-label="t('站内信')" @click="go('messages')"><Bell :size="18"/><span v-if="state.unread_messages" class="bell-count">{{state.unread_messages>99?'99+':state.unread_messages}}</span></button>
           <span class="live-label"
             ><span class="dot" />{{ date(state.system.applied_at, true) }}</span
-          ><button class="icon" :title="t('刷新')" @click="refresh()">
+          ><button class="icon desktop-action" :title="t('刷新')" @click="refresh()">
             <RefreshCw :size="17" /></button
           ><button
             class="icon header-theme"
@@ -176,9 +208,10 @@ import ViewModeSwitcher from "./ViewModeSwitcher.vue";
               >{{ state.me.username
               }}<small>{{ owner ? t("管理员") : t("企业成员") }}</small></span
             ></button
-          ><button class="icon" :title="t('退出登录')" @click="signOut">
+          ><button class="icon desktop-action" :title="t('退出登录')" @click="signOut">
             <LogOut :size="17" />
           </button>
+          <button class="icon mobile-tools-button" :aria-label="t('显示与账户')" :title="t('显示与账户')" aria-controls="mobile-tools" :aria-expanded="mobileTools" @click="mobileTools=true"><SlidersHorizontal :size="20"/></button>
         </div>
       </header>
       <div
@@ -214,8 +247,25 @@ import ViewModeSwitcher from "./ViewModeSwitcher.vue";
           ><span>v{{ state.system.version.split("-")[0] }}</span>
         </footer>
       </div>
+      <nav class="mobile-quick-nav" :aria-label="t('常用导航')">
+        <button v-for="item in quickNav" :key="item.id" :aria-current="page===item.id?'page':undefined" :class="{selected:page===item.id}" @click="go(item.id)"><component :is="item.icon" :size="20"/><span>{{item.label}}</span></button>
+      </nav>
     </div>
   </div>
+  <Teleport to="body">
+    <div v-if="mobileTools && state" class="mobile-tools-shade" @click.self="closeMobile">
+      <section id="mobile-tools" ref="toolsDialog" class="mobile-tools-panel" role="dialog" aria-modal="true" :aria-label="t('显示与账户')" tabindex="-1">
+        <header><div><strong>{{state.me.username}}</strong><small>{{owner?t('管理员'):t('企业成员')}} · {{(state.system.edition||'lite').toUpperCase()}}</small></div><button class="icon" :aria-label="t('关闭')" @click="closeMobile"><X :size="20"/></button></header>
+        <div class="mobile-preference"><span>{{t('界面模式')}}</span><ViewModeSwitcher v-model="viewMode"/></div>
+        <button v-if="selectedSite" @click="closeMobile();switchSite('')"><Building2 :size="18"/><span>{{selectedSiteName}} · {{t('返回本站')}}</span></button>
+        <button @click="toggleTheme"><Sun v-if="theme==='dark'" :size="18"/><Moon v-else :size="18"/><span>{{theme==='dark'?t('切换浅色模式'):t('切换深色模式')}}</span></button>
+        <button @click="closeMobile();modal='password'"><KeyRound :size="18"/><span>{{t('账户与密码')}}</span></button>
+        <button v-if="!simpleMode" @click="closeMobile();go('messages')"><Bell :size="18"/><span>{{t('站内信')}}</span><span v-if="state.unread_messages" class="badge">{{state.unread_messages}}</span></button>
+        <button @click="closeMobile();refresh()"><RefreshCw :size="18"/><span>{{t('刷新')}}</span></button>
+        <button class="danger-button" @click="closeMobile();signOut()"><LogOut :size="18"/><span>{{t('退出登录')}}</span></button>
+      </section>
+    </div>
+  </Teleport>
   <PanelDialogs />
 </template>
 
