@@ -193,6 +193,11 @@ def execute(request, local_bundle=None):
             stderr = (exc.stderr or b'').decode(errors='replace') if isinstance(exc.stderr, bytes) else (exc.stderr or '')
             markers = ['permission denied', 'read-only file system', 'operation not permitted', 'resource temporarily unavailable', 'no such file', 'already has a controller', 'could not acquire site controller lease', 'incomplete application configuration', 'runtime: failed', 'pam', 'rlimit', 'getcwd']
             detail = ' exit=' + str(exc.returncode) + ' reasons=' + ','.join(m for m in markers if m in stderr.lower())
+            # These tools receive only fixed UID/GID options and an application
+            # path. Their own failure line is safe; never forward child output.
+            for line in stderr.splitlines():
+                if re.fullmatch(r'(setpriv|runuser): [A-Za-z0-9 /_.:;=()\'-]{1,240}', line):
+                    detail += ' privilege_tool=' + line
         print('Update failure ' + type(exc).__name__ + ' at ' + frames + detail, file=sys.stderr, flush=True)
         with lock:
             op = state.read('operation.json') or dict(request)
