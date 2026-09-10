@@ -10,7 +10,9 @@
 
 ## 发布产物
 
-- `guangyue-panel-<version>-linux-amd64.tar.gz`：面板、前端、自定义 HY2、安装/升级脚本和文档。
+- `guangyue-panel-lite-<version>-linux-amd64.tar.gz`：默认单机 SQLite 安装。
+- `guangyue-panel-pro-<version>-linux-amd64.tar.gz`：默认主控安装，支持 `--role business` 安装轻量业务站。
+- 两包均包含面板、前端、自定义 HY2、安装/升级脚本、文档及受校验的 `EDITION` 标记。
 - `SHA256SUMS`：外层压缩包与 SBOM 校验；压缩包内还有逐文件校验。
 - `SBOM.spdx.json`：固定 Go/npm 依赖清单。
 - 仓库 tag 对应源码；GitHub 自动提供 source archive，另保留 Hysteria 原始 commit 与完整修改补丁。

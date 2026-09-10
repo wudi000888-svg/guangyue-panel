@@ -316,7 +316,7 @@
   "未启用": "Not enabled",
   "未命名资源": "Unnamed resource",
   "未运行": "Stopped",
-  "本机直连": "Local direct",
+  "本机直连": "Local direct exit",
   "本机直连 · 保存后自动检测": "Local direct · Detected after saving",
   "本机直连（默认）": "Local direct (default)",
   "本轮异常": "Cycle error",
@@ -1542,5 +1542,9 @@
   "检测质量": "Check quality",
   "集中管理业务站、成员授权和出口分配": "Manage business sites, member access and exit assignments.",
   "阻止 IPv6": "Block IPv6",
-  "允许 IPv6 经出口": "Allow IPv6 through the exit"
+  "允许 IPv6 经出口": "Allow IPv6 through the exit",
+  "加载中…": "Loading…",
+  "已完成": "Completed",
+  "失败": "Failed",
+  "状态未知": "Unknown status"
 }
