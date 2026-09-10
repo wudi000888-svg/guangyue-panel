@@ -10,7 +10,7 @@
 
 [English](README_EN.md) · [安装指南](docs/INSTALL.md) · [使用手册](docs/USER_GUIDE.md) · [Nginx 共存](docs/NGINX.md) · [运维与备份](docs/OPERATIONS.md)
 
-![version](https://img.shields.io/badge/version-0.19.1-2563eb)
+![version](https://img.shields.io/badge/version-0.19.2-2563eb)
 ![license](https://img.shields.io/badge/panel_license-LGPL--3.0-16a34a)
 ![platform](https://img.shields.io/badge/server-Linux_amd64-475569)
 
