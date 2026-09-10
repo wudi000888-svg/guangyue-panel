@@ -180,7 +180,7 @@ func businessRecord(r Record, site string, nodes []Node) Record {
 	r.Password = nil
 	r.LastSub = 0
 	r.Role = "user"
-	r.Credentials = Credentials{HY2: seed, Token: businessSecret(seed, site, "local-token"), PublicToken: businessSecret(seed, site, "local-public"), VLESS: map[string]string{}}
+	r.Credentials = Credentials{HYGeneration: r.Credentials.HYGeneration, HY2: seed, Token: businessSecret(seed, site, "local-token"), PublicToken: businessSecret(seed, site, "local-public"), VLESS: map[string]string{}}
 	for _, n := range nodes {
 		if n.Protocol == "vless" {
 			h := sha256.Sum256([]byte(businessSecret(seed, site, n.ID)))

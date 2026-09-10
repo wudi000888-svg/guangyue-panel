@@ -368,6 +368,10 @@ func (a *App) applyBusinessSnapshot(ctx context.Context, snapshot BusinessSnapsh
 				r.Download = old.Download
 				r.VLESSTraffic = old.VLESSTraffic
 				r.HY2Traffic = old.HY2Traffic
+				r.Credentials.HYGeneration = max(r.Credentials.HYGeneration, old.Credentials.HYGeneration)
+				if old.Active() != r.Active() || old.HY2 != r.HY2 {
+					r.Credentials.HYGeneration++
+				}
 			}
 		}
 		for _, n := range nodes {

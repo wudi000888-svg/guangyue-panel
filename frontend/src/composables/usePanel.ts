@@ -384,7 +384,7 @@ const pageDescriptions: Record<string, string> = {
   "public-subscription": "独立公共订阅，仅分发当前合格的自动节点",
   subscription: "分发成员连接配置，管理订阅与访问凭据",
   tasks: "统一查看任务排队、执行结果与失败原因",
-  fleet: "集中接入和管理不同 VPS 上的独立站点",
+  fleet: "集中管理业务站、成员授权和出口分配",
   system: "查看服务状态、证书与最近操作记录",
   messages: "集中接收维护通知与账户消息",
   settings: "统一管理企业品牌、访问偏好与成员支持",
@@ -524,7 +524,7 @@ function go(id: string) {
   if (id === "ips" && ["subscriptions", "manual", "sources"].includes(nested)) selectPrivateTab(nested);
   if (id === "public") publicTab.value = ["resources", "sources", "policy"].includes(nested) ? nested : "resources";
   page.value = id;
-  void router.replace("/"+id+(id === "ips" ? "/"+privateTab.value : id === "public" && publicTab.value !== "resources" ? "/"+publicTab.value : ""));
+  void router.replace("/"+id+(id === "ips" ? "/"+privateTab.value : id === "public" && publicTab.value !== "resources" ? "/"+publicTab.value : id === "fleet" && nested === "independent" ? "/independent" : ""));
   nextTick(() => window.scrollTo({ top: 0, behavior: "instant" }));
   mobileNav.value = false;
   error.value = "";

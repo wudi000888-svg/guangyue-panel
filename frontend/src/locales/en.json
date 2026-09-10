@@ -1539,5 +1539,8 @@
   "授权已过期": "Authorization expired",
   "连接中断": "Disconnected",
   "尚未添加业务站": "No business sites yet",
-  "检测质量": "Check quality"
+  "检测质量": "Check quality",
+  "集中管理业务站、成员授权和出口分配": "Manage business sites, member access and exit assignments.",
+  "阻止 IPv6": "Block IPv6",
+  "允许 IPv6 经出口": "Allow IPv6 through the exit"
 }
