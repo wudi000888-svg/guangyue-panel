@@ -35,6 +35,8 @@ def api(path,body=None,cookie=''):
 def finished():
  for _ in range(120):
   code,data=updater('/state');op=data.get('operation') or {}
+  if code!=200 or not op:
+   time.sleep(1);continue
   if op.get('stage') not in agent.ACTIVE:
    assert op.get('stage')=='succeeded',op.get('error','no operation');return data
   time.sleep(1)
@@ -88,5 +90,8 @@ try:
  assert api('/api/health')[0]['version']==target
  print('PASS retained helper upgrades again after rollback to the older panel',flush=True)
 finally:
+ journal=subprocess.run(['journalctl','-u','guangyue-updater','--no-pager','-o','cat'],capture_output=True,text=True).stdout
+ for line in journal.splitlines():
+  if line.startswith('Update failure '):print(line,flush=True)
  subprocess.run(['systemctl','stop','guangyue-updater.socket','guangyue-updater.service',*install.UNITS],capture_output=True)
  shutil.rmtree(base)

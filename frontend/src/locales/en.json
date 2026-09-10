@@ -1599,5 +1599,6 @@
   "此版本不具备兼容的本机回退备份": "This version has no compatible local rollback backup.",
   "更新未完成，已尝试恢复原版本；请检查运行状态": "The operation did not complete. Recovery was attempted; check service health.",
   "自动恢复未完成，请通过 SSH 检查更新服务与离线备份": "Automatic recovery did not complete. Check the updater and offline backup over SSH.",
-  "上次版本操作被中断，请核对当前版本后重试": "The previous operation was interrupted. Check the running version before retrying."
+  "上次版本操作被中断，请核对当前版本后重试": "The previous operation was interrupted. Check the running version before retrying.",
+  "请先检查更新后再选择版本": "Check for updates before selecting a release."
 }

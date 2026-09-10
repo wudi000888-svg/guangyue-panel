@@ -37,7 +37,7 @@ async function poll(){
   countdown.value=Math.max(0,Math.ceil((countdownUntil-Date.now())/1000));
   if(countdown.value===0){remember(null);window.location.reload();return;}
  }else{countdownUntil=0;countdown.value=null;waiting.value=Date.now()-(selectedPending.started_at||0)*1000>600000;}
- if(state&&!state.operation&&Date.now()-(selectedPending.started_at||0)*1000>45000&&healthVersion===selectedPending.expected_version){error.value=t('未收到执行确认，请重新检测版本');remember(null);return;}
+ if(state?.available&&state.operation?.request_id!==selectedPending.request_id&&!activeStages.has(state.operation?.stage||'')&&Date.now()-(selectedPending.started_at||0)*1000>45000){error.value=t('未收到执行确认，请重新检测版本');remember(null);return;}
  schedule();
 }
 async function apply(){
@@ -65,9 +65,9 @@ onBeforeUnmount(()=>{stopped=true;clearTimeout(timer);document.removeEventListen
   <template v-else>
    <p v-if="!available" class="field-help">{{t(info?.error||'正在读取更新状态')}}</p>
    <template v-else><div class="version-check"><span>{{info?.checked_at?new Date(info.checked_at*1000).toLocaleString():t('尚未检查版本')}}</span><button @click="load(true)" :disabled="busy"><RefreshCw :size="14" :class="{spin:busy}"/>{{t('检查更新')}}</button></div>
-    <div v-if="releases.length" class="version-release"><label>{{t('选择更新版本')}}<select v-model="selected"><option v-for="r in releases" :key="r.version" :value="r.version">v{{r.version}}</option></select></label><a v-if="targetRelease" :href="targetRelease.url" target="_blank" rel="noopener noreferrer">{{t('查看发布说明')}}<ExternalLink :size="13"/></a><pre v-if="targetRelease?.notes">{{targetRelease.notes}}</pre><button class="primary full" @click="confirm='update'" :disabled="busy"><ArrowUpCircle :size="16"/>{{t('更新到所选版本')}}</button></div>
+    <div v-if="releases.length" class="version-release"><label>{{t('选择更新版本')}}<select v-model="selected" :aria-label="t('选择更新版本')"><option v-for="r in releases" :key="r.version" :value="r.version">v{{r.version}}</option></select></label><a v-if="targetRelease" :href="targetRelease.url" target="_blank" rel="noopener noreferrer">{{t('查看发布说明')}}<ExternalLink :size="13"/></a><pre v-if="targetRelease?.notes">{{targetRelease.notes}}</pre><button class="primary full" @click="confirm='update'" :disabled="busy"><ArrowUpCircle :size="16"/>{{t('更新到所选版本')}}</button></div>
     <p v-else class="field-help">{{t(info?.checked_at?'当前没有可用的新版本':'点击检查更新，读取正式发布版本。')}}</p>
-    <details class="version-rollback"><summary><History :size="15"/>{{t('版本回退')}}</summary><p class="field-help">{{t('仅列出安装基线之后、具有本机备份的已安装版本。')}}</p><label v-if="info?.rollback_versions?.length">{{t('选择回退版本')}}<select v-model="rollbackVersion"><option value="">{{t('请选择版本')}}</option><option v-for="r in info.rollback_versions" :key="r.version" :value="r.version" :disabled="!r.compatible">v{{r.version}}{{r.compatible?'':' · '+t('数据库不兼容')}}</option></select></label><p v-else class="field-help">{{t('暂无可回退版本')}}</p><button v-if="info?.rollback_versions?.length" @click="confirm='rollback'" :disabled="busy||!rollbackVersion||!info.rollback_versions.some(r=>r.version===rollbackVersion&&r.compatible)">{{t('回退到所选版本')}}</button></details>
+    <details class="version-rollback"><summary><History :size="15"/>{{t('版本回退')}}</summary><p class="field-help">{{t('仅列出安装基线之后、具有本机备份的已安装版本。')}}</p><label v-if="info?.rollback_versions?.length">{{t('选择回退版本')}}<select v-model="rollbackVersion" :aria-label="t('选择回退版本')"><option value="">{{t('请选择版本')}}</option><option v-for="r in info.rollback_versions" :key="r.version" :value="r.version" :disabled="!r.compatible">v{{r.version}}{{r.compatible?'':' · '+t('数据库不兼容')}}</option></select></label><p v-else class="field-help">{{t('暂无可回退版本')}}</p><button v-if="info?.rollback_versions?.length" @click="confirm='rollback'" :disabled="busy||!rollbackVersion||!info.rollback_versions.some(r=>r.version===rollbackVersion&&r.compatible)">{{t('回退到所选版本')}}</button></details>
    </template>
    <a class="version-guide" href="https://github.com/wudi000888-svg/guangyue-panel/blob/main/docs/UPDATES.md" target="_blank" rel="noopener noreferrer">{{t('更新与回退说明')}}<ExternalLink :size="13"/></a>
   </template>

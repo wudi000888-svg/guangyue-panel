@@ -15,6 +15,7 @@ import tarfile
 import tempfile
 import threading
 import time
+import traceback
 import urllib.parse
 import urllib.request
 import uuid
@@ -184,6 +185,10 @@ def execute(request, local_bundle=None):
                     upgrade.upgrade(bundle, progress=progress)
             progress('succeeded')
     except Exception as exc:
+        # Record locations and exception type only; command arguments/output may
+        # contain credentials and must never reach the journal or browser.
+        frames = ','.join(Path(f.filename).name + ':' + str(f.lineno) for f in traceback.extract_tb(exc.__traceback__))
+        print('Update failure ' + type(exc).__name__ + ' at ' + frames, file=sys.stderr, flush=True)
         with lock:
             op = state.read('operation.json') or dict(request)
             op.update(stage='failed', updated_at=int(time.time()), error=str(exc) if isinstance(exc, ValueError) else '更新未完成，已尝试恢复原版本；请检查运行状态')
@@ -208,7 +213,8 @@ def submit(request, launch=True):
         if request['expected_version'] != state.current(): raise ValueError('当前版本已变化，请重新检测')
         if request['action'] == 'update':
             config = json.loads(state.CONFIG.read_text())
-            available = catalog()
+            available = state.read('catalog.json', {'checked_at': 0, 'releases': []})
+            if available['checked_at'] < time.time() - 900: raise ValueError('请先检查更新后再选择版本')
             if not any(r['version'] == request['version'] and config.get('edition', 'lite') in r['editions'] for r in available['releases']) or state.version(request['version']) <= state.version(state.current()): raise ValueError('请选择已发布的兼容新版本')
         else:
             chosen = next((r for r in state.candidates() if r['version'] == request['version']), None)
