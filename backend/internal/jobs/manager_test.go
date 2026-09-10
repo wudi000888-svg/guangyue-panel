@@ -155,3 +155,12 @@ func TestPostgresQueue(t *testing.T) {
 	t.Run("recovery_delivery", TestQueueRecoveryAndDelivery)
 	t.Run("shutdown", TestQueueShutdownRequeuesWork)
 }
+
+func TestQueueAlreadyCancelledShutdown(t *testing.T) {
+	m := testManager(t, 1)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := m.Run(ctx); err != nil {
+		t.Fatalf("normal shutdown reported as queue failure: %v", err)
+	}
+}
