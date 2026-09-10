@@ -13,8 +13,8 @@ const planOptions=computed(()=>[...new Map((state.value?.users||[]).filter(u=>u.
 const visibleUsers=computed(()=>users.value.filter(u=>planFilter.value==='all'||(planFilter.value==='independent'?!u.entitlement:u.entitlement?.plan_id===planFilter.value)));
 const {page:listPage,pages:listPages,rows:listRows}=usePagination(visibleUsers);
 const allSelected=computed(()=>!!visibleUsers.value.length&&visibleUsers.value.every(u=>selected.value.includes(u.id)));
-function toggleAll(){selected.value=allSelected.value?[]:visibleUsers.value.map(u=>u.id);}
-function editEntitlements(){entitlementUsers.value=(state.value?.users||[]).filter(u=>selected.value.includes(u.id));}
+function toggleAll(){selected.value=allSelected.value?[]:visibleUsers.value.filter(u=>!u.archived).map(u=>u.id);}
+function editEntitlements(){entitlementUsers.value=(state.value?.users||[]).filter(u=>!u.archived&&selected.value.includes(u.id));}
 
 </script>
 <template>
@@ -127,7 +127,7 @@ function editEntitlements(){entitlementUsers.value=(state.value?.users||[]).filt
                     {{ u.last_sub ? date(u.last_sub, true) : t("尚未获取") }}
                   </td>
                   <td :data-label="t('操作')">
-                    <div class="row-actions">
+                    <span v-if="u.archived" class="muted">{{t("历史记录只读")}}</span><div v-else class="row-actions">
  <button class="icon" :title="t('套餐与权益')" @click="entitlementUsers=[u]"><Package :size="17"/></button><button class="icon" :title="t('查看订阅')" @click="showSub(u)">
                         <QrCode :size="17" /></button
                       ><button

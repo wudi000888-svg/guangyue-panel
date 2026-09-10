@@ -14,7 +14,7 @@ func nowUnix() int64 { return time.Now().Unix() }
 
 // Tables is ordered by foreign-key dependencies. schema_migrations is local to
 // each dialect; its contents are checked by Migrate rather than copied blindly.
-var Tables = []string{"users", "nodes", "ip_pool", "meta", "import_sources", "quality_geo_cache", "messages", "public_blacklist", "public_source_cache", "public_source_tasks", "public_custom_sources", "audit", "checkpoints", "revocations", "traffic", "sessions", "message_recipients", "tasks", "fleet_peers", "fleet_tokens", "core_revisions", "business_sites", "node_groups", "plans", "plan_versions", "quota_periods", "node_usage", "entitlement_operations", "node_meter_policies", "business_node_usage", "business_usage_acks"}
+var Tables = []string{"users", "nodes", "ip_pool", "meta", "import_sources", "quality_geo_cache", "messages", "public_blacklist", "public_source_cache", "public_source_tasks", "public_custom_sources", "audit", "checkpoints", "revocations", "traffic", "sessions", "message_recipients", "tasks", "fleet_peers", "fleet_tokens", "core_revisions", "business_sites", "node_groups", "plans", "plan_versions", "quota_periods", "node_usage", "entitlement_operations", "node_meter_policies", "business_node_usage", "business_usage_acks", "wallet_accounts", "money_transactions", "money_entries", "commerce_requests", "redeem_codes", "redeem_attempts", "commerce_offers", "commerce_orders", "commerce_events", "support_tickets", "support_replies", "support_attachments", "archived_users", "support_upload_attempts"}
 
 // Copy replaces destination data in one transaction from a consistent source
 // snapshot. Callers must stop all site controllers before migration or restore.

@@ -56,6 +56,16 @@ server {
     add_header X-Content-Type-Options nosniff always;
     add_header Referrer-Policy no-referrer always;
     add_header X-Frame-Options DENY always;
+    location = /api/support/upload {
+        client_max_body_size 3m;
+        proxy_request_buffering off;
+        proxy_pass http://127.0.0.1:19100;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_read_timeout 30s;
+    }
     location / {
         proxy_pass http://127.0.0.1:19100;
         proxy_http_version 1.1;

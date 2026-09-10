@@ -99,7 +99,7 @@ try:
     print('PASS default BBR/HY2, real privileged toggle off/on, restoration and preserved subscription')
 
     from entitlement_integration import verify_entitlements
-    verify_entitlements(bundle, temp, cert, api, cookie)
+    verify_entitlements(bundle, temp, cert, api, cookie, initial["password"])
 
     # Occupied paths must refuse a second install, without touching current data.
     assert run(*command, '--apply', success=False).returncode != 0

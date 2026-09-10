@@ -37,7 +37,7 @@ async function request<T>(url: string, options: RequestInit, decode: (r: Respons
   const check = () => { if (controller.signal.aborted || generation !== session) throw aborted(); };
   try {
     check();
-    const localOnly = /^\/api\/(fleet(?:\/|$)|business-sites(?:\/|$)|updates(?:\/|$)|login$|logout$|password$|site$)/.test(url);
+    const localOnly = /^\/api\/(commerce(?:\/|$)|support(?:\/|$)|fleet(?:\/|$)|business-sites(?:\/|$)|updates(?:\/|$)|login$|logout$|password$|site$)/.test(url);
     if (remoteSite && url.startsWith('/api/') && !localOnly && !new Headers(options.headers).has('X-Guangyue-Site')) {
       options = { ...options, headers: { ...options.headers, 'X-Guangyue-Site': remoteSite } };
     }

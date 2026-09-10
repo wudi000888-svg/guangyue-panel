@@ -3,6 +3,7 @@ package controlplane
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"flag"
 	cachepkg "github.com/wudi000888-svg/guangyue-panel/backend/internal/cache"
 	"github.com/wudi000888-svg/guangyue-panel/backend/internal/jobs"
@@ -19,6 +20,7 @@ import (
 )
 
 type App struct {
+	ticketProcessor  func(context.Context, []byte, string) ([]byte, error)
 	updateClient     *http.Client
 	controllerLease  *persistence.ControllerLease
 	gatewaySlots     chan struct{}
@@ -63,6 +65,7 @@ func encodeBase64(b []byte) string { return base64.StdEncoding.EncodeToString(b)
 func Run() {
 	// CLI setup and early configuration errors also honor the persisted mode.
 	log.SetOutput(&runtimeLogWriter{dir: "/var/lib/guangyue", out: os.Stderr})
+	imageFormat := flag.String("normalize-ticket-image", "", "normalize an isolated ticket image")
 	cfgPath := flag.String("config", "/etc/guangyue-personal.json", "configuration file")
 	managedService := flag.String("run-core", "", "run a fixed managed service with runtime log control")
 	init := flag.Bool("init", false, "initialize configuration")
@@ -71,6 +74,9 @@ func Run() {
 	snapshot := flag.String("snapshot", "", "write an offline portable backup to a new file")
 	importSQLite := flag.String("import-sqlite", "", "migrate a SQLite database into an empty Pro site")
 	flag.Parse()
+	if *imageFormat != "" {
+		os.Exit(ticketImageWorker(*imageFormat))
+	}
 	if *managedService != "" {
 		if *cfgPath != "/etc/guangyue-personal.json" || *init || *prepare || *restore != "" || *snapshot != "" || *importSQLite != "" || flag.NArg() != 0 {
 			os.Exit(2)
@@ -264,10 +270,12 @@ func (a *App) loop(ctx context.Context) {
 		} else {
 			a.trafficError = ""
 		}
+		commerceErr := a.commerceWork(time.Now().Unix())
 		err := a.advanceQuotaPeriods(time.Now().Unix())
 		if err == nil {
 			err = a.reconcileIfNeeded()
 		}
+		err = errors.Join(err, commerceErr)
 		if err != nil {
 			a.status = "error"
 			a.syncError = err.Error()

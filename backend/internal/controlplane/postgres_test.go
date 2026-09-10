@@ -15,6 +15,14 @@ func TestPostgresBehaviors(t *testing.T) {
 		name string
 		run  func(*testing.T)
 	}{
+		{"commerce_snapshot", TestCommerceSnapshotRoundTrip},
+		{"commerce_recovery", TestCommerceRecoveryAndRenewal},
+		{"commerce_integrity", TestCommerceIntegrityAndArchive},
+		{"commerce_images", TestSupportInternalImagesAndRetention},
+		{"commerce_redemption", TestCommerceRedemptionAtomicAndRevocation},
+		{"commerce_orders", TestCommerceOrderCaptureResetAndRefund},
+		{"commerce_cancellation", TestCommerceCancellationIsolationAndExpiry},
+		{"commerce_support", TestSupportTicketImagesAndOwnership},
 		{"business_lifecycle", TestBusinessLifecycle},
 		{"weighted_business", TestBusinessWeightedQuotasSparseAcknowledgementAndReset},
 		{"business_membership_deletion", TestBusinessExitDeletionCleansGroupsAndRestoresOnFailure},

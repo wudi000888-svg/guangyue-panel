@@ -17,12 +17,13 @@ import (
 )
 
 type Store struct {
-	edition   string
-	db        *persistence.DB
-	vault     *Vault
-	stateDir  string
-	runtimeMu sync.RWMutex
-	runtime   RuntimeSettings
+	commerceErr error
+	edition     string
+	db          *persistence.DB
+	vault       *Vault
+	stateDir    string
+	runtimeMu   sync.RWMutex
+	runtime     RuntimeSettings
 }
 
 func openStore(dir string) (*Store, error) {
@@ -37,6 +38,7 @@ func openConfiguredStore(cfg Config) (*Store, error) {
 		s.db.Close()
 		return nil, err
 	}
+	s.commerceErr = s.validateCommerce(false)
 	return s, nil
 }
 

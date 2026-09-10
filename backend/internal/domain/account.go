@@ -4,6 +4,7 @@ package domain
 import "time"
 
 type User struct {
+	Archived       bool         `json:"archived,omitempty"`
 	ID             int64        `json:"id"`
 	Username       string       `json:"username"`
 	Role           string       `json:"role"`

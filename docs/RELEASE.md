@@ -1,6 +1,6 @@
 # 发布准备与仓库管理
 
-项目名称：广月面板 / Guangyue Panel。仓库 slug：`guangyue-panel`。双版本发布：`0.20.0`。项目定位：新一代跨境电商企业级解决方案，提供 Lite 单机版和 Pro 群站管理版。
+项目名称：广月面板 / Guangyue Panel。仓库 slug：`guangyue-panel`。双版本发布：`0.21.0`。项目定位：新一代跨境电商企业级解决方案，提供 Lite 单机版和 Pro 群站管理版。
 
 ## 公开发布策略
 

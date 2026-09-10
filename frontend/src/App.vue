@@ -14,7 +14,7 @@ import LanguageSwitcher from "./LanguageSwitcher.vue";
 import ViewModeSwitcher from "./ViewModeSwitcher.vue";
 const isDesktop = ref(matchMedia('(min-width: 901px)').matches);
 const mobileTools = ref(false), drawer = ref<HTMLElement|null>(null), toolsDialog = ref<HTMLElement|null>(null);
-const quickNav = computed(() => ['overview','ips','nodes','users','subscription'].flatMap(id => nav.value.filter(item => item.id === id)));
+const quickNav = computed(() => (owner.value?['overview','ips','nodes','users','subscription']:['subscription','shop','wallet','orders','tickets']).flatMap(id => nav.value.filter(item => item.id === id)));
 const mobileLayer = computed(() => mobileNav.value || mobileTools.value);
 let oldOverflow = '', oldFocus: HTMLElement|null = null, locked = false;
 const closeMobile = () => { mobileNav.value = false; mobileTools.value = false; };

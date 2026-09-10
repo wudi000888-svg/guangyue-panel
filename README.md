@@ -10,7 +10,7 @@
 
 [English](README_EN.md) · [安装指南](docs/INSTALL.md) · [使用手册](docs/USER_GUIDE.md) · [Nginx 共存](docs/NGINX.md) · [运维与备份](docs/OPERATIONS.md)
 
-![version](https://img.shields.io/badge/version-0.20.0-2563eb)
+![version](https://img.shields.io/badge/version-0.21.0-2563eb)
 ![license](https://img.shields.io/badge/panel_license-LGPL--3.0-16a34a)
 ![platform](https://img.shields.io/badge/server-Linux_amd64-475569)
 
@@ -20,13 +20,14 @@
 
 把服务器入口、出口 IP、员工订阅和可追溯的质量检测放进一个工作台，减少跨境团队配置和切换网络资源的重复工作。采用 Go + Vue 3。Lite 使用 SQLite，Pro 使用 PostgreSQL + Redis，提供任务中心与多个 VPS 站点的集中接入和管理。
 
-“企业级”描述团队管理与运维场景。每个站点由一个控制器独占管理；Pro 支持主控站＋业务站、统一成员授权与订阅，不提供同站点多主高可用、组织级租户隔离、计费或服务等级承诺。网络与账号合规由部署方和所使用平台的规则决定。
+“企业级”描述团队管理与运维场景。每个站点由一个控制器独占管理；Pro 支持主控站＋业务站、统一成员授权与订阅，不提供同站点多主高可用、组织级租户隔离、外部支付或服务等级承诺。网络与账号合规由部署方和所使用平台的规则决定。
 
 ## 功能一览
 
 | 模块 | 能力 |
 | --- | --- |
 | 套餐与倍率 | 节点 0–100×倍率、节点权限组、套餐分类与版本，手动分配/续期/周期重置，实际与配额双计量；[使用指南](docs/PLANS.md) |
+| 账户与服务 | 站内余额、定额兑换码（有效期/作废）、套餐订单、退款、图片工单与内部备注；[使用指南](docs/COMMERCE.md) |
 | 仪表盘 | 用户、节点、流量、出口与服务状态，快速进入常用操作 |
 | 节点管理 | VLESS Reality / Hysteria 2 多用户；保留两个默认直连节点；绑定出口创建新节点；批量操作 |
 | 私有 IP 池 | 独立出口 / 订阅出口 / 订阅来源分栏；HTTP CONNECT、SOCKS5、单节点和订阅导入 |

@@ -195,6 +195,10 @@ func (a *App) authenticated(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if peer := r.Header.Get("X-Guangyue-Site"); peer != "" {
+		if strings.HasPrefix(r.URL.Path, "/api/commerce/") || strings.HasPrefix(r.URL.Path, "/api/support/") {
+			failure(w, 403, "账户服务必须在主控访问")
+			return
+		}
 		a.relaySiteAPI(w, r, actor, peer)
 		return
 	}
@@ -202,6 +206,10 @@ func (a *App) authenticated(w http.ResponseWriter, r *http.Request) {
 }
 func (a *App) dispatchAuthenticated(w http.ResponseWriter, r *http.Request, actor Record) {
 	switch {
+	case strings.HasPrefix(r.URL.Path, "/api/support/"):
+		a.supportAPI(w, r, actor)
+	case strings.HasPrefix(r.URL.Path, "/api/commerce/"):
+		a.commerceAPI(w, r, actor)
 	case r.URL.Path == "/api/messages" || strings.HasPrefix(r.URL.Path, "/api/messages/"):
 		a.messages(w, r, actor)
 	case r.Method == "GET" && r.URL.Path == "/api/operations":
@@ -685,7 +693,7 @@ func (a *App) createUser(w http.ResponseWriter, r *http.Request, actor Record) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	var count int
-	_ = a.store.db.QueryRow("SELECT COUNT(*) FROM users").Scan(&count)
+	_ = a.store.db.QueryRow("SELECT COUNT(*) FROM users WHERE id NOT IN (SELECT user_id FROM archived_users)").Scan(&count)
 	if count >= 100 {
 		failure(w, 400, "个人版最多 100 位用户")
 		return
@@ -731,14 +739,62 @@ func (a *App) changeUser(w http.ResponseWriter, r *http.Request, actor Record) {
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if pending, e := a.store.commercePending(id); e != nil || pending {
+		failure(w, 409, "请先处理用户的未完成订单")
+		return
+	}
 	record, err := a.store.record(id)
 	if err != nil {
 		failure(w, 404, "用户不存在")
 		return
 	}
+	if record.Archived {
+		failure(w, 409, "账号已归档，历史记录只读")
+		return
+	}
 	if r.Method == "DELETE" && action == "" {
 		if record.Role == "owner" {
 			failure(w, 400, "不能删除管理员")
+			return
+		}
+		history, e := a.store.hasCommerceHistory(id)
+		if e != nil {
+			failure(w, 500, "账户记录检查失败")
+			return
+		}
+		if history {
+			wallet, e := a.store.wallet(id)
+			if e != nil || wallet.Available != 0 || wallet.Held != 0 {
+				failure(w, 409, "请先清算账户余额，再归档用户")
+				return
+			}
+			if err = a.store.queueKick(id); err != nil {
+				failure(w, 500, "撤销队列写入失败")
+				return
+			}
+			record.Enabled = false
+			record.Archived = true
+			tx, e := a.store.db.Begin()
+			if e == nil {
+				e = txUser(tx, record.User)
+				if e == nil {
+					_, e = tx.Exec("INSERT INTO archived_users(user_id,created) VALUES(?,?)", id, time.Now().Unix())
+				}
+				if e == nil {
+					_, e = tx.Exec("DELETE FROM sessions WHERE user_id=?", id)
+				}
+				if e == nil {
+					e = tx.Commit()
+				} else {
+					tx.Rollback()
+				}
+			}
+			if e != nil {
+				failure(w, 500, "归档失败")
+				return
+			}
+			a.status = "pending"
+			jsonResponse(w, 200, object{"ok": true, "archived": true})
 			return
 		}
 		if err = a.store.queueKick(id); err != nil {

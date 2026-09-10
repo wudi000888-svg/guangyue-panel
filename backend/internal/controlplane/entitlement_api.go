@@ -296,9 +296,17 @@ func (a *App) entitlementBatch(w http.ResponseWriter, r *http.Request, actor Rec
 			return
 		}
 		seen[id] = true
+		if pending, e := a.store.commercePending(id); e != nil || pending {
+			failure(w, 409, "请先处理用户的未完成订单")
+			return
+		}
 		u, e := a.store.record(id)
 		if e != nil {
 			failure(w, 404, "部分用户已不存在")
+			return
+		}
+		if u.Archived {
+			failure(w, 409, "账号已归档，历史记录只读")
 			return
 		}
 		if u.Meter != nil && u.Meter.PendingReset {

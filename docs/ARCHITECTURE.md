@@ -43,3 +43,7 @@ Nginx stream 负责 TCP 443 的 SNI 分流：面板/网站进入本地 HTTPS，R
 ## Plans and node rates (0.20.0)
 
 See [the plans and accounting guide](PLANS.md) for permission groups, manual entitlements, weighted quotas, distributed periods, migration and downgrade restrictions.
+
+## 账户与服务（0.21.0）
+
+余额、兑换码、套餐订单与图片工单的启用步骤、权限、容量限制、群站同步和恢复保护见[账户服务指南](COMMERCE.md)。主控统一记账，业务站不保存资金或工单数据；新增迁移 005 后不支持直接回退至 0.20.x。
