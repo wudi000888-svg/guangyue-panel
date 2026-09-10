@@ -10,7 +10,7 @@
 
 [English](README_EN.md) · [安装指南](docs/INSTALL.md) · [使用手册](docs/USER_GUIDE.md) · [Nginx 共存](docs/NGINX.md) · [运维与备份](docs/OPERATIONS.md)
 
-![version](https://img.shields.io/badge/version-0.16.0-2563eb)
+![version](https://img.shields.io/badge/version-0.17.0-2563eb)
 ![license](https://img.shields.io/badge/panel_license-LGPL--3.0-16a34a)
 ![platform](https://img.shields.io/badge/server-Linux_amd64-475569)
 
@@ -39,12 +39,15 @@
 | 工作台 | 简易/专业模式、中文/English、主题、站内信、品牌与系统设置 |
 | 运行模式 | 常规 / 无日志切换，与简易/专业界面模式独立 |
 | 部署 | Nginx TCP 443 SNI 分流与 HY2 UDP 443；非特权服务、状态备份、升级回滚 |
+| 版本更新 | 左上角检测并选择正式版本，后台升级、健康检查后 8 秒刷新；安装基线保护与兼容版本回退 |
 
 > 流媒体或 AI 网站的公开页面可达，不等于账号登录、播放、支付或完整业务解锁。质量标签基于可核验的数据；不会把信息缺失强行标为“家宽”或“原生”。
 
 ## 下载版本
 
 在 [Releases](https://github.com/wudi000888-svg/guangyue-panel/releases/latest) 的 Assets 选择 `guangyue-panel-lite-…tar.gz`（单机）或 `guangyue-panel-pro-…tar.gz`（主控／业务站），并校验 `SHA256SUMS`。Pro 业务站安装无需 PostgreSQL 或 Redis。
+
+已有部署可按[在线更新与版本回退说明](docs/UPDATES.md)启用左上角版本管理。回退保留当前数据，不能低于安装基线；不兼容当前数据库的旧版本会被阻止。
 
 ## 快速开始
 
@@ -109,4 +112,4 @@ flowchart LR
 
 文档组织和专业控制台分区参考 [Sub2API](https://github.com/Wei-Shaw/sub2api)；没有复制其产品标识、截图或文案。感谢 Xray、Hysteria、Mihomo、Go、Vue 与 SQLite 生态。
 
-面板源码自 0.16.0 使用 [LGPL-3.0-only](LICENSE)，配套 [GPL-3.0 文本](licenses/GPL-3.0.txt)和[历史 MIT 声明](licenses/guangyue-legacy-MIT.txt)随项目提供。Hysteria 修改补丁使用 MIT；Xray 和 Mihomo 分别适用 MPL-2.0 与 GPL-3.0，详见第三方许可。
+面板源码自 0.15.0 使用 [LGPL-3.0-only](LICENSE)，配套 [GPL-3.0 文本](licenses/GPL-3.0.txt)和[历史 MIT 声明](licenses/guangyue-legacy-MIT.txt)随项目提供。Hysteria 修改补丁使用 MIT；Xray 和 Mihomo 分别适用 MPL-2.0 与 GPL-3.0，详见第三方许可。

@@ -78,6 +78,12 @@ jobs:
           - os: ubuntu-24.04
             edition: business
             asset: pro
+          - os: ubuntu-24.04
+            edition: updater-lite
+            asset: lite
+          - os: ubuntu-24.04
+            edition: updater-pro
+            asset: pro
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     steps:

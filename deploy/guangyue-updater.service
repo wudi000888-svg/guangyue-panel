@@ -1,0 +1,30 @@
+[Unit]
+Description=Guangyue Panel release updater
+Requires=guangyue-updater.socket
+After=network-online.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/bin/python3 /opt/guangyue-updater/update_agent.py serve
+Environment=PYTHONDONTWRITEBYTECODE=1
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/etc/systemd/system /etc/guangyue-personal.json
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+Nice=10
+IOSchedulingClass=idle
+MemoryHigh=160M
+MemoryMax=384M
+TasksMax=128
+TimeoutStopSec=30
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
