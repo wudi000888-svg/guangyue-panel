@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import {onMounted,onUnmounted,ref,watch} from 'vue';import {usePanelContext} from '../composables/panelContext';import {useCommerce,money,stamp,stateText,type Order} from '../lib/commerce';import {bytes} from '../lib/format';import {serialPoll} from '../lib/requests';import {t} from '../i18n';import '../commerce.css';
 const {owner,state}=usePanelContext(),{read,run,busy,error,notice}=useCommerce(),items=ref<Order[]>([]),all=ref(false),refundID=ref(''),password=ref('');
-async function load(){items.value=(await read<{items:Order[]}>('/orders'+(all.value?'?all=1':'')))?.items||[]}
-async function more(){const last=items.value.at(-1);if(!last)return;const v=await read<{items:Order[]}>('/orders?before='+encodeURIComponent(last.id)+(all.value?'&all=1':''));if(v)items.value.push(...v.items)}
+let sequence=0;async function load(){const current=++sequence;const v=await read<{items:Order[]}>('/orders'+(all.value?'?all=1':''));if(v&&current===sequence)items.value=v.items}
+async function more(){const current=sequence,last=items.value.at(-1);if(!last)return;const v=await read<{items:Order[]}>('/orders?before='+encodeURIComponent(last.id)+(all.value?'&all=1':''));if(v&&current===sequence)items.value.push(...v.items)}
 async function action(o:Order,action:string){const v=await run<Order>('/orders/action',{id:o.id,action,...(action==='refund'?{password:password.value}:{})});if(action==='refund')password.value='';if(v){refundID.value='';notice.value=t('订单状态已更新');await load()}}
 async function copy(id:string){try{await navigator.clipboard.writeText(id);notice.value=t('单号已复制')}catch{error.value=t('复制失败，请手动选择单号')}}
 const poll=serialPoll(async()=>{if(!document.hidden&&!busy.value&&items.value.some(o=>['pending','provisioning','refunding'].includes(o.state)))await load()},()=>10000);
