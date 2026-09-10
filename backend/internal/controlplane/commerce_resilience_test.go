@@ -3,13 +3,16 @@ package controlplane
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"fmt"
 	"github.com/wudi000888-svg/guangyue-panel/backend/internal/persistence"
 	"image"
+	"image/jpeg"
 	"image/png"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -214,17 +217,17 @@ func TestSupportInternalImagesAndRetention(t *testing.T) {
 	}
 }
 func TestSupportWorkerSubprocess(t *testing.T) {
-	if os.Getenv("GY_IMAGE_WORKER_FIXTURE") == "1" {
-		os.Exit(ticketImageWorker("png"))
-	}
 	var b bytes.Buffer
 	png.Encode(&b, image.NewRGBA(image.Rect(0, 0, 256, 256)))
-	path, e := os.Executable()
-	if e != nil {
-		t.Fatal(e)
+	// Race instrumentation needs large shadow mappings incompatible with the
+	// deployed worker's RLIMIT_DATA. Exercise the actual uninstrumented CLI;
+	// the normalizer and all handlers are still covered by the race test suite.
+	path := filepath.Join(t.TempDir(), "guangyue-worker")
+	build := exec.Command(filepath.Join(runtime.GOROOT(), "bin/go"), "build", "-race=false", "-o", path, "../..")
+	if out, e := build.CombinedOutput(); e != nil {
+		t.Fatalf("build worker: %v: %s", e, out)
 	}
-	cmd := exec.Command(path, "-test.run=^TestSupportWorkerSubprocess$")
-	cmd.Env = append(os.Environ(), "GY_IMAGE_WORKER_FIXTURE=1")
+	cmd := exec.Command(path, "-normalize-ticket-image", "png")
 	cmd.Stdin = bytes.NewReader(b.Bytes())
 	output, e := cmd.Output()
 	if e != nil {
@@ -233,7 +236,7 @@ func TestSupportWorkerSubprocess(t *testing.T) {
 	if _, e = png.Decode(bytes.NewReader(output)); e != nil {
 		t.Fatal(e)
 	}
-	// A large fake image is rejected without allocating its decoded pixel area.
+	// Failed uploads also consume the preflight resource budget.
 	a := testApp(t)
 	u := testUser(t, a, "member", "user")
 	for i := 0; i < 30; i++ {
@@ -290,5 +293,36 @@ func TestCommerceSnapshotRoundTrip(t *testing.T) {
 	}
 	if e = dst.store.validateCommerce(true); e != nil {
 		t.Fatal(e)
+	}
+}
+
+func TestSupportImageFormatsAndLimits(t *testing.T) {
+	var b bytes.Buffer
+	if e := jpeg.Encode(&b, image.NewRGBA(image.Rect(0, 0, 12, 8)), nil); e != nil {
+		t.Fatal(e)
+	}
+	// EXIF little-endian orientation 6 means a 90 degree clockwise rotation.
+	exif := []byte{'E', 'x', 'i', 'f', 0, 0, 'I', 'I', 42, 0, 8, 0, 0, 0, 1, 0, 0x12, 1, 3, 0, 1, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 0}
+	segment := []byte{255, 225, 0, 0}
+	binary.BigEndian.PutUint16(segment[2:], uint16(len(exif)+2))
+	raw := append(append(append([]byte{}, b.Bytes()[:2]...), append(segment, exif...)...), b.Bytes()[2:]...)
+	out, e := normalizeTicketImage(raw, "jpeg")
+	if e != nil {
+		t.Fatal(e)
+	}
+	cfg, e := jpeg.DecodeConfig(bytes.NewReader(out))
+	if e != nil || cfg.Width != 8 || cfg.Height != 12 || bytes.Contains(out, []byte("Exif")) {
+		t.Fatal("JPEG metadata or orientation incorrect")
+	}
+	if _, e = normalizeTicketImage(raw, "png"); e == nil {
+		t.Fatal("MIME mismatch accepted")
+	}
+	if _, e = normalizeTicketImage(make([]byte, (2<<20)+1), "png"); e == nil {
+		t.Fatal("oversized image accepted")
+	}
+	b.Reset()
+	png.Encode(&b, image.NewGray(image.Rect(0, 0, 4097, 1)))
+	if _, e = normalizeTicketImage(b.Bytes(), "png"); e == nil {
+		t.Fatal("oversized dimensions accepted")
 	}
 }
