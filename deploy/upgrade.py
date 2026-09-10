@@ -18,10 +18,19 @@ import update_state as updates
 
 
 def as_panel(*args):
-    # Maintenance is a service task, not a login session. PAM-backed runuser can
-    # fail inside the hardened updater (for example when resetting nice limits).
-    # Drop directly to the existing service UID and its supplementary groups.
-    return run('setpriv', '--reuid=guangyue', '--regid=guangyue', '--init-groups', '--no-new-privs', '--', *args)
+    # Let PID 1 establish the service identity. Some hardened hosts prevent a
+    # running updater from calling setresuid, even though it can manage units.
+    # The application itself never receives root or the updater's privileges.
+    command = ['systemd-run', '--quiet', '--wait', '--pipe', '--collect', '--service-type=exec',
+               '--property=User=guangyue', '--property=Group=guangyue',
+               '--property=WorkingDirectory=' + str(STATE), '--property=UMask=0077',
+               '--property=NoNewPrivileges=true', '--property=PrivateTmp=true',
+               '--property=ProtectSystem=strict', '--property=ProtectHome=true',
+               '--property=ReadWritePaths=' + str(STATE), '--property=CapabilityBoundingSet=',
+               '--property=MemoryMax=384M', '--property=TasksMax=128', '--property=RuntimeMaxSec=300']
+    if os.environ.get('LISTEN_PID') == str(os.getpid()):
+        command.append('--property=BindsTo=guangyue-updater.service')
+    return run(*command, '--', *args)
 
 
 def app_hashes(directory):
