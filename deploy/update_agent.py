@@ -306,7 +306,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
 
 class Server(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
-    daemon_threads = True
+    # A helper upgrade may retire this process immediately after a state poll.
+    # Let that response finish before closing the inherited listening socket.
+    daemon_threads = False
     def get_request(self):
         connection, address = super().get_request(); connection.settimeout(25); return connection, address
 
