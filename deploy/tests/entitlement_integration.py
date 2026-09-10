@@ -188,7 +188,17 @@ def verify_entitlements(bundle, temp, cert, api, cookie):
             assert not survived, 'old stream survived quota-period reset'
         assert current['quota_used'] == 0 and current['user']['upload'] > 0, 'reset erased lifetime usage'
         for port in [19891, 19892]:
-            roundtrip(port)
+            # A cached QUIC connection discovers an abrupt server restart on
+            # its transport timeout. Keep the same client and verify recovery.
+            deadline = time.monotonic() + 45
+            while True:
+                try:
+                    roundtrip(port)
+                    break
+                except OSError:
+                    if time.monotonic() >= deadline:
+                        raise AssertionError('client did not reconnect after quota reset')
+                    time.sleep(1)
         print('PASS local quota reset closes idle old VLESS/HY2 streams, preserves lifetime usage and admits new connections')
 
     finally:
