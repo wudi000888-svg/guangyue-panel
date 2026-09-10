@@ -10,7 +10,7 @@ import time
 from urllib.parse import urlparse, parse_qs, unquote
 
 
-def verify_entitlements(bundle, temp, cert, api, cookie):
+def verify_entitlements(bundle, temp, cert, api, cookie, admin_password):
     def call(path, data=None):
         return api('/api' + path, data, cookie)[0]
 
@@ -91,7 +91,12 @@ def verify_entitlements(bundle, temp, cert, api, cookie):
 
     group = call('/node-groups', {'name': 'CI entitlement', 'scope': 'private', 'enabled': True})
     plan = call('/plans', {'name': 'CI plan', 'quota': 1 << 30, 'valid_days': 1, 'cycle': 'none', 'vless': True, 'hy2': True, 'group_ids': [group['id']]})
-    user = call('/users', {'username': 'ci-entitlement', 'password': secrets.token_urlsafe(24), 'enabled': True, 'vless': True, 'hy2': True, 'plan_id': plan['id']})
+    password=secrets.token_urlsafe(24)
+    user = call('/users', {'username': 'ci-entitlement', 'password': password, 'enabled': True, 'vless': True, 'hy2': True})
+    _,member_cookie=api('/api/login',{'username':'ci-entitlement','password':password})
+    def member(path,data=None): return api('/api'+path,data,member_cookie)[0]
+    from commerce_integration import purchase_plan
+    purchase_plan(call,member,admin_password,plan,user['id'],bundle)
     ids = ['vless-main', 'hy2-main']
     call('/nodes/policy', {'ids': ids, 'group_ids': ['legacy-private', group['id']]})
     wait_applied()

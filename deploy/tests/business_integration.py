@@ -105,6 +105,10 @@ try:
     wait_for(lambda:api('/api/health'))
     initial=json.loads((control/'state/initial-owner.json').read_text());_,cookie=api('/api/login',initial)
     me,_=api('/api/state',cookie=cookie)
+    def billing_call(path,body=None):return api('/api'+path,body,cookie=cookie)[0]
+    plan=billing_call('/plans',{'name':'CI business purchase','quota':0,'valid_days':30,'cycle':'none','vless':True,'hy2':True,'group_ids':['legacy-private']})
+    from commerce_integration import purchase_plan
+    purchase_plan(billing_call,billing_call,initial['password'],plan,me['me']['id'],bundle)
     created,_=api('/api/business-sites',{'id':'ci_edge','name':'CI edge','group':'Validation'},cookie=cookie)
     enrollment=base/'enrollment.json';enrollment.write_text(json.dumps(created['enrollment']));enrollment.chmod(0o600)
     policy={'name':'CI edge','group':'Validation','enabled':True,'exclusive':False,'revision':created['site']['revision'],'nodes':[],'grants':[{'user_id':me['me']['id'],'quota':0}]}

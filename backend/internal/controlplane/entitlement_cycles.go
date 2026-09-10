@@ -43,6 +43,11 @@ func (a *App) advanceQuotaPeriods(now int64) error {
 		return err
 	}
 	for _, u := range users {
+		if pending, e := a.store.commerceBarrier(u.ID); e != nil {
+			return e
+		} else if pending {
+			continue
+		}
 		if u.Meter == nil {
 			continue
 		}

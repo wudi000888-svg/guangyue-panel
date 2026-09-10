@@ -9,6 +9,7 @@ A network resource console for cross-border commerce teams. Lite uses Go, SQLite
 
 ## Features
 
+- Account balances, expiring/revocable redemption codes, plan orders, refunds and private image support tickets; [guide](docs/COMMERCE_EN.md). No external payment gateway.
 - Node traffic multipliers (0–100×), permission groups, versioned plan templates and manual entitlements without payments; [guide](docs/PLANS.md).
 - Separate raw and quota usage, 30-day/calendar-month periods and per-node usage reports. Node deletion automatically removes group membership.
 - Multi-user VLESS Reality/Vision and Hysteria 2, including protected default direct nodes.

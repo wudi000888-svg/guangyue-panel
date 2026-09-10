@@ -6,7 +6,7 @@ import (
 )
 
 func TestGatewayScopeAndForbiddenSurfaces(t *testing.T) {
-	for _, path := range []string{"/api/backup", "/api/fleet/tokens", "/api/fleet-gateway", "/api/password", "/api/logout", "https://evil.test/api/state", "//evil.test/api/state", "/api/nodes/../backup", "/api/nodes/%2e%2e/backup", "/api/nodes%5c..%5cbackup"} {
+	for _, path := range []string{"/api/commerce/wallet", "/api/commerce/orders", "/api/support/ticket", "/api/support/upload", "/api/backup", "/api/fleet/tokens", "/api/fleet-gateway", "/api/password", "/api/logout", "https://evil.test/api/state", "//evil.test/api/state", "/api/nodes/../backup", "/api/nodes/%2e%2e/backup", "/api/nodes%5c..%5cbackup"} {
 		if AllowedGateway("GET", path, "manage") {
 			t.Errorf("accepted %s", path)
 		}

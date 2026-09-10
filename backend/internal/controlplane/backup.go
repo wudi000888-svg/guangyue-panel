@@ -17,7 +17,7 @@ import (
 	"time"
 )
 
-const maxBackupDatabaseBytes = 64 << 20
+const maxBackupDatabaseBytes = 8 << 30
 
 var backupEntries = []string{"config.json", "master.key", "panel.db"}
 
@@ -130,7 +130,7 @@ func extractBackup(path, dir string) error {
 		return err
 	}
 	defer file.Close()
-	gz, err := gzip.NewReader(io.LimitReader(file, 128<<20))
+	gz, err := gzip.NewReader(io.LimitReader(file, maxBackupDatabaseBytes+(64<<20)))
 	if err != nil {
 		return err
 	}
@@ -210,6 +210,9 @@ func prepareRestore(cfg Config, dir string) (err error) {
 	}
 	if integrity != "ok" {
 		return errors.New("database integrity check failed")
+	}
+	if err = check.validateCommerce(true); err != nil {
+		return err
 	}
 	if _, err = check.records(); err != nil {
 		return err

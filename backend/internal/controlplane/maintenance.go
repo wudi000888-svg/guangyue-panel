@@ -83,6 +83,9 @@ func importSQLiteSite(cfg Config, dst *Store, path string) error {
 		return err
 	}
 	defer src.db.Close()
+	if err = src.validateCommerce(true); err != nil {
+		return err
+	}
 	if _, err = src.records(); err != nil {
 		return errors.New("source credentials cannot be decrypted")
 	}

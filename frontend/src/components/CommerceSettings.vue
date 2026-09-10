@@ -1,0 +1,7 @@
+<script setup lang="ts">
+import {onMounted,ref} from 'vue';import {useCommerce} from '../lib/commerce';import {t} from '../i18n';import '../commerce.css';
+const {read,api,busy,error,notice}=useCommerce(),settings=ref({sales:false,redemption:true,tickets:true,currency:'CNY'}),password=ref('');
+onMounted(async()=>{const v=await read<typeof settings.value>('/settings');if(v)settings.value=v});
+async function save(){busy.value=true;error.value='';try{await api('/settings','POST',{settings:settings.value,password:password.value});notice.value=t('账户服务设置已保存')}catch(e){error.value=t((e as Error).message)}finally{password.value='';busy.value=false}}
+</script>
+<template><form class="commerce-page commerce-card" @submit.prevent="save"><h2>{{t('余额、兑换码与工单')}}</h2><p v-if="error" class="error" role="alert">{{error}}</p><p v-if="notice" role="status">{{notice}}</p><label class="inline-check"><input v-model="settings.sales" type="checkbox"/>{{t('开放余额购买套餐')}}</label><label class="inline-check"><input v-model="settings.redemption" type="checkbox"/>{{t('开放兑换码充值')}}</label><label class="inline-check"><input v-model="settings.tickets" type="checkbox"/>{{t('允许成员提交工单')}}</label><p class="commerce-muted">{{t('关闭入口不删除已有余额、订单、兑换码和工单。币种固定为 CNY，不接入外部支付。')}}</p><label>{{t('管理员当前密码')}}<input v-model="password" type="password" autocomplete="current-password" required/></label><button class="primary" :disabled="busy">{{t('保存账户服务设置')}}</button></form></template>

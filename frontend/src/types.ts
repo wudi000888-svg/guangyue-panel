@@ -8,6 +8,7 @@ export type Plan = {id:string;version:number;name:string;description:string;cate
 export type NodeGroup = {id:string;name:string;description:string;scope:'private'|'public';enabled:boolean;sort:number;revision:string};
 export type GroupMember = {site_id:string;node_id:string;name:string;protocol:string};
 export type User = {
+ archived?: boolean;
   meter?:QuotaMeter;
   entitlement?:Entitlement;
   id: number;

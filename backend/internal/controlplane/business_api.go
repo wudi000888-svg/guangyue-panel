@@ -156,6 +156,12 @@ func (a *App) businessAPI(w http.ResponseWriter, r *http.Request, actor Record) 
 			failure(w, 400, "站点名称或分组无效")
 			return
 		}
+		for _, g := range append(append([]BusinessGrant{}, v.Grants...), in.Grants...) {
+			if pending, e := a.store.commercePending(g.UserID); e != nil || pending {
+				failure(w, 409, "请先处理用户的未完成订单")
+				return
+			}
+		}
 		v.Name = in.Name
 		v.Group = in.Group
 		v.Enabled = in.Enabled
