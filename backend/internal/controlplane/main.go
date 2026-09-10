@@ -104,7 +104,11 @@ func Run() {
 	} else {
 		debug.SetMemoryLimit(48 << 20)
 	}
-	store, err := openConfiguredStore(cfg)
+	openDatabase := openConfiguredStore
+	if *importSQLite != "" {
+		openDatabase = openUninitializedStore
+	}
+	store, err := openDatabase(cfg)
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -29,6 +29,20 @@ func openStore(dir string) (*Store, error) {
 	return openConfiguredStore(Config{StateDir: dir})
 }
 func openConfiguredStore(cfg Config) (*Store, error) {
+	s, err := openUninitializedStore(cfg)
+	if err != nil {
+		return nil, err
+	}
+	if err = s.initEntitlements(); err != nil {
+		s.db.Close()
+		return nil, err
+	}
+	return s, nil
+}
+
+// Import targets must remain empty until the source snapshot is copied. Schema
+// migrations and meta defaults are safe; business seed rows are deferred.
+func openUninitializedStore(cfg Config) (*Store, error) {
 	if err := os.MkdirAll(cfg.StateDir, 0700); err != nil {
 		return nil, err
 	}
@@ -44,10 +58,6 @@ func openConfiguredStore(cfg Config) (*Store, error) {
 	}
 	s := &Store{db: db, vault: v, stateDir: cfg.StateDir, edition: cfg.edition()}
 	if err = s.initRuntimeSettings(); err != nil {
-		db.Close()
-		return nil, err
-	}
-	if err = s.initEntitlements(); err != nil {
 		db.Close()
 		return nil, err
 	}

@@ -30,7 +30,7 @@ func TestPostgresMigrationRestoreAndRollback(t *testing.T) {
 	if err = os.WriteFile(filepath.Join(cfg.StateDir, "master.key"), key, 0600); err != nil {
 		t.Fatal(err)
 	}
-	dst, err := openConfiguredStore(cfg)
+	dst, err := openUninitializedStore(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
