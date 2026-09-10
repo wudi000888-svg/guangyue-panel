@@ -19,8 +19,9 @@ let oldOverflow = '', oldFocus: HTMLElement|null = null, locked = false;
 const closeMobile = () => { mobileNav.value = false; mobileTools.value = false; };
 watch(mobileLayer, active => {
   if (active && !locked) { oldFocus = document.activeElement as HTMLElement; oldOverflow = document.body.style.overflow; document.body.style.overflow = 'hidden'; locked = true; }
-  if (!active && locked) { document.body.style.overflow = oldOverflow; locked = false; void nextTick(() => oldFocus?.focus()); }
+  if (!active && locked) { document.body.style.overflow = oldOverflow; locked = false; }
 }, {flush:'sync'});
+watch(mobileLayer, active => { if (!active) oldFocus?.focus(); }, {flush:'post'});
 watch([mobileNav, mobileTools], async () => {
   await nextTick();
   const target = mobileTools.value ? toolsDialog.value : mobileNav.value ? drawer.value : null;
