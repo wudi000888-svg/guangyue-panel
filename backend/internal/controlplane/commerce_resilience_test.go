@@ -224,6 +224,7 @@ func TestSupportWorkerSubprocess(t *testing.T) {
 	// the normalizer and all handlers are still covered by the race test suite.
 	path := filepath.Join(t.TempDir(), "guangyue-worker")
 	build := exec.Command(filepath.Join(runtime.GOROOT(), "bin/go"), "build", "-race=false", "-o", path, "../..")
+	build.Env = append(os.Environ(), "CGO_ENABLED=0")
 	if out, e := build.CombinedOutput(); e != nil {
 		t.Fatalf("build worker: %v: %s", e, out)
 	}
@@ -231,6 +232,9 @@ func TestSupportWorkerSubprocess(t *testing.T) {
 	cmd.Stdin = bytes.NewReader(b.Bytes())
 	output, e := cmd.Output()
 	if e != nil {
+		if failure, ok := e.(*exec.ExitError); ok {
+			t.Fatalf("isolated worker: %v: %s", e, failure.Stderr)
+		}
 		t.Fatal("isolated worker", e)
 	}
 	if _, e = png.Decode(bytes.NewReader(output)); e != nil {
