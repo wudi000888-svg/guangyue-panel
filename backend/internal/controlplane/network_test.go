@@ -66,3 +66,15 @@ func TestHYOptimizationPreservesRoutingAndChangesReconciliationHash(t *testing.T
 		t.Fatal("unoptimized upgrade unnecessarily restarts core")
 	}
 }
+
+func TestNetworkWaitsForLegacyHelperWithoutKeepingItAlive(t *testing.T) {
+	a := testApp(t)
+	owner := testUser(t, a, "owner", "owner")
+	a.updateClient = &http.Client{Transport: updateRoundTrip(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: 404, Body: io.NopCloser(bytes.NewBufferString("old helper")), Header: make(http.Header)}, nil
+	})}
+	result := decoded[object](t, req(t, a, owner, "GET", "/api/network-settings", nil), 200)
+	if result["available"] != false || result["retry_after"] != float64(130) {
+		t.Fatal("must allow the old helper's 120-second idle shutdown")
+	}
+}

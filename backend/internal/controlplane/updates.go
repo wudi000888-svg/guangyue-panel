@@ -85,6 +85,12 @@ func (a *App) updatesAPI(w http.ResponseWriter, r *http.Request, actor Record) {
 		return
 	}
 	defer response.Body.Close()
+	if path == "/network" && r.Method == "GET" && response.StatusCode == 404 {
+		// A pre-0.19 helper exits after 120 idle seconds and activates new code
+		// on the next connection. Frequent retries would keep old code alive.
+		jsonResponse(w, 200, object{"available": false, "retry_after": 130, "error": "维护服务正在重载，约两分钟后自动重试"})
+		return
+	}
 	data, err := io.ReadAll(io.LimitReader(response.Body, (2<<20)+1))
 	if err != nil || len(data) > 2<<20 || !json.Valid(data) || (response.StatusCode != 200 && response.StatusCode != 409) {
 		failure(w, 502, "更新服务响应无效")

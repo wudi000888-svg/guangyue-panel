@@ -16,6 +16,16 @@ KEYS = {'bbr': {'net.ipv4.tcp_congestion_control': 'bbr', 'net.core.default_qdis
         'hy2': {'net.core.rmem_max': '8388608', 'net.core.wmem_max': '8388608'}}
 
 
+def setup():
+    # Older release helpers only install the two original updater units.
+    # Complete provisioning when this new helper is first socket-activated.
+    source = state.APP / 'deploy/guangyue-network.service'
+    target = Path('/etc/systemd/system/guangyue-network.service')
+    if source.is_file() and (not target.exists() or target.read_bytes() != source.read_bytes()):
+        atomic(target, source.read_text(), 0o644)
+        run('systemctl', 'daemon-reload')
+
+
 def run(*args):
     return subprocess.check_output(args, stderr=subprocess.DEVNULL, timeout=40).decode().strip()
 

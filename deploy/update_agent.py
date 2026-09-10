@@ -313,6 +313,7 @@ class Server(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
 
 def serve():
     state.baseline(); recover()
+    network.setup()
     loaded = (state.HELPER / 'VERSION').read_text()
     if (state.read('network-operation.json') or {}).get('stage') in {'queued', 'applying'}:
         subprocess.run(['systemctl', 'start', '--no-block', 'guangyue-network.service'], check=True, capture_output=True, timeout=5)

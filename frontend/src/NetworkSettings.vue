@@ -4,14 +4,14 @@ import { Gauge, RefreshCw, Check, LoaderCircle } from 'lucide-vue-next';
 import { useApi, isCancelled } from './lib/api';
 import { t } from './i18n';
 const api = useApi();
-type NetworkState = {available:boolean;error?:string;revision:string;managed:boolean;desired:{bbr:boolean;hy2:boolean};bbr_supported:boolean;actual:{bbr:boolean;hy2:boolean;hy2_running:boolean;congestion_control:string;default_qdisc:string;rmem_max:string;wmem_max:string};operation?:{stage:string;error?:string}};
+type NetworkState = {available:boolean;retry_after?:number;error?:string;revision:string;managed:boolean;desired:{bbr:boolean;hy2:boolean};bbr_supported:boolean;actual:{bbr:boolean;hy2:boolean;hy2_running:boolean;congestion_control:string;default_qdisc:string;rmem_max:string;wmem_max:string};operation?:{stage:string;error?:string}};
 const state=ref<NetworkState|null>(null),bbr=ref(false),hy2=ref(false),busy=ref(false),error=ref(''),saved=ref(false);
 let timer:ReturnType<typeof setTimeout>|undefined,stopped=false;
 const running=computed(()=>busy.value||['queued','applying'].includes(state.value?.operation?.stage||''));
 const changed=computed(()=>state.value?.available&&(bbr.value!==state.value.desired.bbr||hy2.value!==state.value.desired.hy2||!state.value.managed));
 function receive(value:NetworkState){state.value=value;if(value.available&&!['queued','applying'].includes(value.operation?.stage||'')){bbr.value=value.desired.bbr;hy2.value=value.desired.hy2;}}
 function schedule(){clearTimeout(timer);if(!stopped)timer=setTimeout(()=>load(true),2000);}
-async function load(poll=false){try{const value=await api<NetworkState>('/network-settings');if(stopped)return;receive(value);error.value=value.error||value.operation?.error||'';if(['queued','applying'].includes(value.operation?.stage||''))schedule();else if(poll)saved.value=value.operation?.stage==='succeeded';}catch(e){if(!stopped&&!isCancelled(e)){error.value=(e as Error).message;if(poll)schedule();}}}
+async function load(poll=false){try{const value=await api<NetworkState>('/network-settings');if(stopped)return;receive(value);error.value=value.error||value.operation?.error||'';if(value.retry_after){clearTimeout(timer);timer=setTimeout(()=>load(),value.retry_after*1000);return;}if(['queued','applying'].includes(value.operation?.stage||''))schedule();else if(poll)saved.value=value.operation?.stage==='succeeded';}catch(e){if(!stopped&&!isCancelled(e)){error.value=(e as Error).message;if(poll)schedule();}}}
 async function save(){if(running.value||!state.value?.available)return;busy.value=true;saved.value=false;error.value='';try{receive(await api<NetworkState>('/network-settings','POST',{bbr:bbr.value,hy2:hy2.value,revision:state.value.revision}));schedule();}catch(e){if(!isCancelled(e)){error.value=(e as Error).message;schedule();}}finally{busy.value=false;}}
 onMounted(()=>load());onBeforeUnmount(()=>{stopped=true;clearTimeout(timer);});
 </script>

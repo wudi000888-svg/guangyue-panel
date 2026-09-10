@@ -1646,5 +1646,6 @@
   "网络优化正在执行": "Network optimization is running",
   "无法启动网络优化服务": "Could not start network maintenance",
   "上次网络操作被中断，已恢复原设置": "The previous network operation was interrupted. Original settings restored.",
-  "上次网络操作被中断，请核对生效状态": "The previous network operation was interrupted. Check the active settings."
+  "上次网络操作被中断，请核对生效状态": "The previous network operation was interrupted. Check the active settings.",
+  "维护服务正在重载，约两分钟后自动重试": "Maintenance is reloading. Retrying automatically in about two minutes."
 }
