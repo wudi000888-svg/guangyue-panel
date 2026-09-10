@@ -24,6 +24,7 @@ sys.dont_write_bytecode = True
 import update_state as state
 from common import deployment_lock
 import upgrade
+import network
 
 API = 'https://api.github.com/repos/' + state.REPO + '/releases?per_page=100'
 DOWNLOAD = 'https://github.com/' + state.REPO + '/releases/download/'
@@ -216,6 +217,7 @@ def submit(request, launch=True):
     if not isinstance(request['request_id'], str) or not re.fullmatch('[a-f0-9-]{36}', request['request_id']): raise ValueError('更新请求标识无效')
     state.version(request['version']); state.version(request['expected_version']); state.require_floor(request['version'])
     with lock:
+        if (state.read('network-operation.json') or {}).get('stage') in {'queued', 'applying'}: raise ValueError('网络优化正在执行，请稍后再更新版本')
         op = state.read('operation.json')
         if op and op['request_id'] == request['request_id']:
             if any(op.get(k) != request[k] for k in request): raise ValueError('更新请求标识已使用')
@@ -271,7 +273,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
         global last_activity
         last_activity = time.monotonic()
         try:
-            if self.path == '/state' and self.command == 'GET': result = status()
+            if self.path == '/network' and self.command == 'GET': result = network.status()
+            elif self.path == '/network' and self.command == 'POST':
+                size = int(self.headers.get('Content-Length', '0'))
+                if size <= 0 or size > 1024: raise ValueError('网络优化请求无效')
+                request = json.loads(self.rfile.read(size)); network.validate(request)
+                with lock, deployment_lock():
+                    if (state.read('operation.json') or {}).get('stage') in ACTIVE: raise ValueError('已有版本操作正在执行')
+                    if (state.read('network-operation.json') or {}).get('stage') in {'queued', 'applying'}: raise ValueError('网络优化正在执行')
+                    if network.status()['revision'] != request['revision']: raise ValueError('网络设置已变化，请刷新后重试')
+                    op = {'stage': 'queued', 'request': request, 'started_at': int(time.time())}
+                    state.write('network-operation.json', op)
+                try: subprocess.run(['systemctl', 'start', '--no-block', 'guangyue-network.service'], check=True, capture_output=True, timeout=5)
+                except Exception:
+                    state.write('network-operation.json', dict(op, stage='failed', error='无法启动网络优化服务')); raise
+                result = network.status()
+            elif self.path == '/state' and self.command == 'GET': result = status()
             elif self.path == '/check' and self.command == 'POST':
                 with lock:
                     if (state.read('operation.json') or {}).get('stage') in ACTIVE: raise ValueError('已有版本操作正在执行')
@@ -289,13 +306,19 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
 
 class Server(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
-    daemon_threads = True
+    # A helper upgrade may retire this process immediately after a state poll.
+    # Let that response finish before closing the inherited listening socket.
+    daemon_threads = False
     def get_request(self):
         connection, address = super().get_request(); connection.settimeout(25); return connection, address
 
 
 def serve():
     state.baseline(); recover()
+    network.setup()
+    loaded = (state.HELPER / 'VERSION').read_text()
+    if (state.read('network-operation.json') or {}).get('stage') in {'queued', 'applying'}:
+        subprocess.run(['systemctl', 'start', '--no-block', 'guangyue-network.service'], check=True, capture_output=True, timeout=5)
     if os.environ.get('LISTEN_PID') != str(os.getpid()) or os.environ.get('LISTEN_FDS') != '1': raise ValueError('更新服务必须由 systemd socket 启动')
     server = Server(state.SOCKET, Handler, bind_and_activate=False)
     server.socket.close(); server.socket = socket.socket(fileno=3); server.server_address = state.SOCKET
@@ -303,6 +326,7 @@ def serve():
     while True:
         server.handle_request()
         with lock:
+            if (state.HELPER / 'VERSION').read_text() != loaded and (state.read('operation.json') or {}).get('stage') not in ACTIVE: break
             if time.monotonic() - last_activity > 120 and (state.read('operation.json') or {}).get('stage') not in ACTIVE: break
     server.server_close()
 

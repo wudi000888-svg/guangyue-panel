@@ -108,7 +108,12 @@ func hy2Config(c Config, nodes []Node) object {
 			routes[n.ID] = hy2Outbound(coreExit(c, n))
 		}
 	}
-	return object{"listen": ":443", "tls": object{"cert": c.Cert, "key": c.CertKey}, "auth": object{"type": "http", "http": object{"url": "http://" + c.InternalListen + "/auth"}}, "trafficStats": object{"listen": "127.0.0.1:19199", "secret": c.StatsSecret}, "quic": object{"initStreamReceiveWindow": 2097152, "maxStreamReceiveWindow": 2097152, "initConnReceiveWindow": 5242880, "maxConnReceiveWindow": 5242880, "maxConcurrentIncomingStreams": 256}, "outbounds": []object{hy2Outbound(Node{Exit: "direct"})}, "nodeRouting": true, "nodeOutbounds": routes, "masquerade": object{"type": "string", "string": object{"content": "Not Found", "statusCode": 404}}}
+	result := object{"listen": ":443", "tls": object{"cert": c.Cert, "key": c.CertKey}, "auth": object{"type": "http", "http": object{"url": "http://" + c.InternalListen + "/auth"}}, "trafficStats": object{"listen": "127.0.0.1:19199", "secret": c.StatsSecret}, "quic": object{"initStreamReceiveWindow": 2097152, "maxStreamReceiveWindow": 2097152, "initConnReceiveWindow": 5242880, "maxConnReceiveWindow": 5242880, "maxConcurrentIncomingStreams": 256}, "outbounds": []object{hy2Outbound(Node{Exit: "direct"})}, "nodeRouting": true, "nodeOutbounds": routes, "masquerade": object{"type": "string", "string": object{"content": "Not Found", "statusCode": 404}}}
+	if c.HY2Optimized {
+		result["ignoreClientBandwidth"] = true
+		result["congestion"] = object{"type": "bbr", "bbrProfile": "standard"}
+	}
+	return result
 }
 
 var command = coreprocess.Command
@@ -238,6 +243,14 @@ func nodeHash(nodes []Node, protocol string) string {
 	return digest(string(b))
 }
 
+func hy2NodeHash(nodes []Node, optimized bool) string {
+	hash := nodeHash(nodes, "hy2")
+	if optimized {
+		return digest(hash + ":bbr-standard")
+	}
+	return hash
+}
+
 func (a *App) applyCoreConfiguration() error {
 	if err := a.ensureBridge(); err != nil {
 		return err
@@ -271,6 +284,7 @@ func (a *App) applyCoreConfiguration() error {
 		return err
 	}
 	xchange := previousX != xhash
+	hhash = hy2NodeHash(nodes, a.cfg.HY2Optimized)
 	hchange := previousHY != hhash
 	if xchange {
 		candidate := filepath.Join(a.cfg.StateDir, "candidate-xray.json")

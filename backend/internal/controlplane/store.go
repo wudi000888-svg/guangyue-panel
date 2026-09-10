@@ -291,7 +291,7 @@ func (s *Store) readMeta(key string) (string, error) {
 	}
 	return value, err
 }
-func (s *Store) markPreparedNodes() error {
+func (s *Store) markPreparedNodes(hyOptimized bool) error {
 	nodes, err := s.nodes()
 	if err != nil {
 		return err
@@ -302,7 +302,11 @@ func (s *Store) markPreparedNodes() error {
 	}
 	defer tx.Rollback()
 	for key, protocol := range map[string]string{"x_nodes": "vless", "hy_nodes": "hy2"} {
-		if _, err = tx.Exec("INSERT INTO meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", key, nodeHash(nodes, protocol)); err != nil {
+		value := nodeHash(nodes, protocol)
+		if protocol == "hy2" {
+			value = hy2NodeHash(nodes, hyOptimized)
+		}
+		if _, err = tx.Exec("INSERT INTO meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", key, value); err != nil {
 			return err
 		}
 	}

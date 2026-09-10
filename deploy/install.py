@@ -102,7 +102,7 @@ def preflight(args):
     for unit in UNITS:
         if run('systemctl', 'show', unit, '--property=LoadState', '--value').strip() != 'not-found':
             raise ValueError('existing service: ' + unit)
-    for path in ['/var/lib/guangyue-updater', '/opt/guangyue-updater', '/etc/systemd/system/guangyue-updater.socket', '/etc/systemd/system/guangyue-updater.service']:
+    for path in ['/etc/sysctl.d/99-zz-guangyue-network.conf', '/etc/systemd/system/guangyue-network.service', '/var/lib/guangyue-updater', '/opt/guangyue-updater', '/etc/systemd/system/guangyue-updater.socket', '/etc/systemd/system/guangyue-updater.service']:
         if Path(path).exists() or Path(path).is_symlink():
             raise ValueError('existing updater installation; use upgrade')
     verify_bundle(args.bundle)
@@ -152,6 +152,7 @@ def install(args):
     backup = Path(tempfile.mkdtemp(prefix='install-' + time.strftime('%Y%m%d-%H%M%S') + '-', dir=backup_root))
     shutil.copy2('/etc/nginx/nginx.conf', backup / 'nginx.conf')
     created = []
+    network_before = None
     try:
         try:
             user = pwd.getpwnam('guangyue')
@@ -195,6 +196,10 @@ def install(args):
         shutil.copyfile(DEPLOY / 'guangyue-reality.tmpfiles.conf', tmpfiles)
         created += [tmpfiles, Path('/run/guangyue-reality')]
         run('systemd-tmpfiles', '--create', str(tmpfiles))
+        import network
+        # Fresh installs enable both profiles. Upgrades preserve explicit choices.
+        created.append(network.state.ROOT)
+        network_before = network.apply(not getattr(args, 'no_bbr', False), not getattr(args, 'no_hy2_optimization', False), restart=False)
         run('runuser', '-u', 'guangyue', '--', str(APP / 'bin/guangyue'), '-prepare')
         run('runuser', '-u', 'guangyue', '--', str(APP / 'bin/xray'), 'run', '-test', '-c', str(STATE / 'xray.json'))
         for name, content in render(args.panel_domain, args.node_domain, args.reality_sni, args.web_domain).items():
@@ -223,9 +228,12 @@ def install(args):
         import update_state
         created += [update_state.ROOT, update_state.HELPER,
                     Path('/etc/systemd/system/guangyue-updater.socket'),
-                    Path('/etc/systemd/system/guangyue-updater.service')]
+                    Path('/etc/systemd/system/guangyue-updater.service'),
+                    Path('/etc/systemd/system/guangyue-network.service')]
         update_state.setup((bundle / 'VERSION').read_text().strip(), bundle / 'deploy')
     except Exception:
+        if network_before is not None:
+            network.restore(network_before, restart=False)
         subprocess.run(['systemctl', 'disable', '--now', 'guangyue-updater.socket', 'guangyue-updater.service'], capture_output=True)
         subprocess.run(['systemctl', 'disable', '--now', *UNITS], capture_output=True)
         shutil.copy2(backup / 'nginx.conf', '/etc/nginx/nginx.conf')
@@ -264,6 +272,8 @@ def main():
     p.add_argument('--site-id')
     p.add_argument('--infrastructure-file',type=Path)
     p.add_argument('--apply', action='store_true')
+    p.add_argument('--no-bbr', action='store_true', help='opt out of default host BBR tuning')
+    p.add_argument('--no-hy2-optimization', action='store_true', help='keep upstream HY2 policy and UDP limits')
     args = p.parse_args()
     marker=args.bundle/'EDITION'
     args.edition=args.edition or (marker.read_text().strip() if marker.is_file() else 'lite')

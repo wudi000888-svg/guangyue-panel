@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import urllib.request
 from pathlib import Path
 
@@ -72,6 +73,30 @@ try:
     public, _ = api('/api/subscription?pool=public', cookie=cookie)
     assert not public['nodes'] and public['url'] != state['url']
     print('PASS fresh install, service health, real Nginx HTTPS, private permissions and subscription separation')
+
+    network, _ = api('/api/network-settings', cookie=cookie)
+    assert network['desired'] == {'bbr': True, 'hy2': True}
+    assert network['actual']['bbr'] and network['actual']['hy2'] and network['actual']['hy2_running']
+    assert int(network['actual']['rmem_max']) >= 8 << 20
+    baseline = json.loads(Path('/var/lib/guangyue-updater/network.json').read_text())['original']
+    for enabled in [False, True]:
+        api('/api/network-settings', {'bbr': enabled, 'hy2': enabled, 'revision': network['revision']}, cookie)
+        deadline = time.monotonic() + 75
+        while time.monotonic() < deadline:
+            try:
+                network, _ = api('/api/network-settings', cookie=cookie)
+                if network['operation']['stage'] in ['succeeded', 'failed']: break
+            except OSError: pass  # The panel reconnects during a HY profile change.
+            time.sleep(1)
+        assert network['operation']['stage'] == 'succeeded', network['operation'].get('error')
+        assert network['desired'] == {'bbr': enabled, 'hy2': enabled}
+        assert network['actual']['hy2'] == enabled and network['actual']['hy2_running']
+        if not enabled:
+            assert network['actual']['congestion_control'] == baseline['net.ipv4.tcp_congestion_control']
+            assert network['actual']['rmem_max'] == baseline['net.core.rmem_max']
+    after_network, _ = api('/api/subscription', cookie=cookie)
+    assert after_network['url'] == state['url']
+    print('PASS default BBR/HY2, real privileged toggle off/on, restoration and preserved subscription')
 
     # Occupied paths must refuse a second install, without touching current data.
     assert run(*command, '--apply', success=False).returncode != 0

@@ -78,7 +78,30 @@ sudo systemctl start guangyue guangyue-xray guangyue-hy2
 4. VLESS 使用 Vision；确认客户端没有丢失 `flow=xtls-rprx-vision`。Nginx stream 应仅分流，不应转成 HTTP WebSocket 链路。
 5. Linux TCP 查看 `sysctl net.ipv4.tcp_congestion_control net.core.default_qdisc`；BBR 是否有利取决于内核与路径。HY2 的 QUIC 拥塞控制不等同于 Linux TCP BBR。
 6. 本机同时运行 TUN、Fake-IP DNS 或另一个代理时，先排除二次代理、SNI 嗅探重定向和路由回环。可让测试客户端使用服务器真实 IP，并绑定实际联网网卡做对照（Xray `streamSettings.sockopt.interface`）；网卡名必须以本机实际配置为准。仅改服务器地址不能保证绕过 TUN。SSH 转发适合隔离协议问题，但不能代替公网直连验收。
-7. 只在有对照测试时调整参数；本安装器不批量写入 sysctl、不提高不受控 UDP 缓冲，也不会关闭 IPv6 安全策略来换速度。
+7. 网络优化的开关和实际状态见 **系统设置 → 网络优化**，简易和专业模式均可使用。IPv4/IPv6 的 TCP 共用系统拥塞算法，HY2 使用独立 QUIC 算法；优化不改变节点 DNS 或 IPv6 安全策略。
+
+### BBR 与 HY2 优化
+
+0.19.0 起，Lite / Pro 主控 / Pro 业务站新安装默认启用两项优化；已有部署升级保留原系统参数和显式选择。
+
+- **BBR**：设置 `net.ipv4.tcp_congestion_control=bbr`、`net.core.default_qdisc=fq`，必要时加载 `tcp_bbr`。作用于新建 TCP 连接，不替换运行中网卡的 qdisc，不保证所有线路提速。
+- **HY2**：采用 `congestion.type=bbr`、`bbrProfile=standard`、`ignoreClientBandwidth=true`，避免客户端声明带宽强制限速或切换 Brutal。保持 2 MiB 流窗口 / 5 MiB 连接窗口和 256 流并发。UDP 接收/发送上限至少 8 MiB，已有更大值不下调，也不按上限预分配内存。
+- **关闭**：恢复面板接管前的系统值，管理员后续从系统外修改的值不强行覆盖。此前已启用 BBR 的主机关闭面板开关后可能仍为 BBR，界面显示实际算法。HY2 关闭后取消显式策略：不声明客户端带宽时仍是上游默认 BBR，声明带宽时可使用 Brutal。
+- **生效**：HY2 修改会短暂重启面板和 HY2，保留订阅凭据。页面自动核对配置与服务启动时间；尚未加载的配置不会标为已生效。仅切换 BBR 不重启代理核心。
+- **权限与恢复**：参数保存在 `/etc/sysctl.d/99-zz-guangyue-network.conf`，原值和恢复记录在 root 专属 `/var/lib/guangyue-updater/`。固定的 `guangyue-network.service` 执行白名单操作；Web 进程保持非特权。安装、升级和网络操作使用同一部署锁。内核不支持、写入失败或服务未就绪会报错并尝试恢复。
+
+不允许修改宿主机网络参数的容器可在安装命令添加 `--no-bbr --no-hy2-optimization`。业务站默认随安装启用优化；没有管理员网页的业务站可在本机以 root 使用相同维护工具调整：
+
+```bash
+python3 - <<'PY'
+import sys
+sys.path.insert(0, '/opt/guangyue-updater')
+import network
+from common import deployment_lock
+with deployment_lock():
+    network.apply(True, True)  # BBR, HY2
+PY
+```
 
 ## 备份保留和故障报告
 

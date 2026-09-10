@@ -540,7 +540,7 @@ func (a *App) password(w http.ResponseWriter, r *http.Request, actor Record) {
 }
 
 func (a *App) admin(w http.ResponseWriter, r *http.Request, actor Record) {
-	if r.URL.Path == "/api/updates" || strings.HasPrefix(r.URL.Path, "/api/updates/") {
+	if r.URL.Path == "/api/network-settings" || r.URL.Path == "/api/updates" || strings.HasPrefix(r.URL.Path, "/api/updates/") {
 		a.updatesAPI(w, r, actor)
 		return
 	}

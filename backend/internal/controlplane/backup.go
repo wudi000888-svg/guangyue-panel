@@ -261,7 +261,7 @@ func prepareRestore(cfg Config, dir string) (err error) {
 	if err = app.prepare(); err != nil {
 		return err
 	}
-	if err = check.markPreparedNodes(); err != nil {
+	if err = check.markPreparedNodes(cfg.HY2Optimized); err != nil {
 		return err
 	}
 	var busy, pages, checkpointed int
