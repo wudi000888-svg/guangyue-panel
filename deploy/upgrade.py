@@ -17,6 +17,13 @@ from infrastructure import edition_config, service_text, dump_postgres, restore_
 import update_state as updates
 
 
+def as_panel(*args):
+    # Maintenance is a service task, not a login session. PAM-backed runuser can
+    # fail inside the hardened updater (for example when resetting nice limits).
+    # Drop directly to the existing service UID and its supplementary groups.
+    return run('setpriv', '--reuid=guangyue', '--regid=guangyue', '--init-groups', '--no-new-privs', '--', *args)
+
+
 def app_hashes(directory):
     result = {}
     for path in sorted(Path(directory).rglob('*')):
@@ -48,7 +55,7 @@ def backup_current(config):
         shutil.copy2('/etc/systemd/system/' + unit + '.service', backup / 'units')
     if config.get('database', {}).get('driver') == 'postgres':
         dump_postgres(config, backup / 'postgres.dump')
-        run('runuser', '-u', 'guangyue', '--', str(APP / 'bin/guangyue'), '-snapshot', str(STATE / 'upgrade-snapshot.tar.gz'))
+        as_panel(str(APP / 'bin/guangyue'), '-snapshot', str(STATE / 'upgrade-snapshot.tar.gz'))
         shutil.move(str(STATE / 'upgrade-snapshot.tar.gz'), backup / 'database.tar.gz')
     return backup
 
@@ -81,8 +88,8 @@ def restore_units(backup):
 
 
 def prepare_start(expected):
-    run('runuser', '-u', 'guangyue', '--', str(APP / 'bin/guangyue'), '-prepare')
-    run('runuser', '-u', 'guangyue', '--', str(APP / 'bin/xray'), 'run', '-test', '-c', str(STATE / 'xray.json'))
+    as_panel(str(APP / 'bin/guangyue'), '-prepare')
+    as_panel(str(APP / 'bin/xray'), 'run', '-test', '-c', str(STATE / 'xray.json'))
     run('systemctl', 'daemon-reload'); run('systemctl', 'start', *UNITS)
     health(expected)
 
@@ -144,7 +151,7 @@ def upgrade(bundle, edition=None, site_id=None, infrastructure_file=None, progre
             dest = Path('/etc/systemd/system') / (unit + '.service'); source = bundle / 'deploy' / dest.name
             dest.write_text(service_text(source, new_config['edition'], new_config.get('role')) if unit == 'guangyue' else source.read_text()); dest.chmod(0o644)
         if migrating:
-            run('runuser', '-u', 'guangyue', '--', str(APP / 'bin/guangyue'), '-import-sqlite', str(STATE / 'panel.db'))
+            as_panel(str(APP / 'bin/guangyue'), '-import-sqlite', str(STATE / 'panel.db'))
     backup = transaction(change, target, new_config, progress, lambda: updates.setup(target, bundle / 'deploy'))
     print('Upgrade complete. Private offline backup: ' + str(backup))
     return backup
