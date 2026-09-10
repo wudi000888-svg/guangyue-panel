@@ -15,7 +15,7 @@ const running=computed(()=>!!pending.value);
 const operation=computed(()=>info.value?.operation?.request_id===pending.value?.request_id?info.value?.operation:pending.value);
 const available=computed(()=>!!info.value?.available);
 const dialog=ref<HTMLElement|null>(null);let previousFocus:HTMLElement|null=null;let previousOverflow='';let previousInert=false;let isolated=false;
-function releaseDialog(){if(!isolated)return;const app=document.getElementById('app');if(app)app.inert=previousInert;document.body.style.overflow=previousOverflow;previousFocus?.focus();isolated=false;}
+function releaseDialog(){if(!isolated)return;const app=document.getElementById('app');if(app)app.inert=previousInert;document.body.style.overflow=previousOverflow;isolated=false;void nextTick(()=>{if(previousFocus?.getClientRects().length&&getComputedStyle(previousFocus).visibility!=='hidden')previousFocus.focus();else document.querySelector<HTMLElement>('.mobile-menu')?.focus();});}
 watch(open,value=>{if(value)emit('open');},{flush:'sync'});
 watch([open,confirm,running],async()=>{
  if(!open.value){releaseDialog();return;}

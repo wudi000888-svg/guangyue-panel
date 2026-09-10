@@ -19,7 +19,7 @@ let oldOverflow = '', oldFocus: HTMLElement|null = null, locked = false;
 const closeMobile = () => { mobileNav.value = false; mobileTools.value = false; };
 watch(mobileLayer, active => {
   if (active && !locked) { oldFocus = document.activeElement as HTMLElement; oldOverflow = document.body.style.overflow; document.body.style.overflow = 'hidden'; locked = true; }
-  if (!active && locked) { document.body.style.overflow = oldOverflow; locked = false; oldFocus?.focus(); }
+  if (!active && locked) { document.body.style.overflow = oldOverflow; locked = false; void nextTick(() => oldFocus?.focus()); }
 }, {flush:'sync'});
 watch([mobileNav, mobileTools], async () => {
   await nextTick();
