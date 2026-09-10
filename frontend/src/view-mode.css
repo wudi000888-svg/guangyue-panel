@@ -11,6 +11,7 @@
  .topbar .language-switch{gap:0}.topbar .language-switch>svg{display:none}.topbar .language-switch select{width:108px;font-size:16px;min-height:44px}
  .topbar .mobile-tools-button{display:inline-flex}
  .app-shell .sidebar{width:min(310px,calc(100vw - 32px));padding:0 14px;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom);z-index:100}
+ .sidebar .version-badge{min-height:44px}
  .sidebar .brand{padding-right:40px}.drawer-close{display:flex;position:absolute;right:14px;top:calc(14px + env(safe-area-inset-top))}
  .app-shell .nav-shade{z-index:99;backdrop-filter:blur(3px);background:#080d1866}
  .sidebar .nav-group button{min-height:44px;height:44px;font-size:14px}.sidebar .collapse-control{display:none}
