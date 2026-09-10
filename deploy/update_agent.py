@@ -154,8 +154,11 @@ def status():
     config = json.loads(state.CONFIG.read_text()); current = state.current()
     cached = state.read('catalog.json', {'checked_at': 0, 'releases': []})
     releases = [r for r in cached['releases'] if config.get('edition', 'lite') in r['editions'] and state.version(r['version']) >= state.version(current)]
-    rollback = [{k: r[k] for k in ['version', 'created', 'compatible']} for r in state.candidates()]
-    return {'available': True, 'current_version': current, 'installed_version': state.baseline()['version'], 'checked_at': cached['checked_at'], 'releases': releases, 'rollback_versions': rollback, 'operation': state.read('operation.json'), 'refresh_seconds': 8}
+    op = state.read('operation.json')
+    # Polling must not open the database while its files are being backed up or
+    # restored (nor recreate SQLite WAL sidecars under the updater's identity).
+    rollback = [] if (op or {}).get('stage') in ACTIVE else [{k: r[k] for k in ['version', 'created', 'compatible']} for r in state.candidates()]
+    return {'available': True, 'current_version': current, 'installed_version': state.baseline()['version'], 'checked_at': cached['checked_at'], 'releases': releases, 'rollback_versions': rollback, 'operation': op, 'refresh_seconds': 8}
 
 
 def progress(stage):

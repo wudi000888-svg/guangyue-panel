@@ -54,6 +54,13 @@ class UpdateTests(unittest.TestCase):
         with self.assertRaises(ValueError): agent.submit(second, launch=False)
         self.assertEqual(state.read('operation.json')['request_id'], first['request_id'])
 
+    def test_progress_polling_does_not_touch_database_during_file_switch(self):
+        state.write('operation.json',dict(self.request(),stage='installing'))
+        with patch.object(state,'candidates',side_effect=AssertionError('database must remain closed')):
+            result=agent.status()
+        self.assertEqual(result['operation']['stage'],'installing')
+        self.assertEqual(result['rollback_versions'],[])
+
     def test_catalog_filters_unstable_and_mismatched_assets_and_preserves_offline_cache(self):
         def release(v, **extra):
             return dict(tag_name='v'+v, assets=[{'name': agent.asset_name(v, 'lite'), 'state': 'uploaded'}, {'name':'SHA256SUMS','state':'uploaded'}], **extra)

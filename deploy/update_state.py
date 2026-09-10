@@ -90,9 +90,11 @@ def remember(backup, config, signature):
 
 
 def candidates():
+    values = read('history.json', [])
+    if not values: return []
     config = json.loads(CONFIG.read_text()); ident = identity(config)
     signature = schema(config); floor = version(baseline()['version']); now = version(current())
-    result = {}; values = read('history.json', [])
+    result = {}
     for row in reversed(values):
         v = row['version']
         if v in result or not floor <= version(v) < now or any(row.get(k) != x for k, x in ident.items()):
