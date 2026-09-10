@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import {computed,onMounted,ref,watch} from "vue";
+import {rateText} from "../lib/quota";
+import NodePolicyDialog from "../components/NodePolicyDialog.vue";
 import { usePanelContext } from "../composables/panelContext";
-const { state, busy, speedRunning, qualityRunning, qualityTest, speedTest, nodePoolLabel, detecting, nodeSearch, nodeProtocol, nodeStatus, publicNodePage, filteredNodes, date, exitName, go, editNode, detectNode, selectedNodeIDs, selectableNodes, selectAll, batchAction } = usePanelContext();
+const { nodeGroups,loadEntitlements,refresh,state, busy, speedRunning, qualityRunning, qualityTest, speedTest, nodePoolLabel, detecting, nodeSearch, nodeProtocol, nodeStatus, publicNodePage, filteredNodes, date, exitName, go, editNode, detectNode, selectedNodeIDs, batchAction } = usePanelContext();
 import { ArrowUpRight, CircleHelp, Gauge, Globe2, Pencil, Plus, RefreshCw, Search, ShieldCheck, Trash2 } from "lucide-vue-next";
 import { t } from "../i18n";
 import CountryMark from "../CountryMark.vue";
@@ -8,7 +11,13 @@ import SpeedMetric from "../SpeedMetric.vue";
 import QualityTags from "../QualityTags.vue";
 import { usePagination } from "../composables/usePagination";
 import ListTable from "../components/ListTable.vue";
-const {page:listPage,pages:listPages,rows:listRows}=usePagination(filteredNodes);
+const groupFilter=ref('all'),policyOpen=ref(false);
+const visibleNodes=computed(()=>filteredNodes.value.filter(n=>groupFilter.value==='all'||(groupFilter.value==='none'?!n.group_ids?.length:n.group_ids?.includes(groupFilter.value))));
+const {page:listPage,pages:listPages,rows:listRows}=usePagination(visibleNodes);
+const selectableNodes=computed(()=>visibleNodes.value.filter(n=>!n.default_direct));
+function selectAll(_kind:string,event:Event){selectedNodeIDs.value=(event.target as HTMLInputElement).checked?selectableNodes.value.map(n=>n.id):[];}
+watch(visibleNodes,ns=>selectedNodeIDs.value=selectedNodeIDs.value.filter(id=>ns.some(n=>n.id===id)));
+onMounted(loadEntitlements);
 </script>
 <template>
 <section v-if="state">
@@ -56,17 +65,17 @@ const {page:listPage,pages:listPages,rows:listRows}=usePagination(filteredNodes)
               <option value="all">{{ t("全部状态") }}</option>
               <option value="enabled">{{ t("已启用") }}</option>
               <option value="disabled">{{ t("已停用") }}</option></select
-            ><span class="spacer"></span
-            ><span class="muted">{{ filteredNodes.length }}{{ t("个节点") }}</span>
+            ><select v-model="groupFilter" :aria-label="t('节点权限组')"><option value="all">{{t("全部节点组")}}</option><option value="none">{{t("尚未授权")}}</option><option v-for="g in nodeGroups.filter(g=>(g.scope==='public')===publicNodePage)" :key="g.id" :value="g.id">{{g.name}}</option></select><span class="spacer"></span
+            ><span class="muted">{{ visibleNodes.length }}{{ t("个节点") }}</span>
           </div>
           <div v-if="selectedNodeIDs.length" class="batch-toolbar" role="region" :aria-label="t('批量操作')">
-            <strong>{{t('已选择')}} {{selectedNodeIDs.length}}</strong>
+            <strong>{{t('已选择')}} {{selectedNodeIDs.length}}</strong><button :disabled="busy" @click="policyOpen=true">{{t("调整倍率与分组")}}</button>
             <button :disabled="busy" @click="batchAction('nodes','enable')">{{t('批量启用')}}</button>
             <button :disabled="busy" @click="batchAction('nodes','disable')">{{t('批量停用')}}</button>
             <button  class="danger-button" :disabled="busy" @click="batchAction('nodes','delete')"><Trash2 :size="14"/>{{t('批量删除')}}</button>
             <button class="text-button" :disabled="busy" @click="selectedNodeIDs=[]">{{t('清空选择')}}</button>
           </div>
-          <ListTable :total="filteredNodes.length" v-model:page="listPage" :pages="listPages">
+          <ListTable :total="visibleNodes.length" v-model:page="listPage" :pages="listPages">
             <table>
               <thead>
                 <tr>
@@ -90,8 +99,7 @@ const {page:listPage,pages:listPages,rows:listRows}=usePagination(filteredNodes)
                         :country="n.country"
                       />
                       <div>
-                        <strong>{{ n.name }}</strong
-                        ><small
+                        <strong>{{ n.name }}</strong><span class="badge neutral node-rate">{{rateText(n)}}</span><small v-if="!n.group_ids?.length" class="table-warning">{{t("尚未授权")}}</small><small
                           >{{
                             n.protocol === "vless"
                               ? state.system.vless_host
@@ -161,7 +169,7 @@ const {page:listPage,pages:listPages,rows:listRows}=usePagination(filteredNodes)
                     </div>
                   </td>
                 </tr>
-                <tr v-if="!filteredNodes.length">
+                <tr v-if="!visibleNodes.length">
                   <td colspan="8" class="empty">{{ t("没有匹配的节点") }}</td>
                 </tr>
               </tbody>
@@ -173,7 +181,7 @@ const {page:listPage,pages:listPages,rows:listRows}=usePagination(filteredNodes)
               <div class="node-card-head"><input class="row-select" type="checkbox" v-model="selectedNodeIDs" :value="n.id" :aria-label="t('选择')+' '+ n.name" :disabled="busy || n.default_direct"/>
                 <CountryMark :code="n.country_code" :country="n.country" />
                 <div>
-                  <h2>{{ n.name }}</h2>
+                  <h2>{{ n.name }} <span class="badge neutral">{{rateText(n)}}</span></h2><small v-if="!n.group_ids?.length" class="table-warning">{{t("尚未授权")}}</small>
                   <span :class="['tag', n.protocol]">{{
                     n.protocol === "vless"
                       ? "VLESS · Reality / TCP"
@@ -266,7 +274,7 @@ const {page:listPage,pages:listPages,rows:listRows}=usePagination(filteredNodes)
                 </button>
               </div>
             </article>
-            <p v-if="!filteredNodes.length" class="empty">{{ t("没有匹配的节点") }}</p>
+            <p v-if="!visibleNodes.length" class="empty">{{ t("没有匹配的节点") }}</p>
           </div>
           </template>
           </ListTable>
@@ -274,5 +282,5 @@ const {page:listPage,pages:listPages,rows:listRows}=usePagination(filteredNodes)
             <span>{{ t("共") }}{{ filteredNodes.length }}{{ t("个节点") }}</span
             ><span>{{ t("名称根据实际出口自动更新") }}</span>
           </div>
-        </section>
+        <NodePolicyDialog v-if="policyOpen" :nodes="state.nodes.filter(n=>selectedNodeIDs.includes(n.id))" :groups="nodeGroups" @close="policyOpen=false" @updated="selectedNodeIDs=[];refresh()"/></section>
 </template>

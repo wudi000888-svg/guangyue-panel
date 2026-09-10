@@ -9,6 +9,7 @@ import (
 )
 
 type MemberNodeQuality struct {
+	RateMilli   int64      `json:"rate_milli"`
 	ID          string     `json:"id"`
 	Name        string     `json:"name"`
 	Protocol    string     `json:"protocol"`
@@ -20,7 +21,7 @@ type MemberNodeQuality struct {
 }
 
 func memberMayUseNode(actor Record, n Node) bool {
-	if !actor.Active() || !n.Enabled {
+	if !actor.Active() || !n.Enabled || !nodeGroupAllowed(actor, n) {
 		return false
 	}
 	switch n.Protocol {
@@ -121,7 +122,7 @@ func memberQualityReport(n Node) *IPQuality {
 
 func memberNodeState(n Node) Node {
 	// Construct an allowlist instead of clearing an evolving set of owner fields.
-	view := Node{ID: n.ID, Name: n.Name, Protocol: n.Protocol, Enabled: n.Enabled, ProbeIP: n.ProbeIP, Country: n.Country, CountryCode: n.CountryCode, ProbedAt: n.ProbedAt, CheckedAt: n.CheckedAt, Quality: memberQualityReport(n), DNS: n.DNS}
+	view := Node{PolicyVersion: 1, RateMilli: nodeRate(n), ID: n.ID, Name: n.Name, Protocol: n.Protocol, Enabled: n.Enabled, ProbeIP: n.ProbeIP, Country: n.Country, CountryCode: n.CountryCode, ProbedAt: n.ProbedAt, CheckedAt: n.CheckedAt, Quality: memberQualityReport(n), DNS: n.DNS}
 	if n.ManagedBy == publicManager {
 		view.ManagedBy = publicManager
 	}
@@ -169,7 +170,7 @@ func (a *App) memberNodeQuality(w http.ResponseWriter, r *http.Request, actor Re
 		}
 		for _, entry := range entries {
 			n := entry.node
-			views = append(views, MemberNodeQuality{ID: n.ID, Name: n.Name, Protocol: n.Protocol, ProbeIP: n.ProbeIP, Country: n.Country, CountryCode: n.CountryCode, CheckedAt: n.CheckedAt, Quality: memberQualityReport(n)})
+			views = append(views, MemberNodeQuality{RateMilli: nodeRate(n), ID: n.ID, Name: n.Name, Protocol: n.Protocol, ProbeIP: n.ProbeIP, Country: n.Country, CountryCode: n.CountryCode, CheckedAt: n.CheckedAt, Quality: memberQualityReport(n)})
 		}
 	}
 	active := current.Active()

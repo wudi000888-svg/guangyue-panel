@@ -147,12 +147,20 @@ func (a *App) planResourceChange(kind string, input batchRequest) (resourceChang
 }
 
 func (a *App) applyResourceChange(p resourceChange, apply func() error) error {
+	var previousSites []BusinessSite
+	if len(p.removePools) > 0 {
+		sites, e := a.store.businessSites()
+		if e != nil {
+			return e
+		}
+		previousSites, _ = pruneBusinessNodes(sites, p.removePools)
+	}
 	if err := a.store.saveInfrastructure(p.newPools, p.newNodes, p.newRecords, p.removePools, p.removeNodes); err != nil {
 		return errors.New("批量操作未保存，原配置未改变")
 	}
 	if err := apply(); err != nil {
 		a.status, a.syncError = "error", "resource change apply failed"
-		if err := a.store.saveInfrastructure(p.oldPools, p.oldNodes, p.oldRecords, nil, nil); err != nil {
+		if err := a.store.saveInfrastructure(p.oldPools, p.oldNodes, p.oldRecords, nil, nil, previousSites...); err != nil {
 			return errors.New("批量操作应用失败且恢复未完成，请检查系统状态")
 		}
 		if err := apply(); err != nil {
@@ -188,6 +196,11 @@ func (a *App) changeResources(w http.ResponseWriter, r *http.Request, actor Reco
 			failure(w, 502, "流量同步暂未完成，请稍后重试删除")
 			return
 		}
+	}
+	p, err = a.planResourceChange(kind, input)
+	if err != nil {
+		failure(w, 409, err.Error())
+		return
 	}
 	if err := a.applyResourceChange(p, a.reconcile); err != nil {
 		failure(w, 502, err.Error())

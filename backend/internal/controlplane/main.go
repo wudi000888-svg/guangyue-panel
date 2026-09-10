@@ -260,7 +260,10 @@ func (a *App) loop(ctx context.Context) {
 		} else {
 			a.trafficError = ""
 		}
-		err := a.reconcileIfNeeded()
+		err := a.advanceQuotaPeriods(time.Now().Unix())
+		if err == nil {
+			err = a.reconcileIfNeeded()
+		}
 		if err != nil {
 			a.status = "error"
 			a.syncError = err.Error()

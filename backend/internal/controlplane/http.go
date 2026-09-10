@@ -212,6 +212,8 @@ func (a *App) dispatchAuthenticated(w http.ResponseWriter, r *http.Request, acto
 		a.dashboard(w, r, actor)
 	case r.Method == "GET" && r.URL.Path == "/api/subscription":
 		a.subscriptionInfo(w, r, actor)
+	case r.Method == "GET" && r.URL.Path == "/api/usage":
+		a.userUsage(w, r, actor)
 	case r.Method == "GET" && r.URL.Path == "/api/node-quality":
 		a.memberNodeQuality(w, r, actor)
 	case r.Method == "POST" && r.URL.Path == "/api/logout":
@@ -238,6 +240,12 @@ func (a *App) state(w http.ResponseWriter, r *http.Request, actor Record) {
 		return
 	}
 	actor = current
+	resolved := []Record{actor}
+	if err := a.store.resolveAccess(resolved); err != nil {
+		failure(w, 500, "读取授权失败")
+		return
+	}
+	actor = resolved[0]
 	records, err := a.store.records()
 	if err != nil {
 		failure(w, 500, "读取用户失败")
@@ -392,7 +400,7 @@ func (a *App) subscriptionInfo(w http.ResponseWriter, r *http.Request, actor Rec
 		}
 		for _, entry := range entries {
 			n := entry.node
-			views = append(views, SubscriptionNode{MemberNodeQuality: MemberNodeQuality{ID: n.ID, Name: entry.name, Protocol: n.Protocol, ProbeIP: n.ProbeIP, Country: n.Country, CountryCode: n.CountryCode, CheckedAt: n.CheckedAt, Quality: memberQualityReport(n)}, URI: entry.uri, DNS: n.DNS, SiteID: entry.siteID, SiteName: entry.siteName})
+			views = append(views, SubscriptionNode{MemberNodeQuality: MemberNodeQuality{RateMilli: nodeRate(n), ID: n.ID, Name: entry.name, Protocol: n.Protocol, ProbeIP: n.ProbeIP, Country: n.Country, CountryCode: n.CountryCode, CheckedAt: n.CheckedAt, Quality: memberQualityReport(n)}, URI: entry.uri, DNS: n.DNS, SiteID: entry.siteID, SiteName: entry.siteName})
 			lines = append(lines, entry.uri)
 		}
 	}
@@ -459,7 +467,7 @@ func (a *App) serveSubscription(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", typ)
-	w.Header().Set("Subscription-Userinfo", fmt.Sprintf("upload=%d; download=%d; total=%d; expire=%d", record.Upload, record.Download, record.Quota, record.Expires))
+	w.Header().Set("Subscription-Userinfo", fmt.Sprintf("upload=%d; download=%d; total=%d; expire=%d", record.QuotaUpload(), record.QuotaDownload(), record.Quota, record.Expires))
 	updateHours := "6"
 	if public {
 		updateHours = "1"
@@ -487,7 +495,7 @@ func (a *App) hyAuth(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			for _, node := range nodes {
-				if node.Protocol != "hy2" || !node.Enabled {
+				if node.Protocol != "hy2" || !memberMayUseNode(record, node) {
 					continue
 				}
 				if subtle.ConstantTimeCompare([]byte(input.Auth), []byte(hyNodePassword(record, node))) == 1 {
@@ -540,6 +548,10 @@ func (a *App) password(w http.ResponseWriter, r *http.Request, actor Record) {
 }
 
 func (a *App) admin(w http.ResponseWriter, r *http.Request, actor Record) {
+	if r.URL.Path == "/api/plans" || r.URL.Path == "/api/node-groups" || r.URL.Path == "/api/entitlements/batch" || r.URL.Path == "/api/nodes/policy" {
+		a.entitlementAPI(w, r, actor)
+		return
+	}
 	if r.URL.Path == "/api/network-settings" || r.URL.Path == "/api/updates" || strings.HasPrefix(r.URL.Path, "/api/updates/") {
 		a.updatesAPI(w, r, actor)
 		return
@@ -643,6 +655,7 @@ func (a *App) admin(w http.ResponseWriter, r *http.Request, actor Record) {
 var usernamePattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]{2,31}$`)
 
 type userInput struct {
+	PlanID   string `json:"plan_id"`
 	Username string `json:"username"`
 	Password string `json:"password"`
 	Enabled  bool   `json:"enabled"`
@@ -683,6 +696,15 @@ func (a *App) createUser(w http.ResponseWriter, r *http.Request, actor Record) {
 		return
 	}
 	record := Record{User: User{Username: input.Username, Role: "user", Enabled: input.Enabled, VLESS: input.VLESS, HY2: input.HY2, Expires: input.Expires, Quota: input.Quota, Created: time.Now().Unix()}, Credentials: Credentials{HY2: randomToken(24), Token: randomToken(32), VLESS: map[string]string{}}, Password: hash}
+	record.InitMeter("period-"+randomToken(12), record.Created)
+	if input.PlanID != "" {
+		p, e := a.store.plan(input.PlanID)
+		if e != nil || p.Archived {
+			failure(w, 400, "套餐不存在或已归档")
+			return
+		}
+		assignPlan(&record, p, time.Now().Unix())
+	}
 	for _, n := range nodes {
 		if n.Protocol == "vless" {
 			record.Credentials.VLESS[n.ID] = uuid()
@@ -746,6 +768,10 @@ func (a *App) changeUser(w http.ResponseWriter, r *http.Request, actor Record) {
 			failure(w, 400, "不能停用管理员登录")
 			return
 		}
+		if record.Entitlement != nil && (input.Quota != record.Quota || input.VLESS != record.VLESS || input.HY2 != record.HY2 || input.Expires != record.Expires) {
+			failure(w, 409, "套餐权益请通过套餐与权益操作变更")
+			return
+		}
 		if input.Password != "" {
 			if len(input.Password) > 72 {
 				failure(w, 400, "密码不能为空，且不能超过 72 个字节")
@@ -783,11 +809,8 @@ func (a *App) changeUser(w http.ResponseWriter, r *http.Request, actor Record) {
 				return
 			}
 		case "reset-traffic":
-			record.Credentials.HYGeneration++
-			record.Upload = 0
-			record.Download = 0
-			record.VLESSTraffic = 0
-			record.HY2Traffic = 0
+			failure(w, 409, "请使用套餐权益中的开始新周期，生命周期用量不能清零")
+			return
 		default:
 			failure(w, 404, "操作不存在")
 			return
@@ -904,6 +927,10 @@ func (a *App) saveNode(w http.ResponseWriter, r *http.Request, actor Record) {
 				n.Password = x.Password
 			}
 		}
+	}
+	if err = a.store.validateNodePolicy(&n, old); err != nil {
+		failure(w, 400, err.Error())
+		return
 	}
 	if old == nil {
 		if n.ID != "" || (n.Protocol != "vless" && n.Protocol != "hy2") || len(nodes) >= 16 {
@@ -1040,7 +1067,10 @@ func (a *App) saveNode(w http.ResponseWriter, r *http.Request, actor Record) {
 		savePools = append(savePools, *selected)
 	}
 	if !a.cfg.Dev {
-		_ = a.collect()
+		if err = a.collect(); err != nil {
+			failure(w, 502, "流量同步未完成，节点设置未改变")
+			return
+		}
 	}
 	// A hostname has one Nginx destination and one Reality handshake target.
 	// Keep its pinned address consistent across nodes in the same transaction.

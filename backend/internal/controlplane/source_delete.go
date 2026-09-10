@@ -9,6 +9,7 @@ import (
 )
 
 type sourceDeletion struct {
+	oldSites, newSites                                []BusinessSite
 	source                                            ImportSource
 	removedPools, reassignedPools, oldReassignedPools []IPResource
 	removedNodes                                      []Node
@@ -83,6 +84,15 @@ func (a *App) planSourceDeletion(source ImportSource) (sourceDeletion, error) {
 			p.newRecords = append(p.newRecords, record)
 		}
 	}
+	sites, e := a.store.businessSites()
+	if e != nil {
+		return p, e
+	}
+	ids := []string{}
+	for id := range remove {
+		ids = append(ids, id)
+	}
+	p.oldSites, p.newSites = pruneBusinessNodes(sites, ids)
 	return p, nil
 }
 
@@ -158,6 +168,19 @@ func (s *Store) persistSourceDeletion(p sourceDeletion, restore bool) error {
 			return e
 		}
 		if _, e = tx.Exec("UPDATE users SET credentials=? WHERE id=?", b, record.ID); e != nil {
+			return e
+		}
+	}
+	sites := p.newSites
+	if restore {
+		sites = p.oldSites
+	}
+	for _, site := range sites {
+		b, e := s.vault.seal(site)
+		if e != nil {
+			return e
+		}
+		if _, e = tx.Exec("UPDATE business_sites SET doc=? WHERE id=?", b, site.ID); e != nil {
 			return e
 		}
 	}

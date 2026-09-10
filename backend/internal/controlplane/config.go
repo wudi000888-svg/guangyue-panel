@@ -17,7 +17,7 @@ import (
 	"path/filepath"
 )
 
-const version = "0.19.2"
+const version = "0.20.0"
 
 type Config struct {
 	HY2Optimized    bool                `json:"hy2_optimized,omitempty"`
@@ -266,6 +266,10 @@ type User = domain.User
 type Record = domain.Record
 type Credentials = domain.Credentials
 type Node struct {
+	PolicyVersion  int          `json:"policy_version"`
+	RateMilli      int64        `json:"rate_milli"`
+	RateRevision   string       `json:"rate_revision"`
+	GroupIDs       []string     `json:"group_ids"`
 	DNS            *NodeDNS     `json:"dns,omitempty"`
 	DefaultDirect  bool         `json:"default_direct,omitempty"`
 	RealitySNI     string       `json:"reality_sni,omitempty"`

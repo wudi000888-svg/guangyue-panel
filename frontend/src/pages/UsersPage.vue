@@ -1,11 +1,21 @@
 <script setup lang="ts">
 import { usePanelContext } from "../composables/panelContext";
-const { state, busy, userSearch, userFilter, userRole, expiringUsers, active, userStatus, users, usage, bytes, date, editUser, toggleUser, showSub } = usePanelContext();
-import { Pencil, Plus, Power, QrCode, Search } from "lucide-vue-next";
+const { state, busy, refresh,quotaUsed, userSearch, userFilter, userRole, expiringUsers, active, userStatus, users, usage, bytes, date, editUser, toggleUser, showSub } = usePanelContext();
+import {computed,ref} from "vue";
+import type {User} from "../types";
+import EntitlementDialog from "../components/EntitlementDialog.vue";
+import { Pencil, Plus, Power, QrCode, Search,Package } from "lucide-vue-next";
 import { t } from "../i18n";
 import { usePagination } from "../composables/usePagination";
 import ListTable from "../components/ListTable.vue";
-const {page:listPage,pages:listPages,rows:listRows}=usePagination(users);
+const selected=ref<number[]>([]),entitlementUsers=ref<User[]>([]),planFilter=ref('all');
+const planOptions=computed(()=>[...new Map((state.value?.users||[]).filter(u=>u.entitlement).map(u=>[u.entitlement!.plan_id,u.entitlement!.name])).entries()]);
+const visibleUsers=computed(()=>users.value.filter(u=>planFilter.value==='all'||(planFilter.value==='independent'?!u.entitlement:u.entitlement?.plan_id===planFilter.value)));
+const {page:listPage,pages:listPages,rows:listRows}=usePagination(visibleUsers);
+const allSelected=computed(()=>!!visibleUsers.value.length&&visibleUsers.value.every(u=>selected.value.includes(u.id)));
+function toggleAll(){selected.value=allSelected.value?[]:visibleUsers.value.map(u=>u.id);}
+function editEntitlements(){entitlementUsers.value=(state.value?.users||[]).filter(u=>selected.value.includes(u.id));}
+
 </script>
 <template>
 <section v-if="state">
@@ -53,14 +63,16 @@ const {page:listPage,pages:listPages,rows:listRows}=usePagination(users);
               <option value="all">{{ t("全部角色") }}</option>
               <option value="owner">{{ t("管理员") }}</option>
               <option value="user">{{ t("企业成员") }}</option></select
-            ><span class="spacer"></span
-            ><span class="muted">{{ users.length }}{{ t("位成员") }}</span>
+            ><select v-model="planFilter" :aria-label="t('套餐筛选')"><option value="all">{{t("全部套餐")}}</option><option value="independent">{{t("独立配置")}}</option><option v-for="[id,name] in planOptions" :key="id" :value="id">{{name}}</option></select><span class="spacer"></span
+            ><span class="muted">{{ visibleUsers.length }}{{ t("位成员") }}</span>
           </div>
-          <ListTable :total="users.length" v-model:page="listPage" :pages="listPages">
+          <div v-if="selected.length" class="batch-toolbar"><strong>{{t("已选择")}} {{selected.length}}</strong><button class="primary" :disabled="busy" @click="editEntitlements"><Package :size="15"/>{{t("批量设置权益")}}</button><button @click="selected=[]">{{t("清空选择")}}</button></div>
+ <ListTable :total="visibleUsers.length" v-model:page="listPage" :pages="listPages">
             <table class="adaptive-table">
               <thead>
                 <tr>
-                  <th>{{ t("成员") }}</th>
+                  <th class="select-cell"><input type="checkbox" :checked="allSelected" :aria-label="t('选择全部当前结果')" @change="toggleAll"/></th><th>{{ t("成员") }}</th>
+ <th>{{t("当前套餐")}}</th>
                   <th>{{ t("状态") }}</th>
                   <th>{{ t("协议") }}</th>
                   <th class="usage-cell">{{ t("流量使用") }}</th>
@@ -71,7 +83,7 @@ const {page:listPage,pages:listPages,rows:listRows}=usePagination(users);
               </thead>
               <tbody>
                 <tr v-for="u in listRows" :key="u.id">
-                  <td :data-label="t('成员')">
+                  <td class="select-cell" :data-label="t('选择')"><input type="checkbox" v-model="selected" :value="u.id" :aria-label="t('选择')+' '+u.username"/></td><td :data-label="t('成员')">
                     <div class="user-cell">
                       <span class="avatar small">{{
                         u.username.slice(0, 1).toUpperCase()
@@ -84,7 +96,8 @@ const {page:listPage,pages:listPages,rows:listRows}=usePagination(users);
                       </div>
                     </div>
                   </td>
-                  <td :data-label="t('状态')">
+                  <td :data-label="t('当前套餐')"><strong>{{u.entitlement?.name||t("独立配置")}}</strong><small v-if="u.entitlement">v{{u.entitlement.version}}</small><small v-if="u.meter?.end">{{t("下次重置")}} · {{date(u.meter.end)}}</small></td>
+ <td :data-label="t('状态')">
                     <span
                       :class="['badge', active(u) ? 'success' : 'danger']"
                       >{{ userStatus(u) }}</span
@@ -99,10 +112,10 @@ const {page:listPage,pages:listPages,rows:listRows}=usePagination(users);
                   </td>
                   <td :data-label="t('流量使用')">
                     <div class="usage-text">
-                      {{ bytes(u.upload + u.download)
+                      {{ bytes(quotaUsed(u))
                       }}<span>/ {{ u.quota ? bytes(u.quota) : t("不限") }}</span>
                     </div>
-                    <div class="progress">
+                    <small>{{t("实际累计流量")}} · {{bytes(u.upload+u.download)}}</small><div class="progress">
                       <span
                         :style="{ width: usage(u) + '%' }"
                         :class="{ exhausted: usage(u) >= 100 }"
@@ -115,7 +128,7 @@ const {page:listPage,pages:listPages,rows:listRows}=usePagination(users);
                   </td>
                   <td :data-label="t('操作')">
                     <div class="row-actions">
-                      <button class="icon" :title="t('查看订阅')" @click="showSub(u)">
+ <button class="icon" :title="t('套餐与权益')" @click="entitlementUsers=[u]"><Package :size="17"/></button><button class="icon" :title="t('查看订阅')" @click="showSub(u)">
                         <QrCode :size="17" /></button
                       ><button
                         class="icon"
@@ -134,11 +147,11 @@ const {page:listPage,pages:listPages,rows:listRows}=usePagination(users);
                     </div>
                   </td>
                 </tr>
-                <tr v-if="!users.length">
-                  <td colspan="7" class="empty">{{ t("没有匹配的成员") }}</td>
+                <tr v-if="!visibleUsers.length">
+                  <td colspan="9" class="empty">{{ t("没有匹配的成员") }}</td>
                 </tr>
               </tbody>
             </table>
           </ListTable>
-        </section>
+        <EntitlementDialog v-if="entitlementUsers.length" :users="entitlementUsers" @close="entitlementUsers=[]" @updated="selected=[];refresh()"/></section>
 </template>

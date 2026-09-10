@@ -109,7 +109,7 @@ func (a *App) syncBusinessAgent(ctx context.Context, client *http.Client) error 
 				SiteID string `json:"site_id"`
 				Token  string `json:"token"`
 			}
-			info := BusinessInfo{SiteID: a.cfg.siteID(), Version: version, Protocol: 1, VLESSHost: a.cfg.VLESSHost, HY2Host: a.cfg.HY2Host, RealityPublic: a.cfg.RealityPublic, RealitySNI: a.cfg.RealitySNI, ShortID: a.cfg.ShortID}
+			info := BusinessInfo{SiteID: a.cfg.siteID(), Version: version, Protocol: 2, VLESSHost: a.cfg.VLESSHost, HY2Host: a.cfg.HY2Host, RealityPublic: a.cfg.RealityPublic, RealitySNI: a.cfg.RealitySNI, ShortID: a.cfg.ShortID}
 			if err = a.businessRequest(ctx, client, "/api/business/enroll", a.cfg.EnrollmentToken, info, &out); err != nil {
 				return err
 			}
@@ -141,9 +141,20 @@ func (a *App) syncBusinessAgent(ctx context.Context, client *http.Client) error 
 		a.mu.Unlock()
 		return err
 	}
-	report := BusinessHeartbeat{Version: version, SiteID: a.cfg.siteID(), Applied: state.Applied, Usage: map[int64]BusinessUsage{}, Error: state.Error}
+	report := BusinessHeartbeat{Protocol: 2, UsageBaseline: map[int64]BusinessUsage{}, Version: version, SiteID: a.cfg.siteID(), Applied: state.Applied, Usage: map[int64]BusinessUsage{}, Error: state.Error}
 	for _, u := range users {
-		report.Usage[u.ID] = BusinessUsage{Upload: u.Upload, Download: u.Download, VLESS: u.VLESSTraffic, HY2: u.HY2Traffic}
+		report.Usage[u.ID] = businessUsageOf(u.User)
+		if u.Meter == nil {
+			report.UsageBaseline[u.ID] = BusinessUsage{Upload: u.Upload, Download: u.Download}
+		}
+		if u.Meter != nil {
+			report.UsageBaseline[u.ID] = BusinessUsage{Upload: u.Meter.InitialUpload, Download: u.Meter.InitialDownload}
+		}
+	}
+	report.NodeUsage, err = a.store.pendingNodeUsage()
+	if err != nil {
+		a.mu.Unlock()
+		return err
 	}
 	for _, n := range nodes {
 		report.Reports = append(report.Reports, n.public())
@@ -219,6 +230,9 @@ func (a *App) applyBusinessSnapshot(ctx context.Context, snapshot BusinessSnapsh
 	if snapshot.IssuedAt < state.Contact {
 		return errors.New("stale business policy")
 	}
+	if err = a.store.ackBusinessUsage(snapshot.UsageAck); err != nil {
+		return err
+	}
 	if state.Applied == snapshot.Revision {
 		state.LeaseUntil = snapshot.IssuedAt + snapshot.LeaseSeconds
 		state.Contact = snapshot.IssuedAt
@@ -227,6 +241,9 @@ func (a *App) applyBusinessSnapshot(ctx context.Context, snapshot BusinessSnapsh
 			return err
 		}
 		return a.reconcileIfNeeded()
+	}
+	if err = a.collect(); err != nil {
+		return err
 	}
 	oldRuntime := a.store.runtimeSnapshot()
 	oldNodes, err := a.store.nodes()
@@ -245,6 +262,10 @@ func (a *App) applyBusinessSnapshot(ctx context.Context, snapshot BusinessSnapsh
 	seen := map[string]bool{}
 	exits := map[string]IPResource{}
 	for i := range nodes {
+		nodes[i] = normalizeNodePolicy(nodes[i])
+		if nodes[i].PolicyVersion != 1 || nodes[i].RateMilli < 0 || nodes[i].RateMilli > 100000 || nodes[i].RateMilli%10 != 0 || len(nodes[i].GroupIDs) > 128 {
+			return errors.New("invalid node entitlement policy")
+		}
 		n := &nodes[i]
 		if !simpleID(n.ID) || seen[n.ID] || n.Protocol != "vless" && n.Protocol != "hy2" {
 			return errors.New("invalid business node")
@@ -368,6 +389,21 @@ func (a *App) applyBusinessSnapshot(ctx context.Context, snapshot BusinessSnapsh
 				r.Download = old.Download
 				r.VLESSTraffic = old.VLESSTraffic
 				r.HY2Traffic = old.HY2Traffic
+				if old.Meter != nil {
+					m := *old.Meter
+					if u.Meter != nil {
+						if m.PeriodID != u.Meter.PeriodID {
+							m.UploadRemainder, m.DownloadRemainder = 0, 0
+						}
+						m.PeriodID = u.Meter.PeriodID
+						m.Start = u.Meter.Start
+						m.End = u.Meter.End
+						m.PendingReset = u.Meter.PendingReset
+					}
+					m.BaseUpload = 0
+					m.BaseDownload = 0
+					r.Meter = &m
+				}
 				r.Credentials.HYGeneration = max(r.Credentials.HYGeneration, old.Credentials.HYGeneration)
 				if old.Active() != r.Active() || old.HY2 != r.HY2 {
 					r.Credentials.HYGeneration++

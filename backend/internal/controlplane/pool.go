@@ -65,7 +65,16 @@ func (s *Store) savePoolState(pools []IPResource, nodes []Node, remove []string)
 }
 
 // Collector membership and the corresponding member credentials change together.
-func (s *Store) saveInfrastructure(pools []IPResource, nodes []Node, records []Record, removePools, removeNodes []string) error {
+func (s *Store) saveInfrastructure(pools []IPResource, nodes []Node, records []Record, removePools, removeNodes []string, restoreSites ...BusinessSite) error {
+	changedSites := []BusinessSite{}
+	if len(removePools) > 0 {
+		sites, e := s.businessSites()
+		if e != nil {
+			return e
+		}
+		_, changedSites = pruneBusinessNodes(sites, removePools)
+	}
+	changedSites = append(changedSites, restoreSites...)
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err
@@ -82,7 +91,7 @@ func (s *Store) saveInfrastructure(pools []IPResource, nodes []Node, records []R
 		}
 	}
 	for _, n := range nodes {
-		b, e := s.vault.seal(n)
+		b, e := s.vault.seal(normalizeNodePolicy(n))
 		if e != nil {
 			return e
 		}
@@ -107,6 +116,15 @@ func (s *Store) saveInfrastructure(pools []IPResource, nodes []Node, records []R
 	for _, id := range removePools {
 		if _, err = tx.Exec("DELETE FROM ip_pool WHERE id=?", id); err != nil {
 			return err
+		}
+	}
+	for _, site := range changedSites {
+		b, e := s.vault.seal(site)
+		if e != nil {
+			return e
+		}
+		if _, e = tx.Exec("UPDATE business_sites SET doc=? WHERE id=?", b, site.ID); e != nil {
+			return e
 		}
 	}
 	return tx.Commit()

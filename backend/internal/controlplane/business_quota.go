@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/wudi000888-svg/guangyue-panel/backend/internal/domain"
 	"time"
 )
 
@@ -40,7 +41,7 @@ func (a *App) validateBusinessAllocations(candidate BusinessSite) error {
 		if u.Quota == 0 {
 			continue
 		}
-		remaining := max(int64(0), u.Quota-u.Upload-u.Download)
+		remaining := max(int64(0), u.Quota-u.QuotaUsed())
 		for _, s := range sites {
 			if s.IssuedUnlimited[u.ID] {
 				return errBusinessQuota
@@ -67,7 +68,7 @@ func (a *App) validateBusinessUserQuota(u Record) error {
 	if err != nil {
 		return err
 	}
-	remaining := max(int64(0), u.Quota-u.Upload-u.Download)
+	remaining := max(int64(0), u.Quota-u.QuotaUsed())
 	for _, s := range sites {
 		if s.IssuedUnlimited[u.ID] {
 			return errBusinessQuota
@@ -92,6 +93,11 @@ func (a *App) coreRecords() ([]Record, error) {
 	records, err := a.store.records()
 	if err != nil {
 		return nil, err
+	}
+	if !a.cfg.businessAgent() {
+		if err = a.store.resolveAccess(records); err != nil {
+			return nil, err
+		}
 	}
 	if a.cfg.businessAgent() {
 		expires := a.businessLeaseDeadline()
@@ -129,6 +135,9 @@ func (a *App) coreRecords() ([]Record, error) {
 // Persist counters and the acknowledged allocation in one transaction. Replayed
 // or out-of-order totals never lower a watermark or count the same bytes twice.
 func (a *App) acceptBusinessUsage(v *BusinessSite, in BusinessHeartbeat) error {
+	if err := a.verifyBusinessMeter(v, in); err != nil {
+		return err
+	}
 	a.store.runtimeMu.RLock()
 	defer a.store.runtimeMu.RUnlock()
 	history := a.store.logsEnabledLocked()
@@ -138,7 +147,7 @@ func (a *App) acceptBusinessUsage(v *BusinessSite, in BusinessHeartbeat) error {
 	}
 	defer tx.Rollback()
 	for id, next := range in.Usage {
-		if id <= 0 || next.Upload < 0 || next.Download < 0 || next.VLESS < 0 || next.HY2 < 0 || next.Upload > 1<<60 || next.Download > 1<<60 || next.VLESS > 1<<60 || next.HY2 > 1<<60 || next.total() != next.VLESS+next.HY2 {
+		if id <= 0 || next.Upload < 0 || next.Download < 0 || next.VLESS < 0 || next.HY2 < 0 || next.Upload > 1<<60 || next.Download > 1<<60 || next.VLESS > 1<<60 || next.HY2 > 1<<60 || next.rawTotal() != next.VLESS+next.HY2 {
 			return errors.New("invalid traffic report")
 		}
 		previous, known := v.Usage[id]
@@ -153,6 +162,12 @@ func (a *App) acceptBusinessUsage(v *BusinessSite, in BusinessHeartbeat) error {
 		}
 		if !authorized {
 			return errors.New("traffic user is not assigned to this site")
+		}
+		if next.Metered && (next.QuotaUpload < 0 || next.QuotaDownload < 0 || next.QuotaUpload > 1<<60 || next.QuotaDownload > 1<<60) {
+			return errors.New("invalid weighted traffic report")
+		}
+		if next.Metered && previous.Metered && (next.QuotaUpload < previous.QuotaUpload || next.QuotaDownload < previous.QuotaDownload) {
+			return errors.New("weighted watermark moved backwards")
 		}
 		if next.Upload < previous.Upload || next.Download < previous.Download || next.VLESS < previous.VLESS || next.HY2 < previous.HY2 {
 			return errors.New("business counters moved backwards; restore requires reconciliation")
@@ -177,6 +192,21 @@ func (a *App) acceptBusinessUsage(v *BusinessSite, in BusinessHeartbeat) error {
 		}
 		if u.Upload > 1<<60-du || u.Download > 1<<60-dd {
 			return errors.New("traffic counter limit exceeded")
+		}
+		u.InitMeter("legacy-"+businessUsageKey(id), time.Now().Unix())
+		qu, qd := du, dd
+		if next.Metered {
+			pu, pd := previous.Upload, previous.Download
+			if previous.Metered {
+				pu, pd = previous.QuotaUpload, previous.QuotaDownload
+			}
+			qu, qd = next.QuotaUpload-pu, next.QuotaDownload-pd
+		}
+		if u.Meter.Upload, err = domain.AddCounter(u.Meter.Upload, qu); err != nil {
+			return err
+		}
+		if u.Meter.Download, err = domain.AddCounter(u.Meter.Download, qd); err != nil {
+			return err
 		}
 		u.Upload += du
 		u.Download += dd
@@ -226,6 +256,11 @@ func (a *App) acceptBusinessUsage(v *BusinessSite, in BusinessHeartbeat) error {
 			if g.Quota == 0 {
 				v.IssuedUnlimited[g.UserID] = true
 			}
+		}
+	}
+	for _, row := range in.NodeUsage {
+		if _, err = tx.Exec("INSERT INTO business_node_usage(site_id,user_id,node_id,period_id,rate_revision,rate_milli,upload,download) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(site_id,user_id,node_id,period_id,rate_revision) DO UPDATE SET upload=excluded.upload,download=excluded.download", v.ID, row.UserID, row.NodeID, row.PeriodID, row.RateRevision, row.RateMilli, row.Upload, row.Download); err != nil {
+			return err
 		}
 	}
 	b, err := a.store.vault.seal(v)

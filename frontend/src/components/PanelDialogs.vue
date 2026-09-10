@@ -2,10 +2,13 @@
 import { computed, ref } from "vue";
 import { useModalFocus } from "../composables/useModalFocus";
 import { usePanelContext } from "../composables/panelContext";
-const { state, busy, error, notice, modal, editingID, userForm, nodeForm, ipForm, importMode, importForm, importFile, importFileReading, importIssues, clearPrivateFile, readPrivateFile, importSubscription, ipPool, selectedIP, ipStatus, ipBadge, passwordForm, probeResult, displayedNodeName, confirmation, defaultRealitySNI, editingDefaultDirect, bytes, exitName, go, saveUser, confirmUser, confirmed, editNode, probe, saveIP, saveNode, deleteNode, changePassword } = usePanelContext();
-import { Activity, ArrowUpRight, Check, CircleHelp, Download, Globe2, KeyRound, LoaderCircle, Plus, RefreshCw, ShieldCheck, Trash2, X } from "lucide-vue-next";
+import NodeGroupPicker from "./NodeGroupPicker.vue";
+const { plans,nodeGroups,state, busy, error, notice, modal, editingID, userForm, nodeForm, ipForm, importMode, importForm, importFile, importFileReading, importIssues, clearPrivateFile, readPrivateFile, importSubscription, ipPool, selectedIP, ipStatus, ipBadge, passwordForm, probeResult, displayedNodeName, confirmation, defaultRealitySNI, editingDefaultDirect, bytes, exitName, go, saveUser, confirmUser, confirmed, editNode, probe, saveIP, saveNode, deleteNode, changePassword } = usePanelContext();
+import { Activity, ArrowUpRight, Check, CircleHelp, Download, Globe2, KeyRound, LoaderCircle, Plus, ShieldCheck, Trash2, X } from "lucide-vue-next";
 import { t } from "../i18n";
 import CountryMark from "../CountryMark.vue";
+const hasPlan=computed(()=>!!userForm.plan_id);
+const nodeRate=computed({get:()=>(nodeForm.rate_milli??1000)/1000,set:(v:number)=>nodeForm.rate_milli=Math.round(v*1000)});
 const editDialog=ref<HTMLElement|null>(null), confirmDialog=ref<HTMLElement|null>(null);
 useModalFocus(computed(()=>!!modal.value || !!confirmation.value), computed(()=>confirmation.value ? confirmDialog.value : editDialog.value), ()=>{
   if(busy.value)return;
@@ -158,7 +161,10 @@ useModalFocus(computed(()=>!!modal.value || !!confirmation.value), computed(()=>
             :required="!editingID"
             maxlength="72"
         /></label><p class="field-help">{{t('密码至少 1 位，无复杂度要求，最多 72 字节。')}}</p>
-        <div class="field-row">
+        <label v-if="!editingID">{{t('套餐')}}<select v-model="userForm.plan_id" :aria-label="t('套餐')"><option value="">{{t('独立配置')}}</option><option v-for="p in plans.filter(p=>!p.archived)" :key="p.id" :value="p.id">{{p.name}} · v{{p.version}}</option></select></label>
+        <p v-if="editingID&&hasPlan" class="field-help">{{t('套餐权益请通过用户管理中的套餐与权益操作变更。')}}</p>
+        <p v-if="!editingID&&hasPlan" class="field-help">{{plans.find(p=>p.id===userForm.plan_id)?.description}} · {{t('创建后按所选套餐发放额度、协议和有效期。')}}</p>
+        <div v-if="!hasPlan" class="field-row">
           <label
             >{{ t("流量额度 / GB") }}<input
               v-model.number="userForm.quotaGB"
@@ -182,22 +188,12 @@ useModalFocus(computed(()=>!!modal.value || !!confirmation.value), computed(()=>
                 state?.users.find((u) => u.id === editingID)?.role === 'owner'
               "
             />{{ t("账号启用") }}</label
-          ><label><input v-model="userForm.vless" type="checkbox" />VLESS</label
-          ><label><input v-model="userForm.hy2" type="checkbox" />HY2</label>
+          ><label v-if="!hasPlan"><input v-model="userForm.vless" type="checkbox" />VLESS</label
+          ><label v-if="!hasPlan"><input v-model="userForm.hy2" type="checkbox" />HY2</label>
         </div>
         <p v-if="error" class="error" role="alert">{{ t(error) }}</p>
         <div v-if="editingID" class="advanced-actions">
           <button
-            type="button"
-            @click="
-              confirmUser(
-                state!.users.find((u) => u.id === editingID)!,
-                'reset-traffic',
-              )
-            "
-          >
-            <RefreshCw :size="15" />{{ t("重置流量") }}</button
-          ><button
             v-if="
               state?.users.find((u) => u.id === editingID)?.role !== 'owner'
             "
@@ -334,6 +330,7 @@ useModalFocus(computed(()=>!!modal.value || !!confirmation.value), computed(()=>
             nodeForm.protocol.toUpperCase()
           }}</span>
         </div>
+        <section class="node-dns-settings"><label>{{t('节点倍率')}}<input v-model.number="nodeRate" type="number" min="0" max="100" step="0.01" required/></label><p class="field-help">{{t('实际使用 1 GiB 消耗对应倍率的配额；0×免扣配额，仍统计实际流量。')}}</p><NodeGroupPicker v-model="nodeForm.group_ids" :groups="nodeGroups" scope="private"/><p v-if="!nodeForm.group_ids?.length" class="field-help">{{t('未分组节点不会发放给用户。删除节点时会自动移出所有分组。')}}</p></section>
         <div v-if="editingDefaultDirect" class="default-direct-notice"><ShieldCheck :size="18"/><div><strong>{{t('保留服务器默认直连入口')}}</strong><p>{{t('此节点固定使用本机出口，保持启用，不能删除或绑定其他出口。')}}</p><button type="button" class="text-button" :disabled="busy" @click="editNode(undefined, nodeForm.protocol)"><Plus :size="14"/>{{t('绑定 IP 池出口请新增节点')}}</button></div></div>
         <div v-if="nodeForm.protocol === 'vless'" class="node-sni-setting">
           <label for="node-reality-sni">{{t('Reality SNI（可选）')}}<input id="node-reality-sni" v-model="nodeForm.reality_sni" type="text" inputmode="url" autocomplete="off" autocapitalize="none" :spellcheck="false" maxlength="63" :disabled="busy" :placeholder="defaultRealitySNI" aria-describedby="node-reality-sni-help"/></label>

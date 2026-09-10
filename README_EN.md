@@ -9,6 +9,8 @@ A network resource console for cross-border commerce teams. Lite uses Go, SQLite
 
 ## Features
 
+- Node traffic multipliers (0–100×), permission groups, versioned plan templates and manual entitlements without payments; [guide](docs/PLANS.md).
+- Separate raw and quota usage, 30-day/calendar-month periods and per-node usage reports. Node deletion automatically removes group membership.
 - Multi-user VLESS Reality/Vision and Hysteria 2, including protected default direct nodes.
 - Nginx TCP 443 SNI routing alongside website HTTPS; HY2 shares the port number over UDP.
 - Private HTTP CONNECT / SOCKS5 exits, subscription and single-node imports, source ownership and staggered daily updates.

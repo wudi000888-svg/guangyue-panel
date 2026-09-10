@@ -16,6 +16,13 @@ func TestPostgresBehaviors(t *testing.T) {
 		run  func(*testing.T)
 	}{
 		{"business_lifecycle", TestBusinessLifecycle},
+		{"weighted_business", TestBusinessWeightedQuotasSparseAcknowledgementAndReset},
+		{"business_membership_deletion", TestBusinessExitDeletionCleansGroupsAndRestoresOnFailure},
+		{"entitlements", TestEntitlementSnapshotsRenewResetAndAccess},
+		{"entitlement_migration", TestEntitlementMigrationAndUsageIsolation},
+		{"entitlement_edit", TestRejectedEntitlementEditPreservesSessionsAndNewUserMeter},
+		{"node_rates", TestNodeMeterRatesChangeDeletionAndNoLogs},
+		{"membership_deletion", TestNodeDeleteRemovesGroupAndPreservesUsage},
 		{"business_quota", TestBusinessAllocationsAndCounterRollback},
 		{"shared_quality", TestDirectQualitySharedAcrossProtocols},
 		{"authentication", TestUserIsolationAndCSRF},

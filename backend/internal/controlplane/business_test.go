@@ -111,11 +111,14 @@ func TestBusinessLifecycle(t *testing.T) {
 	if w := businessTokenRequest(t, master, "/api/business/enroll", token, info); w.Code != 401 {
 		t.Fatal("enrollment token still usable")
 	}
-	members[0].Upload = 300
-	members[0].Download = 700
-	members[0].VLESSTraffic = 400
-	members[0].HY2Traffic = 600
-	agent.store.save(&members[0])
+	if err = agent.store.account([]Counter{
+		{Key: "v-up", Generation: "1", UserID: user.ID, NodeID: "vless-main", Protocol: "vless", Direction: "up", Value: 100},
+		{Key: "v-down", Generation: "1", UserID: user.ID, NodeID: "vless-main", Protocol: "vless", Direction: "down", Value: 300},
+		{Key: "h-up", Generation: "1", UserID: user.ID, NodeID: "hy2-main", Protocol: "hy2", Direction: "up", Value: 200},
+		{Key: "h-down", Generation: "1", UserID: user.ID, NodeID: "hy2-main", Protocol: "hy2", Direction: "down", Value: 400},
+	}); err != nil {
+		t.Fatal(err)
+	}
 	for i := 0; i < 2; i++ {
 		if err = agent.syncBusinessAgent(ctx, server.Client()); err != nil {
 			t.Fatal(err)
@@ -177,10 +180,10 @@ func TestBusinessAllocationsAndCounterRollback(t *testing.T) {
 	u.Quota = 1000
 	a.store.save(&u)
 	site, _ := createBusinessTest(t, a, owner, "east")
-	site.Grants = []BusinessGrant{{u.ID, 800}}
+	site.Grants = []BusinessGrant{{UserID: u.ID, Quota: 800}}
 	a.store.saveBusinessSite(site)
 	second, _ := createBusinessTest(t, a, owner, "west")
-	second.Grants = []BusinessGrant{{u.ID, 300}}
+	second.Grants = []BusinessGrant{{UserID: u.ID, Quota: 300}}
 	if a.validateBusinessPolicy(second) == nil {
 		t.Fatal("oversubscribed quota accepted")
 	}
@@ -287,7 +290,7 @@ func TestBusinessCommandsAndIdentityPinning(t *testing.T) {
 		t.Fatal("replacement machine reused enrollment")
 	}
 	site, _ = master.store.businessSite(site.ID)
-	site.Grants = []BusinessGrant{{owner.ID, 0}}
+	site.Grants = []BusinessGrant{{UserID: owner.ID, Quota: 0}}
 	master.store.saveBusinessSite(site)
 	snapshot, e := master.businessSnapshot(&site)
 	if e != nil {
@@ -318,7 +321,7 @@ func TestBusinessCommandsAndIdentityPinning(t *testing.T) {
 		t.Fatal("remote command replay duplicated work")
 	}
 	site2, _ := createBusinessTest(t, master, owner, "west")
-	site2.Grants = []BusinessGrant{{owner.ID, 0}}
+	site2.Grants = []BusinessGrant{{UserID: owner.ID, Quota: 0}}
 	master.store.saveBusinessSite(site2)
 	snapshot2, e := master.businessSnapshot(&site2)
 	if e != nil {

@@ -64,8 +64,8 @@ func TestMultipleHY2NodesDefaultDirectAndIndependentCredentials(t *testing.T) {
 	member := testUser(t, a, "member", "user")
 	nodes, _ := a.store.nodes()
 	oldSub, _, _ := subscription(a.cfg, member, nodes, "raw", "")
-	hy := decodeNode(t, req(t, a, owner, "POST", "/api/nodes", Node{Protocol: "hy2", Enabled: true}))
-	vl := decodeNode(t, req(t, a, owner, "POST", "/api/nodes", Node{Protocol: "vless", Enabled: true}))
+	hy := decodeNode(t, req(t, a, owner, "POST", "/api/nodes", Node{PolicyVersion: 1, RateMilli: 1000, GroupIDs: []string{legacyPrivateGroup}, Protocol: "hy2", Enabled: true}))
+	vl := decodeNode(t, req(t, a, owner, "POST", "/api/nodes", Node{PolicyVersion: 1, RateMilli: 1000, GroupIDs: []string{legacyPrivateGroup}, Protocol: "vless", Enabled: true}))
 	for _, n := range []Node{hy, vl} {
 		if n.Exit != "direct" || n.ExitID != "" || n.Host != "" || n.Port != 0 {
 			t.Fatal("new node does not default to unpooled direct")

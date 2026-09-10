@@ -134,13 +134,14 @@ func (a *App) businessAPI(w http.ResponseWriter, r *http.Request, actor Record) 
 	}
 	if len(parts) == 1 && r.Method == "PUT" {
 		var in struct {
-			Name      string          `json:"name"`
-			Group     string          `json:"group"`
-			Enabled   bool            `json:"enabled"`
-			Exclusive bool            `json:"exclusive"`
-			Revision  string          `json:"revision"`
-			Nodes     []Node          `json:"nodes"`
-			Grants    []BusinessGrant `json:"grants"`
+			Name         string          `json:"name"`
+			Group        string          `json:"group"`
+			Enabled      bool            `json:"enabled"`
+			Exclusive    bool            `json:"exclusive"`
+			Revision     string          `json:"revision"`
+			Nodes        []Node          `json:"nodes"`
+			DefaultNodes []Node          `json:"default_nodes"`
+			Grants       []BusinessGrant `json:"grants"`
 		}
 		if !decodeBusiness(w, r, &in) {
 			return
@@ -159,9 +160,60 @@ func (a *App) businessAPI(w http.ResponseWriter, r *http.Request, actor Record) 
 		v.Group = in.Group
 		v.Enabled = in.Enabled
 		v.Exclusive = in.Exclusive
+		for i := range in.Grants {
+			g := &in.Grants[i]
+			u, e := a.store.record(g.UserID)
+			if e != nil {
+				failure(w, 400, "用户不存在")
+				return
+			}
+			if u.Meter != nil {
+				if u.Meter.PendingReset {
+					failure(w, 409, "用户正在切换配额周期")
+					return
+				}
+				g.PeriodID = u.Meter.PeriodID
+			}
+			g.Budget = max(int64(0), g.Quota-v.Usage[g.UserID].total())
+		}
 		v.Grants = in.Grants
+		if in.DefaultNodes != nil {
+			for i := range in.DefaultNodes {
+				n := &in.DefaultNodes[i]
+				if n.ID != "vless-main" && n.ID != "hy2-main" {
+					failure(w, 400, "默认节点标识无效")
+					return
+				}
+				old := normalizeNodePolicy(Node{ID: n.ID})
+				for _, p := range v.DefaultNodes {
+					if p.ID == n.ID {
+						old = p
+					}
+				}
+				n.ManagedBy = ""
+				if err = a.store.validateNodePolicy(n, &old); err != nil {
+					failure(w, 400, err.Error())
+					return
+				}
+			}
+			v.DefaultNodes = in.DefaultNodes
+		}
 		v.Nodes = nil
 		for _, n := range in.Nodes {
+			if p, e := a.store.pool(n.ExitID); e == nil && p.PoolGroup == "public" {
+				n.ManagedBy = publicManager
+			}
+			var old *Node
+			for _, prior := range v.SentNodes {
+				if prior.ID == n.ID {
+					copy := normalizeNodePolicy(prior)
+					old = &copy
+				}
+			}
+			if err = a.store.validateNodePolicy(&n, old); err != nil {
+				failure(w, 400, err.Error())
+				return
+			}
 			v.Nodes = append(v.Nodes, businessNodeTemplate(n))
 		}
 		if err = a.validateBusinessPolicy(v); err != nil {
@@ -305,6 +357,9 @@ func (a *App) businessSync(w http.ResponseWriter, r *http.Request) {
 	}
 	if in.Version != "" {
 		v.Info.Version = in.Version
+		if in.Protocol == 2 {
+			v.Info.Protocol = 2
+		}
 	}
 	v.PendingToken = ""
 	v.LastSeen = time.Now().Unix()
@@ -353,6 +408,7 @@ func (a *App) businessSync(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	out, err := a.businessSnapshot(&v)
+	out.UsageAck = append([]NodeUsage{}, in.NodeUsage...)
 	if err == nil {
 		_, err = a.store.db.Exec("UPDATE business_sites SET enroll_hash=NULL WHERE id=?", v.ID)
 	}

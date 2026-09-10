@@ -65,11 +65,15 @@ func (a *App) desiredCoreHash() (string, error) {
 	if err != nil {
 		return "", err
 	}
+	memberships := map[string][]string{}
+	for _, n := range nodes {
+		memberships[n.ID] = normalizeNodePolicy(n).GroupIDs
+	}
 	users := []object{}
 	for _, u := range records {
-		users = append(users, object{"id": u.ID, "active": u.Active(), "vless": u.VLESS, "hy2": u.HY2, "credentials": u.Credentials})
+		users = append(users, object{"id": u.ID, "active": u.Active(), "vless": u.VLESS, "hy2": u.HY2, "credentials": u.Credentials, "groups": u.AllowedGroups})
 	}
-	b, err := json.Marshal(object{"hy2_optimized": a.cfg.HY2Optimized, "vless": nodeHash(nodes, "vless"), "hy2": nodeHash(nodes, "hy2"), "users": users, "sni": a.cfg.RealitySNI, "target": a.cfg.RealityTarget})
+	b, err := json.Marshal(object{"memberships": memberships, "hy2_optimized": a.cfg.HY2Optimized, "vless": nodeHash(nodes, "vless"), "hy2": nodeHash(nodes, "hy2"), "users": users, "sni": a.cfg.RealitySNI, "target": a.cfg.RealityTarget})
 	return digest(string(b)), err
 }
 func (a *App) reconcileIfNeeded() error {

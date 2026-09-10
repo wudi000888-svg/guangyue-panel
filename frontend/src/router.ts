@@ -12,6 +12,7 @@ export const router = createRouter({
   routes: [
     { path: '/', redirect: '/overview' },
     { path: '/overview', component: () => import('./pages/OverviewPage.vue') },
+    { path: '/plans', component: () => import('./pages/PlansPage.vue'), meta: { owner: true } },
     { path: '/users', component: () => import('./pages/UsersPage.vue'), meta: { owner: true } },
     { path: '/ips/:tab?', component: () => import('./pages/PrivatePoolPage.vue'), meta: { owner: true } },
     { path: '/nodes', component: () => import('./pages/NodesPage.vue'), meta: { owner: true } },
