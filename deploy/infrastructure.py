@@ -31,11 +31,32 @@ def read_profile(path):
         raise ValueError('profile requires PostgreSQL DSN and Redis URL')
     return {key:value[key] for key in ('database','redis_url')}
 
-def edition_config(config, edition, site, profile=None):
+def edition_config(config, edition, site, profile=None, role=None, enrollment=None):
     result=dict(config)
     if not re.fullmatch(r'[a-z][a-z0-9_]{0,39}',site):
         raise ValueError('site ID must be a lowercase identifier, at most 40 characters')
-    if edition=='pro':
+    role=role or (config.get('role') if config.get('edition',edition)==edition else None) or ('controller' if edition=='pro' else 'standalone')
+    if role not in ('standalone','controller','business') or (edition=='lite' and role!='standalone') or (edition=='pro' and role=='standalone'):
+        raise ValueError('Lite uses standalone; Pro uses controller or business')
+    if role=='business':
+        if profile: raise ValueError('business sites use local SQLite and do not need infrastructure')
+        if enrollment:
+            path=Path(enrollment)
+            if path.is_symlink() or not path.is_file() or path.stat().st_mode & 0o077:
+                raise ValueError('enrollment file must be a private regular file (mode 600)')
+            data=json.loads(path.read_text())
+            if set(data)!= {'site_id','controller_url','enrollment_token'} or data['site_id']!=site:
+                raise ValueError('enrollment file does not match the site ID')
+            u=urlparse(data['controller_url'])
+            if u.scheme!='https' or not u.hostname or u.username or u.password or u.query or u.fragment or u.path not in ('','/'):
+                raise ValueError('controller URL must be an HTTPS origin')
+            if not re.fullmatch(r'gye_[A-Za-z0-9_-]{43}',data['enrollment_token']):
+                raise ValueError('invalid enrollment token')
+            result.update(data)
+        if not result.get('controller_url') or not (result.get('enrollment_token') or result.get('business_token')):
+            raise ValueError('business site requires --enrollment-file')
+        result.update(database={'driver':'sqlite'},redis_url='')
+    elif edition=='pro':
         if profile: result.update(read_profile(profile))
         if result.get('database',{}).get('driver')!='postgres' or not result.get('redis_url'):
             raise ValueError('Pro requires --infrastructure-file; provision services first')
@@ -43,12 +64,12 @@ def edition_config(config, edition, site, profile=None):
         raise ValueError('automatic Pro to Lite downgrade is refused; use portable backup recovery')
     else:
         result.update(database={'driver':'sqlite'},redis_url='')
-    result.update(edition=edition,site_id=site)
+    result.update(edition=edition,site_id=site,role=role)
     return result
 
-def service_text(path, edition):
+def service_text(path, edition, role=None):
     text=Path(path).read_text()
-    if edition=='pro':
+    if edition=='pro' and role!='business':
         text=text.replace('Description=Guangyue Panel control panel','Description=Guangyue Panel Pro control panel').replace('GOMEMLIMIT=48MiB','GOMEMLIMIT=192MiB').replace('MemoryHigh=96M','MemoryHigh=256M').replace('MemoryMax=160M','MemoryMax=384M').replace('TasksMax=64','TasksMax=128')
     return text
 

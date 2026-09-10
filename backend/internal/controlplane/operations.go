@@ -61,7 +61,7 @@ func (a *App) desiredCoreHash() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	records, err := a.store.records()
+	records, err := a.coreRecords()
 	if err != nil {
 		return "", err
 	}

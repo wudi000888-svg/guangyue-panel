@@ -229,6 +229,12 @@ func prepareRestore(cfg Config, dir string) (err error) {
 	if _, err = check.pools(); err != nil {
 		return err
 	}
+	if _, err = check.businessSites(); err != nil {
+		return err
+	}
+	if _, err = check.businessAgentState(); err != nil {
+		return err
+	}
 	if _, err = check.fleetPeers(); err != nil {
 		return err
 	}
@@ -333,7 +339,7 @@ func restoreBackup(cfg Config, path string) error {
 	if err = prepareRestore(cfg, temp); err != nil {
 		return err
 	}
-	if cfg.edition() == "pro" {
+	if cfg.controller() {
 		return restorePostgres(cfg, temp)
 	}
 	previous, err := os.MkdirTemp(cfg.StateDir, "before-restore-")

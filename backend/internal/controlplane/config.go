@@ -17,32 +17,36 @@ import (
 	"path/filepath"
 )
 
-const version = "0.15.0"
+const version = "0.16.0"
 
 type Config struct {
-	Edition        string              `json:"edition,omitempty"`
-	SiteID         string              `json:"site_id,omitempty"`
-	Database       persistence.Options `json:"database,omitempty"`
-	RedisURL       string              `json:"redis_url,omitempty"`
-	StateDir       string              `json:"state_dir"`
-	Listen         string              `json:"listen"`
-	InternalListen string              `json:"internal_listen"`
-	PublicURL      string              `json:"public_url"`
-	VLESSHost      string              `json:"vless_host"`
-	HY2Host        string              `json:"hy2_host"`
-	RealitySNI     string              `json:"reality_sni"`
-	RealityTarget  string              `json:"reality_target"`
-	RealityPrivate string              `json:"reality_private"`
-	RealityPublic  string              `json:"reality_public"`
-	ShortID        string              `json:"short_id"`
-	StatsSecret    string              `json:"stats_secret"`
-	Cert           string              `json:"cert"`
-	CertKey        string              `json:"cert_key"`
-	Xray           string              `json:"xray"`
-	Mihomo         string              `json:"mihomo"`
-	Hysteria       string              `json:"hysteria"`
-	WebDir         string              `json:"web_dir"`
-	Dev            bool                `json:"dev"`
+	Role            string              `json:"role,omitempty"`
+	ControllerURL   string              `json:"controller_url,omitempty"`
+	EnrollmentToken string              `json:"enrollment_token,omitempty"`
+	BusinessToken   string              `json:"business_token,omitempty"`
+	Edition         string              `json:"edition,omitempty"`
+	SiteID          string              `json:"site_id,omitempty"`
+	Database        persistence.Options `json:"database,omitempty"`
+	RedisURL        string              `json:"redis_url,omitempty"`
+	StateDir        string              `json:"state_dir"`
+	Listen          string              `json:"listen"`
+	InternalListen  string              `json:"internal_listen"`
+	PublicURL       string              `json:"public_url"`
+	VLESSHost       string              `json:"vless_host"`
+	HY2Host         string              `json:"hy2_host"`
+	RealitySNI      string              `json:"reality_sni"`
+	RealityTarget   string              `json:"reality_target"`
+	RealityPrivate  string              `json:"reality_private"`
+	RealityPublic   string              `json:"reality_public"`
+	ShortID         string              `json:"short_id"`
+	StatsSecret     string              `json:"stats_secret"`
+	Cert            string              `json:"cert"`
+	CertKey         string              `json:"cert_key"`
+	Xray            string              `json:"xray"`
+	Mihomo          string              `json:"mihomo"`
+	Hysteria        string              `json:"hysteria"`
+	WebDir          string              `json:"web_dir"`
+	Dev             bool                `json:"dev"`
 }
 
 func randomToken(n int) string {
@@ -133,6 +137,18 @@ func (c Config) edition() string {
 	}
 	return "lite"
 }
+func (c Config) businessAgent() bool { return c.Role == "business" }
+func (c Config) controller() bool    { return c.edition() == "pro" && !c.businessAgent() }
+func (c Config) deploymentRole() string {
+	if c.businessAgent() {
+		return "business"
+	}
+	if c.controller() {
+		return "controller"
+	}
+	return "standalone"
+}
+
 func (c Config) siteID() string {
 	if c.SiteID == "" {
 		return "default"
@@ -149,7 +165,7 @@ func (c Config) DatabaseOptions() persistence.Options {
 	o := c.Database
 	o.SiteID = c.siteID()
 	if o.Driver == "" {
-		if c.edition() == "pro" {
+		if c.edition() == "pro" && !c.businessAgent() {
 			o.Driver = "postgres"
 		} else {
 			o.Driver = "sqlite"
@@ -167,6 +183,21 @@ func (c Config) validateEdition() error {
 	d := c.DatabaseOptions()
 	if c.edition() == "lite" && d.Driver != "sqlite" {
 		return errors.New("Lite requires SQLite")
+	}
+	if c.businessAgent() {
+		if c.edition() != "pro" || d.Driver != "sqlite" || c.RedisURL != "" || c.ControllerURL == "" || c.EnrollmentToken == "" && c.BusinessToken == "" {
+			return errors.New("business role requires Pro, SQLite and controller enrollment configuration")
+		}
+		return validateControllerURL(c.ControllerURL, c.Dev)
+	}
+	if c.Role != "" && c.Role != "controller" && c.Role != "standalone" {
+		return errors.New("invalid deployment role")
+	}
+	if c.Role == "standalone" && c.edition() == "pro" {
+		return errors.New("Pro requires controller or business role")
+	}
+	if c.Role == "controller" && c.edition() != "pro" {
+		return errors.New("controller role requires Pro")
 	}
 	if c.edition() == "pro" && (d.Driver != "postgres" || d.DSN == "" || c.RedisURL == "") {
 		return errors.New("Pro requires PostgreSQL and Redis configuration")

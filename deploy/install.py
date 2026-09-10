@@ -103,7 +103,7 @@ def preflight(args):
         if run('systemctl', 'show', unit, '--property=LoadState', '--value').strip() != 'not-found':
             raise ValueError('existing service: ' + unit)
     verify_bundle(args.bundle)
-    edition_config({},getattr(args,'edition','lite'),getattr(args,'site_id','default'),getattr(args,'infrastructure_file',None))
+    edition_config({},getattr(args,'edition','lite'),getattr(args,'site_id','default'),getattr(args,'infrastructure_file',None),getattr(args,'role',None),getattr(args,'enrollment_file',None))
     render(args.panel_domain, args.node_domain, args.reality_sni, args.web_domain)
     validate(args.cert, args.key, {args.panel_domain, args.node_domain})
     nginx = run('nginx', '-T')
@@ -177,7 +177,7 @@ def install(args):
         created.append(CONFIG)
         config = json.loads(CONFIG.read_text())
         config.update(public_url='https://' + args.panel_domain, vless_host=args.node_domain, hy2_host=args.node_domain, reality_sni=args.reality_sni, reality_target=args.reality_sni + ':443', cert=str(STATE / 'tls/current/fullchain.pem'), cert_key=str(STATE / 'tls/current/privkey.pem'))
-        config=edition_config(config,getattr(args,'edition','lite'),getattr(args,'site_id','default'),getattr(args,'infrastructure_file',None))
+        config=edition_config(config,getattr(args,'edition','lite'),getattr(args,'site_id','default'),getattr(args,'infrastructure_file',None),getattr(args,'role',None),getattr(args,'enrollment_file',None))
         CONFIG.write_text(json.dumps(config, indent=2) + '\n')
         os.chown(CONFIG, 0, user.pw_gid)
         os.chmod(CONFIG, 0o640)
@@ -201,7 +201,7 @@ def install(args):
         run('nginx', '-t')
         for unit in UNITS:
             path = Path('/etc/systemd/system') / (unit + '.service')
-            path.write_text(service_text(DEPLOY / path.name,config["edition"]) if unit=="guangyue" else (DEPLOY / path.name).read_text())
+            path.write_text(service_text(DEPLOY / path.name,config["edition"],config.get("role")) if unit=="guangyue" else (DEPLOY / path.name).read_text())
             path.chmod(0o644)
             created.append(path)
         hook = Path('/etc/letsencrypt/renewal-hooks/deploy/guangyue-panel')
@@ -233,7 +233,7 @@ def install(args):
         print('Installation rolled back. Private recovery directory: ' + str(backup), file=sys.stderr)
         raise
     print('Installed Guangyue Panel at https://' + args.panel_domain)
-    print('Initial owner credentials: /var/lib/guangyue/initial-owner.json (read locally; change password immediately).')
+    if config.get('role') != 'business': print('Initial owner credentials: /var/lib/guangyue/initial-owner.json (read locally; change password immediately).')
     print('Backup: ' + str(backup))
 
 
@@ -247,11 +247,22 @@ def main():
     p.add_argument('--web-domain', action='append', default=[], type=domain)
     p.add_argument('--cert', required=True, type=Path)
     p.add_argument('--key', required=True, type=Path)
-    p.add_argument('--edition',choices=['lite','pro'],default='lite')
-    p.add_argument('--site-id',default='default')
+    p.add_argument('--edition',choices=['lite','pro'])
+    p.add_argument('--role',choices=['standalone','controller','business'])
+    p.add_argument('--enrollment-file',type=Path)
+    p.add_argument('--site-id')
     p.add_argument('--infrastructure-file',type=Path)
     p.add_argument('--apply', action='store_true')
     args = p.parse_args()
+    marker=args.bundle/'EDITION'
+    args.edition=args.edition or (marker.read_text().strip() if marker.is_file() else 'lite')
+    if args.edition not in ('lite','pro'): raise ValueError('invalid bundle edition')
+    if not args.site_id and args.enrollment_file:
+        # Full permission, identity and endpoint validation follows in preflight.
+        if args.enrollment_file.is_symlink() or args.enrollment_file.stat().st_mode & 0o077:
+            raise ValueError('enrollment file must be mode 600')
+        args.site_id=json.loads(args.enrollment_file.read_text()).get('site_id')
+    args.site_id=args.site_id or 'default'
     if args.apply:
         with deployment_lock():
             preflight(args)

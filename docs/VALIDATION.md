@@ -57,3 +57,15 @@ CI 与源码构建固定使用 Go 1.26.8，发布包包含 Go BSD-3-Clause 许�
 - 线上流量采样揭示 PostgreSQL `ON CONFLICT` 中累加字段必须限定表名，已修复。补充真实 PostgreSQL 的计费检查点、计数器重置、配额和普通/无日志模式切换回归，SQLite 与 PostgreSQL 均通过。
 
 最终 tag 对应的全量测试、安装与发布包来源，以[仓库 Actions](https://github.com/wudi000888-svg/guangyue-panel/actions)和 [v0.15.0 Release](https://github.com/wudi000888-svg/guangyue-panel/releases/tag/v0.15.0) 为准。上述结果仅适用于本次改动，不能代替未来版本验证。
+
+## 0.16.0 主控与业务站验证（2026-09-10）
+
+- 全量 Go race、vet、前端 13 项测试、英文文案检查、TypeScript 与生产构建通过。任务队列正常停机取消竞态已补回归。
+- 真实 PostgreSQL/Redis 的业务站生命周期、身份隔离、额度预留、重复/乱序流量、独占出口和质量复用测试通过；数据库迁移与失败恢复在独立测试容器完成，不使用生产数据库。
+- [安装 CI 34428165651](https://github.com/wudi000888-svg/guangyue-panel/actions/runs/34428165651) 的 Lite、Pro 主控和 Pro 业务站三条路径全部通过。业务站使用真实 systemd 安装、SQLite、HTTPS 注册及版本确认，统一订阅中的 VLESS/HY2 均通过真实核心 TCP 和 UDP DNS，升级与坏可执行文件回滚后节点凭据保持一致，撤销确认后才能删除站点。
+- Hysteria 2.9.2 定制核心的真实 QUIC/TCP/UDP 回归通过；业务站核心包装器在控制面进程退出后仍执行授权租约到期检查。
+- Chromium 完成业务站创建、注册文件下载、成员分配、Agent 同步、统一订阅和旧独立面板路由验证；合成数据桌面与手机页面无运行错误、无横向溢出。
+- 同站同出口 VLESS/HY2 复用 24 小时内的成功质量报告与标签；出口或归属改变、报告失败/过期时不复用。协议测速结果保留独立。不同业务站不复用链路检测结果。
+- Lite/Pro 分别打包，受校验的 EDITION 文件确定默认安装角色；Pro 的 business 角色无需 PostgreSQL/Redis。源码与安装包经过秘密扫描，最终 tag 和产物校验以对应 Release 为准。
+
+业务站断连最多保留 15 分钟授权，撤销有周期执行延迟；流量采用周期采样及站点预留额度，不承诺零窗口超额。当前业务站测速衡量服务器经指定出口的访问速度，不代表用户到服务器入口的端到端带宽。此处记录安装和功能测试，生产升级与正式发布的最终结果另记于 Release 交付说明。

@@ -168,7 +168,15 @@ func (m *Manager) Recover(ctx context.Context) error {
 	_, err := m.db.ExecContext(ctx, "UPDATE tasks SET state='queued',started=0,next_at=?,error='' WHERE state='running'", time.Now().Unix())
 	return err
 }
-func (m *Manager) Run(ctx context.Context) error {
+func (m *Manager) Run(ctx context.Context) (err error) {
+	parent := ctx
+	defer func() {
+		// Cancellation can race a database claim/prune. A requested shutdown
+		// must complete normally after workers persist their final state.
+		if parent.Err() != nil && errors.Is(err, parent.Err()) {
+			err = nil
+		}
+	}()
 	ctx, stop := context.WithCancel(ctx)
 	defer stop()
 	m.mu.Lock()

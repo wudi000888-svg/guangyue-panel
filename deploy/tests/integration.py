@@ -12,6 +12,8 @@ from pathlib import Path
 
 if os.geteuid() != 0 or os.environ.get('GITHUB_ACTIONS') != 'true':
     raise SystemExit('This integration harness is restricted to disposable GitHub Actions runners.')
+if os.environ.get('GY_INTEGRATION_EDITION')=='business':
+    os.execv(sys.executable,[sys.executable,str(Path(__file__).with_name('business_integration.py')),*sys.argv[1:]])
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import install

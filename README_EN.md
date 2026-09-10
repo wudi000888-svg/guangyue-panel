@@ -1,8 +1,9 @@
+<!-- Current deployment roles are documented below. -->
 # Guangyue Panel · 广月面板
 
 **A next-generation enterprise solution for cross-border e-commerce teams.**
 
-A network resource console for cross-border commerce teams. Lite uses Go, SQLite and Vue 3 on one VPS. Pro adds PostgreSQL, Redis, durable background tasks and authenticated management of independent VPS sites. See [edition selection and Pro setup](docs/EDITIONS.md).
+A network resource console for cross-border commerce teams. Lite uses Go, SQLite and Vue 3 on one VPS. Pro adds PostgreSQL, Redis, durable background tasks and a controller with lightweight business sites, unified subscriptions and scoped exit allocations. See [edition selection and Pro setup](docs/EDITIONS.md).
 
 [中文](README.md) · [Installation](docs/INSTALL.md) · [User guide](docs/USER_GUIDE.md) · [Operations](docs/OPERATIONS.md)
 
@@ -36,4 +37,8 @@ Quality reports retain provider, timestamp, unavailable and conflicting results.
 
 See [CONTRIBUTING](CONTRIBUTING.md) for tests and reproducible build instructions, [architecture](docs/ARCHITECTURE.md), [configuration](docs/CONFIGURATION.md), [security](SECURITY.md), and [release preparation](docs/RELEASE.md).
 
-The panel is LGPL-3.0-only licensed from 0.15.0, retaining the original fake-ui MIT notice in `licenses/guangyue-legacy-MIT.txt`. The accompanying GPL-3.0 text is included. The custom Hysteria patch is MIT. Xray is MPL-2.0 and Mihomo is GPL-3.0; see [third-party notices](THIRD_PARTY_NOTICES.md). Documentation structure is inspired by Sub2API; its branding and screenshots are not included.
+The panel is LGPL-3.0-only licensed from 0.16.0, retaining the original fake-ui MIT notice in `licenses/guangyue-legacy-MIT.txt`. The accompanying GPL-3.0 text is included. The custom Hysteria patch is MIT. Xray is MPL-2.0 and Mihomo is GPL-3.0; see [third-party notices](THIRD_PARTY_NOTICES.md). Documentation structure is inspired by Sub2API; its branding and screenshots are not included.
+
+## Controller and business sites (0.16.0)
+
+Choose the `guangyue-panel-lite-…tar.gz` asset for a standalone SQLite deployment, or `guangyue-panel-pro-…tar.gz` for a controller or business site. The Pro controller uses PostgreSQL and Redis; business sites use SQLite and enroll with `--role business --enrollment-file /root/enrollment.json`. The controller distributes scoped member credentials and exit bindings, aggregates subscriptions, and reserves per-site quotas. Business sites pull over HTTPS and expire authorization after a 15-minute lease. Quality reports are shared by VLESS/HY2 using the same local exit; speed results remain independent. See the [complete business-site guide](docs/BUSINESS-SITES.md) for installation, quotas, recovery and offline limits.

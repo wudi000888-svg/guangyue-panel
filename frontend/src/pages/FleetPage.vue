@@ -31,7 +31,8 @@ onMounted(load);onUnmounted(()=>{newToken.value='';peerForm.token='';});
 </script>
 <template>
   <div class="fleet-page">
-    <TablePageLayout :title="t('群站管理')" :description="t('集中接入和管理不同 VPS 上的独立站点')">
+    <RouterLink to="/fleet">← {{t('返回业务站管理')}}</RouterLink>
+    <TablePageLayout :title="t('独立面板接入')" :description="t('集中接入和管理不同 VPS 上的独立站点')">
       <template #actions><button @click="dialog='token';newToken='' "><KeyRound :size="16"/>{{t('创建接入令牌')}}</button><button class="primary" @click="dialog='peer'"><Plus :size="16"/>{{t('接入站点')}}</button></template>
       <template #notice><p class="pool-intro"><Server :size="20"/><span>{{t('本站标识')}} <code>{{siteID}}</code> · {{t('各站点独立保存数据、密钥和代理核心配置')}}</span></p><p v-if="error&&!dialog&&!removal" class="error" role="alert">{{t(error)}}</p></template>
       <table><thead><tr><th>{{t('站点名称')}}</th><th>{{t('面板地址')}}</th><th>{{t('站点标识')}}</th><th>{{t('连接状态')}}</th><th>{{t('操作')}}</th></tr></thead><tbody>

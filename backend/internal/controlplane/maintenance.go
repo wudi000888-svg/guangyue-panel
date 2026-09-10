@@ -57,7 +57,7 @@ func offlineSnapshot(cfg Config, s *Store, path string) error {
 	return nil
 }
 func importSQLiteSite(cfg Config, dst *Store, path string) error {
-	if cfg.edition() != "pro" {
+	if !cfg.controller() {
 		return errors.New("SQLite migration requires Pro edition")
 	}
 	if filepath.Base(path) != "panel.db" {

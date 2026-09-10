@@ -161,3 +161,21 @@ class InfrastructureBundleTests(unittest.TestCase):
                 shutil.copyfile(Path(install.__file__).parent/name,root/name)
             subprocess.run([sys.executable,str(root/'infrastructure.py'),'--help'],check=True,capture_output=True)
             self.assertFalse((root/'__pycache__').exists())
+
+class BusinessDeploymentTests(unittest.TestCase):
+    def test_business_role_uses_sqlite_without_infrastructure(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path=Path(temp)/'enrollment.json'
+            path.write_text(json.dumps({'site_id':'site_east','controller_url':'https://control.example.com','enrollment_token':'gye_'+'A'*43}))
+            path.chmod(0o600)
+            config=infrastructure.edition_config({},'pro','site_east',role='business',enrollment=path)
+            self.assertEqual(config['database']['driver'],'sqlite')
+            self.assertEqual(config['redis_url'],'')
+            self.assertEqual(config['role'],'business')
+            self.assertEqual(infrastructure.edition_config(config,'pro','site_east'),config)
+            unit=Path(install.DEPLOY)/'guangyue.service'
+            self.assertIn('MemoryMax=160M',infrastructure.service_text(unit,'pro','business'))
+            with self.assertRaises(ValueError):infrastructure.edition_config({},'lite','site_east',role='business',enrollment=path)
+            with self.assertRaises(ValueError):infrastructure.edition_config({},'pro','site_west',role='business',enrollment=path)
+            path.chmod(0o644)
+            with self.assertRaises(ValueError):infrastructure.edition_config({},'pro','site_east',role='business',enrollment=path)

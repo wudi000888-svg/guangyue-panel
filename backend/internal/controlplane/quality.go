@@ -370,17 +370,29 @@ func (a *App) saveQuality(snapshot Node, pool bool, result IPQuality) error {
 	if err != nil {
 		return err
 	}
+	found := false
 	for _, n := range nodes {
 		if n.ID == snapshot.ID {
 			if !sameExit(n, snapshot) || n.ProbeIP != snapshot.ProbeIP {
 				return errors.New("出口已变化，请重新检测")
 			}
-			n.Quality = &result
-			applyQualityIdentity(&n, result)
-			return a.store.saveNode(n)
+			found = true
 		}
 	}
-	return errors.New("节点已不存在")
+	if !found {
+		return errors.New("节点已不存在")
+	}
+	updated := []Node{}
+	for _, n := range nodes {
+		// Ingress protocol does not change the exit tested by measureQuality.
+		// Pool ownership remains separate, and measurements never cross sites.
+		if n.ExitID == "" && sameExit(n, snapshot) && (n.ManagedBy == publicManager) == (snapshot.ManagedBy == publicManager) {
+			n.Quality = &result
+			applyQualityIdentity(&n, result)
+			updated = append(updated, n)
+		}
+	}
+	return a.store.savePoolNodes(nil, updated)
 }
 
 func applyQualityIdentity(n *Node, q IPQuality) {
@@ -440,11 +452,35 @@ func (a *App) measureResourceQuality(ctx context.Context, pool bool, id string) 
 	if !n.Enabled {
 		return IPQuality{}, 400, errors.New("请先启用资源")
 	}
+	if q := a.reusableQuality(n); q != nil {
+		if err := a.saveQuality(n, pool, *q); err == nil {
+			return *q, 200, nil
+		}
+	}
 	q := a.measureQuality(ctx, n)
 	if err := a.saveQuality(n, pool, q); err != nil {
 		return IPQuality{}, 409, errors.New(err.Error())
 	}
 	return q, 200, nil
+}
+
+func (a *App) reusableQuality(n Node) *IPQuality {
+	nodes, err := a.store.nodes()
+	if err != nil {
+		return nil
+	}
+	nodes = append(nodes, n)
+	var latest *IPQuality
+	for _, candidate := range nodes {
+		q := candidate.Quality
+		if !sameExit(n, candidate) || (n.ManagedBy == publicManager) != (candidate.ManagedBy == publicManager) || q == nil || q.Error != "" || q.SchemaVersion != qualitySchemaVersion || !publicIP(q.IP) || candidate.ProbeIP != q.IP || n.ProbeIP != "" && n.ProbeIP != q.IP || time.Since(time.Unix(q.At, 0)) < 0 || time.Since(time.Unix(q.At, 0)) >= 24*time.Hour {
+			continue
+		}
+		if latest == nil || q.At > latest.At {
+			latest = q
+		}
+	}
+	return latest
 }
 
 // One due resource per minute keeps anonymous metadata requests and memory bounded.
@@ -463,6 +499,31 @@ func (a *App) refreshQuality(ctx context.Context) {
 		return
 	}
 	defer a.qualityMu.Unlock()
+	nodes, err := a.store.nodes()
+	if err != nil {
+		return
+	}
+	for _, n := range nodes {
+		if !n.Enabled || n.Exit != "direct" || n.ExitID != "" {
+			continue
+		}
+		interval := 24 * time.Hour
+		if n.Quality != nil && n.Quality.Error != "" {
+			interval = 15 * time.Minute
+		}
+		if n.Quality != nil && n.Quality.SchemaVersion == qualitySchemaVersion && time.Since(time.Unix(n.Quality.At, 0)) < interval {
+			continue
+		}
+		if q := a.reusableQuality(n); q != nil {
+			_ = a.saveQuality(n, false, *q)
+			continue
+		}
+		q := a.measureQuality(ctx, n)
+		if ctx.Err() == nil {
+			_ = a.saveQuality(n, false, q)
+		}
+		return
+	}
 	pools, err := a.store.pools()
 	if err != nil {
 		return

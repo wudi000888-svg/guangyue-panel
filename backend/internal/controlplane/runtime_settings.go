@@ -215,3 +215,9 @@ func (w *runtimeLogWriter) Write(b []byte) (int, error) {
 	}
 	return w.out.Write(b)
 }
+
+func (s *Store) runtimeSnapshot() RuntimeSettings {
+	s.runtimeMu.RLock()
+	defer s.runtimeMu.RUnlock()
+	return s.runtime
+}

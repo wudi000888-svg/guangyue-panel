@@ -36,7 +36,7 @@ def upgrade(bundle, edition=None, site_id=None, infrastructure_file=None):
         (backup / 'units').mkdir()
         for unit in UNITS:
             shutil.copy2('/etc/systemd/system/' + unit + '.service', backup / 'units')
-        if old_config.get('edition')=='pro':
+        if old_config.get('database',{}).get('driver')=='postgres':
             dump_postgres(old_config,backup/'postgres.dump')
             run('runuser','-u','guangyue','--',str(APP/'bin/guangyue'),'-snapshot',str(STATE/'upgrade-snapshot.tar.gz'))
             shutil.move(str(STATE/'upgrade-snapshot.tar.gz'),backup/'database.tar.gz')
@@ -60,11 +60,11 @@ def upgrade(bundle, edition=None, site_id=None, infrastructure_file=None):
         for unit in UNITS:
             dest=Path('/etc/systemd/system')/(unit+'.service')
             source=bundle/'deploy'/dest.name
-            dest.write_text(service_text(source,new_config['edition']) if unit=='guangyue' else source.read_text())
+            dest.write_text(service_text(source,new_config['edition'],new_config.get('role')) if unit=='guangyue' else source.read_text())
             dest.chmod(0o644)
         if migrating:
             run('runuser','-u','guangyue','--',str(APP/'bin/guangyue'),'-import-sqlite',str(STATE/'panel.db'))
-        db_changed = new_config['edition']=='pro'
+        db_changed = new_config.get('database',{}).get('driver')=='postgres'
 
         run('runuser', '-u', 'guangyue', '--', str(APP / 'bin/guangyue'), '-prepare')
         run('runuser', '-u', 'guangyue', '--', str(APP / 'bin/xray'), 'run', '-test', '-c', str(STATE / 'xray.json'))
@@ -84,7 +84,7 @@ def upgrade(bundle, edition=None, site_id=None, infrastructure_file=None):
                 if not path.is_symlink():
                     shutil.chown(path, user='guangyue', group='guangyue')
             shutil.chown(CONFIG, user='root', group='guangyue')
-            if old_config.get('edition')=='pro' and db_changed:
+            if old_config.get('database',{}).get('driver')=='postgres' and db_changed:
                 restore_postgres(old_config,backup/'postgres.dump')
             for unit in UNITS:
                 shutil.copy2(backup / 'units' / (unit + '.service'), '/etc/systemd/system/' + unit + '.service')

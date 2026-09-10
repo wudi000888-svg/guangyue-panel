@@ -1,0 +1,1 @@
+CREATE TABLE IF NOT EXISTS business_sites (id TEXT PRIMARY KEY, enroll_hash TEXT UNIQUE, token_hash TEXT UNIQUE, doc BLOB NOT NULL);

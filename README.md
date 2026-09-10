@@ -10,7 +10,7 @@
 
 [English](README_EN.md) · [安装指南](docs/INSTALL.md) · [使用手册](docs/USER_GUIDE.md) · [Nginx 共存](docs/NGINX.md) · [运维与备份](docs/OPERATIONS.md)
 
-![version](https://img.shields.io/badge/version-0.15.0-2563eb)
+![version](https://img.shields.io/badge/version-0.16.0-2563eb)
 ![license](https://img.shields.io/badge/panel_license-LGPL--3.0-16a34a)
 ![platform](https://img.shields.io/badge/server-Linux_amd64-475569)
 
@@ -20,7 +20,7 @@
 
 把服务器入口、出口 IP、员工订阅和可追溯的质量检测放进一个工作台，减少跨境团队配置和切换网络资源的重复工作。采用 Go + Vue 3。Lite 使用 SQLite，Pro 使用 PostgreSQL + Redis，提供任务中心与多个 VPS 站点的集中接入和管理。
 
-“企业级”描述团队管理与运维场景。每个站点由一个控制器独占管理；Pro 支持多个独立站点联邦管理，不提供同站点多主高可用、组织级租户隔离、计费或服务等级承诺。网络与账号合规由部署方和所使用平台的规则决定。
+“企业级”描述团队管理与运维场景。每个站点由一个控制器独占管理；Pro 支持主控站＋业务站、统一成员授权与订阅，不提供同站点多主高可用、组织级租户隔离、计费或服务等级承诺。网络与账号合规由部署方和所使用平台的规则决定。
 
 ## 功能一览
 
@@ -35,12 +35,16 @@
 | 订阅体验 | Raw / Base64 / Mihomo，节点链接一键复制、二维码、成员可见质量报告 |
 | IP 质量 | 多源地理位置、ASN、代理风险信号、公开页面可达性；保留来源、时间、未知和冲突 |
 | DNS / IPv6 | 每节点 DNS 出口策略，安全 DoH 与 IPv6 允许/阻断选项 |
-| 任务与群站 | 持久化任务队列、取消与重启恢复、配置版本；Pro 支持 HTTPS 站点接入、令牌撤销和管理切换 |
+| 任务与群站 | 持久化任务队列、取消与重启恢复、配置版本；Pro 主控＋业务站、统一订阅、出口分配、站点额度与远程检测 |
 | 工作台 | 简易/专业模式、中文/English、主题、站内信、品牌与系统设置 |
 | 运行模式 | 常规 / 无日志切换，与简易/专业界面模式独立 |
 | 部署 | Nginx TCP 443 SNI 分流与 HY2 UDP 443；非特权服务、状态备份、升级回滚 |
 
 > 流媒体或 AI 网站的公开页面可达，不等于账号登录、播放、支付或完整业务解锁。质量标签基于可核验的数据；不会把信息缺失强行标为“家宽”或“原生”。
+
+## 下载版本
+
+在 [Releases](https://github.com/wudi000888-svg/guangyue-panel/releases/latest) 的 Assets 选择 `guangyue-panel-lite-…tar.gz`（单机）或 `guangyue-panel-pro-…tar.gz`（主控／业务站），并校验 `SHA256SUMS`。Pro 业务站安装无需 PostgreSQL 或 Redis。
 
 ## 快速开始
 
@@ -67,6 +71,7 @@ sudo python3 deploy/install.py --bundle "$PWD" \
 | 文档 | 适用场景 |
 | --- | --- |
 | [版本选择与 Pro 部署](docs/EDITIONS.md) | Lite/Pro 对比、基础设施、迁移与群站接入 |
+| [主控＋业务站](docs/BUSINESS-SITES.md) | 注册业务站、统一订阅、成员额度、出口分配与离线边界 |
 | [安装指南](docs/INSTALL.md) | DNS、证书、依赖、版本包、首次登录、卸载 |
 | [使用手册](docs/USER_GUIDE.md) | 从创建用户到导入出口、发放订阅与排错 |
 | [Nginx 共存](docs/NGINX.md) | 与现有 HTTPS 网站共用 TCP 443，保留自定义 SNI |
@@ -104,4 +109,4 @@ flowchart LR
 
 文档组织和专业控制台分区参考 [Sub2API](https://github.com/Wei-Shaw/sub2api)；没有复制其产品标识、截图或文案。感谢 Xray、Hysteria、Mihomo、Go、Vue 与 SQLite 生态。
 
-面板源码自 0.15.0 使用 [LGPL-3.0-only](LICENSE)，配套 [GPL-3.0 文本](licenses/GPL-3.0.txt)和[历史 MIT 声明](licenses/guangyue-legacy-MIT.txt)随项目提供。Hysteria 修改补丁使用 MIT；Xray 和 Mihomo 分别适用 MPL-2.0 与 GPL-3.0，详见第三方许可。
+面板源码自 0.16.0 使用 [LGPL-3.0-only](LICENSE)，配套 [GPL-3.0 文本](licenses/GPL-3.0.txt)和[历史 MIT 声明](licenses/guangyue-legacy-MIT.txt)随项目提供。Hysteria 修改补丁使用 MIT；Xray 和 Mihomo 分别适用 MPL-2.0 与 GPL-3.0，详见第三方许可。
