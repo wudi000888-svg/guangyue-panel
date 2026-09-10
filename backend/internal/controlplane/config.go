@@ -17,9 +17,10 @@ import (
 	"path/filepath"
 )
 
-const version = "0.18.0"
+const version = "0.19.0"
 
 type Config struct {
+	HY2Optimized    bool                `json:"hy2_optimized,omitempty"`
 	Role            string              `json:"role,omitempty"`
 	ControllerURL   string              `json:"controller_url,omitempty"`
 	EnrollmentToken string              `json:"enrollment_token,omitempty"`

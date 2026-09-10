@@ -1,0 +1,24 @@
+[Unit]
+Description=Guangyue Panel bounded network optimization
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/bin/python3 /opt/guangyue-updater/network.py apply
+Environment=PYTHONDONTWRITEBYTECODE=1
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+# /etc must allow atomic replacement of the root-owned configuration file.
+# The fixed worker only writes its two named files; no caller-supplied paths.
+ReadWritePaths=/etc /var/lib/guangyue-updater /run/lock
+ProtectHome=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+MemoryMax=96M
+TasksMax=32
+TimeoutStartSec=120
+Restart=on-failure
+RestartSec=5

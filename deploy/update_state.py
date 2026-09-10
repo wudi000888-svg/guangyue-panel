@@ -119,7 +119,7 @@ def setup(initial, source):
                 continue
             temp = HELPER / (path.name + '.new'); shutil.copyfile(path, temp); temp.chmod(0o644); os.replace(temp, HELPER / path.name)
         helper_version.write_text(wanted + '\n'); helper_version.chmod(0o644)
-    for name in ['guangyue-updater.socket', 'guangyue-updater.service']:
+    for name in ['guangyue-updater.socket', 'guangyue-updater.service', 'guangyue-network.service']:
         dest = Path('/etc/systemd/system') / name
         if (source / name).exists():
             shutil.copyfile(source / name, dest); dest.chmod(0o644)

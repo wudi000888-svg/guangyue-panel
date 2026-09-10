@@ -155,7 +155,7 @@ func Run() {
 		if err = a.prepare(); err != nil {
 			log.Fatal(err)
 		}
-		if err = store.markPreparedNodes(); err != nil {
+		if err = store.markPreparedNodes(cfg.HY2Optimized); err != nil {
 			log.Fatal(err)
 		}
 		return

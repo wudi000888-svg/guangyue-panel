@@ -12,6 +12,7 @@ import { Bell, ArrowUpRight, ChevronRight, KeyRound, LoaderCircle, LogOut, Menu,
 import { t } from "./i18n";
 import LanguageSwitcher from "./LanguageSwitcher.vue";
 import ViewModeSwitcher from "./ViewModeSwitcher.vue";
+const isDesktop = ref(matchMedia('(min-width: 901px)').matches);
 const mobileTools = ref(false), drawer = ref<HTMLElement|null>(null), toolsDialog = ref<HTMLElement|null>(null);
 const quickNav = computed(() => ['overview','ips','nodes','users','subscription'].flatMap(id => nav.value.filter(item => item.id === id)));
 const mobileLayer = computed(() => mobileNav.value || mobileTools.value);
@@ -41,7 +42,7 @@ function mobileKeys(e: KeyboardEvent) {
   else if (!e.shiftKey && (active === last || !box?.contains(active))) { e.preventDefault(); first.focus(); }
 }
 let desktop: MediaQueryList;
-function onDesktop() { if (desktop.matches) closeMobile(); }
+function onDesktop() { isDesktop.value = desktop.matches; if (desktop.matches) closeMobile(); }
 onMounted(() => { desktop = matchMedia('(min-width: 901px)'); desktop.addEventListener('change', onDesktop); document.addEventListener('keydown', mobileKeys); });
 onBeforeUnmount(() => { closeMobile(); desktop?.removeEventListener('change', onDesktop); document.removeEventListener('keydown', mobileKeys); });
 </script>
@@ -181,7 +182,7 @@ onBeforeUnmount(() => { closeMobile(); desktop?.removeEventListener('change', on
         <div class="top-actions">
  <button v-if="selectedSite" class="site-switch desktop-action" @click="switchSite('')">{{selectedSiteName}} · {{t('返回本站')}}</button>
  <span v-else class="edition-badge desktop-action">{{state.system.edition==='pro'?'PRO':'LITE'}}</span>
-          <ViewModeSwitcher class="desktop-action" v-model="viewMode"/>
+          <ViewModeSwitcher v-if="isDesktop" class="desktop-action" v-model="viewMode"/>
           <LanguageSwitcher/>
           <button v-if="!simpleMode" class="icon inbox-bell" :title="t('站内信')" :aria-label="t('站内信')" @click="go('messages')"><Bell :size="18"/><span v-if="state.unread_messages" class="bell-count">{{state.unread_messages>99?'99+':state.unread_messages}}</span></button>
           <span class="live-label"
@@ -254,7 +255,7 @@ onBeforeUnmount(() => { closeMobile(); desktop?.removeEventListener('change', on
     </div>
   </div>
   <Teleport to="body">
-    <div v-if="mobileTools && state" class="mobile-tools-shade" @click.self="closeMobile">
+    <div v-if="!isDesktop && mobileTools && state" class="mobile-tools-shade" @click.self="closeMobile">
       <section id="mobile-tools" ref="toolsDialog" class="mobile-tools-panel" role="dialog" aria-modal="true" :aria-label="t('显示与账户')" tabindex="-1">
         <header><div><strong>{{state.me.username}}</strong><small>{{owner?t('管理员'):t('企业成员')}} · {{(state.system.edition||'lite').toUpperCase()}}</small></div><button class="icon" :aria-label="t('关闭')" @click="closeMobile"><X :size="20"/></button></header>
         <div class="mobile-preference"><span>{{t('界面模式')}}</span><ViewModeSwitcher v-model="viewMode"/></div>

@@ -25,6 +25,23 @@ func (a *App) updatesAPI(w http.ResponseWriter, r *http.Request, actor Record) {
 	path := strings.TrimPrefix(r.URL.Path, "/api/updates")
 	var body []byte
 	switch {
+	case r.URL.Path == "/api/network-settings" && r.Method == "GET":
+		path = "/network"
+	case r.URL.Path == "/api/network-settings" && r.Method == "POST":
+		var in struct {
+			BBR      *bool  `json:"bbr"`
+			HY2      *bool  `json:"hy2"`
+			Revision string `json:"revision"`
+		}
+		if !decode(w, r, &in) {
+			return
+		}
+		if in.BBR == nil || in.HY2 == nil || !regexp.MustCompile(`^(initial|[0-9]{1,24})$`).MatchString(in.Revision) {
+			failure(w, 400, "网络优化请求无效")
+			return
+		}
+		body, _ = json.Marshal(in)
+		path = "/network"
 	case path == "" && r.Method == "GET":
 		path = "/state"
 	case path == "/check" && r.Method == "POST":
@@ -61,7 +78,7 @@ func (a *App) updatesAPI(w http.ResponseWriter, r *http.Request, actor Record) {
 	response, err := client.Do(req)
 	if err != nil {
 		if r.Method == "GET" {
-			jsonResponse(w, 200, object{"available": false, "current_version": version, "error": "此部署尚未启用在线更新服务"})
+			jsonResponse(w, 200, object{"available": false, "current_version": version, "error": "此部署尚未启用维护服务"})
 			return
 		}
 		failure(w, 503, "更新服务暂不可用，请稍后重试")
@@ -73,8 +90,12 @@ func (a *App) updatesAPI(w http.ResponseWriter, r *http.Request, actor Record) {
 		failure(w, 502, "更新服务响应无效")
 		return
 	}
-	if path == "/apply" && response.StatusCode == 200 {
-		a.store.audit(actor.Username, "version_operation", string(body))
+	if (path == "/apply" || path == "/network" && r.Method == "POST") && response.StatusCode == 200 {
+		action := "version_operation"
+		if path == "/network" {
+			action = "network_optimization"
+		}
+		a.store.audit(actor.Username, action, string(body))
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(response.StatusCode)

@@ -69,7 +69,7 @@ func (a *App) desiredCoreHash() (string, error) {
 	for _, u := range records {
 		users = append(users, object{"id": u.ID, "active": u.Active(), "vless": u.VLESS, "hy2": u.HY2, "credentials": u.Credentials})
 	}
-	b, err := json.Marshal(object{"vless": nodeHash(nodes, "vless"), "hy2": nodeHash(nodes, "hy2"), "users": users, "sni": a.cfg.RealitySNI, "target": a.cfg.RealityTarget})
+	b, err := json.Marshal(object{"hy2_optimized": a.cfg.HY2Optimized, "vless": nodeHash(nodes, "vless"), "hy2": nodeHash(nodes, "hy2"), "users": users, "sni": a.cfg.RealitySNI, "target": a.cfg.RealityTarget})
 	return digest(string(b)), err
 }
 func (a *App) reconcileIfNeeded() error {

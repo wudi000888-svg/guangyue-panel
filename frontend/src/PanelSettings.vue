@@ -8,7 +8,8 @@ import { onMounted, onUnmounted, reactive, ref } from 'vue';
 import { Settings2, Save, Building2, Languages, LifeBuoy, Info } from 'lucide-vue-next';
 import { t } from './i18n';
 import RuntimeSettings from './RuntimeSettings.vue';
-defineProps<{simpleMode?:boolean}>();
+import NetworkSettings from './NetworkSettings.vue';
+defineProps<{simpleMode?:boolean;remoteSite?:boolean}>();
 export type SiteSettings = {panel_name:string;organization:string;default_locale:string;support_email:string;login_notice:string;revision:string};
 const emit=defineEmits<{saved:[]}>();
 const form=reactive<SiteSettings>({panel_name:'',organization:'',default_locale:'zh-CN',support_email:'',login_notice:'',revision:''});
@@ -23,6 +24,7 @@ onMounted(load);
   <p v-if="error" class="error" role="alert">{{t(error)}} <button @click="load">{{t('重新加载')}}</button></p>
   <p v-if="saved" class="settings-saved" role="status">{{t('系统设置已保存并生效')}}</p>
   <RuntimeSettings @updated="emit('saved')"/>
+  <NetworkSettings v-if="!remoteSite"/>
   <form v-if="ready" @submit.prevent="save">
    <div class="settings-grid"><div class="settings-sections">
     <section class="settings-card"><header><Building2 :size="19"/><div><h2>{{t('品牌与工作区')}}</h2><p>{{t('显示在登录页、侧边栏与浏览器标题中')}}</p></div></header><div class="settings-fields"><label>{{t('面板名称')}}<input v-model="form.panel_name" required maxlength="40" :aria-label="t('面板名称')"/></label><label>{{t('组织名称')}}<input v-model="form.organization" required maxlength="60" :aria-label="t('组织名称')"/></label></div></section>
