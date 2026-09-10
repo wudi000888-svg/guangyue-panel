@@ -91,6 +91,10 @@ func TestBusinessLifecycle(t *testing.T) {
 	if err := agent.syncBusinessAgent(ctx, server.Client()); err != nil {
 		t.Fatal(err)
 	}
+	listing := req(t, master, owner, "GET", "/api/business-sites", nil)
+	if strings.Contains(listing.Body.String(), `"nodes":null`) || strings.Contains(listing.Body.String(), `"grants":null`) {
+		t.Fatal("empty site collections must be arrays")
+	}
 	catalog, err := master.subscriptionCatalog(user, false, "")
 	if err != nil || len(catalog) != 4 {
 		t.Fatalf("catalog: %d %v", len(catalog), err)

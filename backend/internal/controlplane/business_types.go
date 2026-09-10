@@ -76,6 +76,12 @@ type BusinessSite struct {
 }
 
 func (v *BusinessSite) defaults() {
+	if v.Nodes == nil {
+		v.Nodes = []Node{}
+	}
+	if v.Grants == nil {
+		v.Grants = []BusinessGrant{}
+	}
 	if v.Usage == nil {
 		v.Usage = map[int64]BusinessUsage{}
 	}
@@ -87,6 +93,7 @@ func (v *BusinessSite) defaults() {
 	}
 }
 func (v BusinessSite) public() BusinessSite {
+	v.defaults()
 	v.PendingToken = ""
 	v.SentNodes = nil
 	v.IssuedNodes = nil

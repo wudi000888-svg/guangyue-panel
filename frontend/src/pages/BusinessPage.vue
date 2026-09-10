@@ -17,7 +17,7 @@ const createForm=reactive({id:'',name:'',group:''});const members=ref<Record<num
 const allUsers=computed(()=>state.value?.users||[]);const pools=computed(()=>(state.value?.ip_pool||[]).filter(p=>p.enabled));
 const online=computed(()=>sites.value.filter(s=>s.last_seen>Date.now()/1000-90).length);
 const siteStatus=(s:Site)=>!s.info?'等待注册':s.error?'配置异常':!s.enabled?'已停用':s.lease_until<=Date.now()/1000?'授权已过期':s.last_seen<Date.now()/1000-90?'连接中断':s.applied!==s.desired?'等待同步':'已同步';
-async function load(){try{const out=await api<{sites:Site[]}>();sites.value=out.sites;loaded.value=true;error.value='';}catch(e){if(!isCancelled(e))error.value=(e as Error).message;}}
+async function load(){try{const out=await api<{sites:Site[]}>();sites.value=out.sites.map(s=>({...s,nodes:s.nodes||[],grants:s.grants||[]}));loaded.value=true;error.value='';}catch(e){if(!isCancelled(e))error.value=(e as Error).message;}}
 function edit(site:Site){editing.value=structuredClone(toRaw(site));members.value={};for(const user of allUsers.value){const g=site.grants.find(g=>g.user_id===user.id);members.value[user.id]={selected:!!g,gib:g?g.quota/1073741824:0};}error.value='';}
 function close(){if(busy.value)return;editing.value=null;creating.value=false;removing.value=null;enrollment.value=null;error.value='';}
 async function create(){busy.value=true;try{const out=await api<{enrollment:Record<string,string>}>('','POST',createForm);enrollment.value=out.enrollment;await load();}catch(e){if(!isCancelled(e))error.value=(e as Error).message;}finally{busy.value=false;}}
