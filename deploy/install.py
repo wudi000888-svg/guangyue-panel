@@ -102,6 +102,9 @@ def preflight(args):
     for unit in UNITS:
         if run('systemctl', 'show', unit, '--property=LoadState', '--value').strip() != 'not-found':
             raise ValueError('existing service: ' + unit)
+    for path in ['/var/lib/guangyue-updater', '/opt/guangyue-updater', '/etc/systemd/system/guangyue-updater.socket', '/etc/systemd/system/guangyue-updater.service']:
+        if Path(path).exists() or Path(path).is_symlink():
+            raise ValueError('existing updater installation; use upgrade')
     verify_bundle(args.bundle)
     edition_config({},getattr(args,'edition','lite'),getattr(args,'site_id','default'),getattr(args,'infrastructure_file',None),getattr(args,'role',None),getattr(args,'enrollment_file',None))
     render(args.panel_domain, args.node_domain, args.reality_sni, args.web_domain)
@@ -127,11 +130,13 @@ def preflight(args):
         run('nginx', '-t', '-c', str(path / 'nginx.conf'))
 
 
-def health():
+def health(expected=None):
     for _ in range(20):
         try:
             with urllib.request.build_opener(urllib.request.ProxyHandler({})).open('http://127.0.0.1:19100/api/health', timeout=2) as response:
                 if response.status == 200:
+                    if expected and json.load(response).get('version') != expected:
+                        raise ValueError('running version does not match the selected release')
                     run('systemctl', 'is-active', '--quiet', *UNITS, 'nginx')
                     return
         except Exception:
@@ -215,7 +220,13 @@ def install(args):
         run('systemctl', 'enable', '--now', *UNITS)
         run('systemctl', 'reload', 'nginx')
         health()
+        import update_state
+        created += [update_state.ROOT, update_state.HELPER,
+                    Path('/etc/systemd/system/guangyue-updater.socket'),
+                    Path('/etc/systemd/system/guangyue-updater.service')]
+        update_state.setup((bundle / 'VERSION').read_text().strip(), bundle / 'deploy')
     except Exception:
+        subprocess.run(['systemctl', 'disable', '--now', 'guangyue-updater.socket', 'guangyue-updater.service'], capture_output=True)
         subprocess.run(['systemctl', 'disable', '--now', *UNITS], capture_output=True)
         shutil.copy2(backup / 'nginx.conf', '/etc/nginx/nginx.conf')
         # Preserve failed state and credentials privately for diagnosis/retry.

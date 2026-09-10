@@ -19,6 +19,7 @@ import (
 )
 
 type App struct {
+	updateClient     *http.Client
 	controllerLease  *persistence.ControllerLease
 	gatewaySlots     chan struct{}
 	cache            *cachepkg.Cache

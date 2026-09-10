@@ -19,8 +19,8 @@ flowchart TB
 
 | Release asset | 用途 | 默认行为 |
 | --- | --- | --- |
-| `guangyue-panel-lite-0.16.0-linux-amd64.tar.gz` | 单 VPS 低资源部署 | Lite / SQLite / 单机管理 |
-| `guangyue-panel-pro-0.16.0-linux-amd64.tar.gz` | 主控或业务站 | 默认主控；传 `--role business` 安装业务站 |
+| `guangyue-panel-lite-0.17.0-linux-amd64.tar.gz` | 单 VPS 低资源部署 | Lite / SQLite / 单机管理 |
+| `guangyue-panel-pro-0.17.0-linux-amd64.tar.gz` | 主控或业务站 | 默认主控；传 `--role business` 安装业务站 |
 
 两个包共享核心业务代码，各自带有受校验的 `EDITION` 标记。安装器读取标记决定默认版本；`--edition` 可显式选择。升级默认沿用当前版本、角色与站点身份，不能通过普通升级把业务站改成主控。主控建议 2 核 2 GiB 起步；业务站建议 1 核 1 GiB，控制面沿用 Lite 的 48 MiB Go 内存目标与 160 MiB systemd 上限，不安装 PostgreSQL/Redis。总内存仍包含 Nginx、代理核心和操作系统。
 

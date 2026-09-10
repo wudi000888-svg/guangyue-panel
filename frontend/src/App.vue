@@ -4,6 +4,7 @@ import { RouterView } from "vue-router";
 import { usePanel } from "./composables/usePanel";
 import { panelKey } from "./composables/panelContext";
 import PanelDialogs from "./components/PanelDialogs.vue";
+import PanelUpdater from "./components/PanelUpdater.vue";
 const panel=usePanel();
 provide(panelKey,panel);
 const { selectedSite, selectedSiteName, switchSite, api, state, ready, busy, error, page, mobileNav, site, login, modal, theme, sideCollapsed, viewMode, simpleMode, toggleTheme, confirmation, owner, pendingHY, titles, pageDescriptions, navGroups, currentGroup, date, refresh, task, signIn, signOut, go } = panel;
@@ -71,10 +72,11 @@ import ViewModeSwitcher from "./ViewModeSwitcher.vue";
         ><span class="brand-icon"><RadioTower :size="25" /></span
         ><span class="brand-name"
           >{{site.panel_name}}<small
-            >{{ t("企业控制台 ·") }}{{ state.system.version.split("-")[0] }}</small
+            >{{ t("企业控制台") }}<template v-if="!owner || selectedSite"> · v{{ state.system.version.split("-")[0] }}</template></small
           ></span
         ></a
       >
+      <PanelUpdater v-if="owner && !selectedSite" :version="state.system.version.split('-')[0]"/>
       <div class="workspace">
         <span class="workspace-symbol"><Building2 :size="16" /></span>
         <div>

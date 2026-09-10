@@ -1,0 +1,12 @@
+[Unit]
+Description=Guangyue Panel local update control
+
+[Socket]
+ListenStream=/run/guangyue-update.sock
+SocketUser=root
+SocketGroup=guangyue
+SocketMode=0660
+RemoveOnStop=true
+
+[Install]
+WantedBy=sockets.target
