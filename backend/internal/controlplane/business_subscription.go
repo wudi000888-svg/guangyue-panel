@@ -9,6 +9,11 @@ import (
 // No network call occurs when serving a subscription. Only a site's acknowledged
 // policy and scoped credentials enter the catalog; transport secrets stay local.
 func (a *App) subscriptionCatalog(record Record, public bool, protocol string) ([]subscriptionEntry, error) {
+	resolved := []Record{record}
+	if err := a.store.resolveAccess(resolved); err != nil {
+		return nil, err
+	}
+	record = resolved[0]
 	nodes, err := a.store.nodes()
 	if err != nil {
 		return nil, err
@@ -26,7 +31,7 @@ func (a *App) subscriptionCatalog(record Record, public bool, protocol string) (
 	}
 	for _, u := range local {
 		if u.ID == record.ID && u.Active() {
-			entries = subscriptionEntries(a.cfg, record, selected, protocol)
+			entries = subscriptionEntries(a.cfg, u, selected, protocol)
 			break
 		}
 	}

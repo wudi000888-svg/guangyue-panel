@@ -104,7 +104,11 @@ func Run() {
 	} else {
 		debug.SetMemoryLimit(48 << 20)
 	}
-	store, err := openConfiguredStore(cfg)
+	openDatabase := openConfiguredStore
+	if *importSQLite != "" {
+		openDatabase = openUninitializedStore
+	}
+	store, err := openDatabase(cfg)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -260,7 +264,10 @@ func (a *App) loop(ctx context.Context) {
 		} else {
 			a.trafficError = ""
 		}
-		err := a.reconcileIfNeeded()
+		err := a.advanceQuotaPeriods(time.Now().Unix())
+		if err == nil {
+			err = a.reconcileIfNeeded()
+		}
 		if err != nil {
 			a.status = "error"
 			a.syncError = err.Error()

@@ -39,14 +39,17 @@ var publicSources = []PublicSource{
 }
 
 type PublicSettings struct {
-	Enabled         bool     `json:"enabled"`
-	IntervalMinutes int      `json:"interval_minutes"`
-	MaxResources    int      `json:"max_resources"`
-	MaxLatencyMS    int64    `json:"max_latency_ms"`
-	MinMbps         float64  `json:"min_mbps"`
-	CandidateLimit  int      `json:"candidate_limit"`
-	Sources         []string `json:"sources"`
-	Revision        string   `json:"revision"`
+	NodePolicyVersion int      `json:"node_policy_version"`
+	NodeRateMilli     int64    `json:"node_rate_milli"`
+	NodeGroupIDs      []string `json:"node_group_ids"`
+	Enabled           bool     `json:"enabled"`
+	IntervalMinutes   int      `json:"interval_minutes"`
+	MaxResources      int      `json:"max_resources"`
+	MaxLatencyMS      int64    `json:"max_latency_ms"`
+	MinMbps           float64  `json:"min_mbps"`
+	CandidateLimit    int      `json:"candidate_limit"`
+	Sources           []string `json:"sources"`
+	Revision          string   `json:"revision"`
 }
 type PublicEvent struct {
 	At      int64  `json:"at"`
@@ -78,7 +81,7 @@ type PublicStatus struct {
 }
 
 func defaultPublicSettings() PublicSettings {
-	return PublicSettings{IntervalMinutes: 60, MaxResources: 3, MaxLatencyMS: 1500, MinMbps: 2, CandidateLimit: 80, Sources: []string{"proxifly", "monosans-http", "monosans-socks5", "speedx-http", "speedx-socks5", "clarketm-http"}}
+	return PublicSettings{NodePolicyVersion: 1, NodeRateMilli: 1000, NodeGroupIDs: []string{legacyPublicGroup}, IntervalMinutes: 60, MaxResources: 3, MaxLatencyMS: 1500, MinMbps: 2, CandidateLimit: 80, Sources: []string{"proxifly", "monosans-http", "monosans-socks5", "speedx-http", "speedx-socks5", "clarketm-http"}}
 }
 func (s *Store) publicSettings() PublicSettings {
 	c := defaultPublicSettings()
@@ -206,6 +209,18 @@ func (a *App) savePublicSettings(w http.ResponseWriter, r *http.Request, actor R
 	a.publicMu.Lock()
 	a.mu.Lock()
 	old := a.store.publicSettings()
+	if c.NodePolicyVersion == 0 {
+		c.NodePolicyVersion = 1
+		c.NodeRateMilli = old.NodeRateMilli
+		c.NodeGroupIDs = old.NodeGroupIDs
+	}
+	policy := Node{PolicyVersion: c.NodePolicyVersion, RateMilli: c.NodeRateMilli, GroupIDs: c.NodeGroupIDs, ManagedBy: publicManager}
+	if err := a.store.validateNodePolicy(&policy, nil); err != nil {
+		a.mu.Unlock()
+		a.publicMu.Unlock()
+		failure(w, 400, err.Error())
+		return
+	}
 	if old.Revision != c.Revision {
 		a.mu.Unlock()
 		a.publicMu.Unlock()
@@ -344,7 +359,13 @@ func (a *App) applyPublicSetLocked(desired []IPResource) error {
 					return errors.New("节点身份冲突")
 				}
 			}
-			n := bindPool(Node{ID: id, Protocol: proto, Enabled: true, ManagedBy: publicManager}, p)
+			policy := a.store.publicSettings()
+			n := bindPool(Node{ID: id, Protocol: proto, Enabled: true, ManagedBy: publicManager, PolicyVersion: 1, RateMilli: policy.NodeRateMilli, GroupIDs: append([]string{}, policy.NodeGroupIDs...), RateRevision: randomToken(12)}, p)
+			for _, old := range oldPublicNodes {
+				if old.ID == id && nodeRate(old) == n.RateMilli {
+					n.RateRevision = normalizeNodePolicy(old).RateRevision
+				}
+			}
 			n.Speed = p.Speed
 			newNodes = append(newNodes, n)
 			wantNodes[id] = true
@@ -377,7 +398,9 @@ func (a *App) applyPublicSetLocked(desired []IPResource) error {
 		}
 	}
 	if !a.cfg.Dev {
-		_ = a.collect()
+		if err := a.collect(); err != nil {
+			return err
+		}
 		recordsNow, e := a.store.records()
 		if e != nil {
 			return e
@@ -391,6 +414,11 @@ func (a *App) applyPublicSetLocked(desired []IPResource) error {
 			}
 		}
 	}
+	sites, e := a.store.businessSites()
+	if e != nil {
+		return e
+	}
+	previousSites, _ := pruneBusinessNodes(sites, removePools)
 	if err = a.store.saveInfrastructure(desired, newNodes, records, removePools, removeNodes); err != nil {
 		return err
 	}
@@ -413,7 +441,7 @@ func (a *App) applyPublicSetLocked(desired []IPResource) error {
 				newNodeIDs = append(newNodeIDs, n.ID)
 			}
 		}
-		restore := a.store.saveInfrastructure(oldPublicPools, oldPublicNodes, oldRecords, newPoolIDs, newNodeIDs)
+		restore := a.store.saveInfrastructure(oldPublicPools, oldPublicNodes, oldRecords, newPoolIDs, newNodeIDs, previousSites...)
 		_ = a.store.setMeta("x_nodes", "")
 		_ = a.store.setMeta("hy_nodes", "")
 		rollback := a.reconcile()

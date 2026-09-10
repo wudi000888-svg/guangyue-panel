@@ -19,8 +19,8 @@ flowchart TB
 
 | Release asset | 用途 | 默认行为 |
 | --- | --- | --- |
-| `guangyue-panel-lite-0.19.2-linux-amd64.tar.gz` | 单 VPS 低资源部署 | Lite / SQLite / 单机管理 |
-| `guangyue-panel-pro-0.19.2-linux-amd64.tar.gz` | 主控或业务站 | 默认主控；传 `--role business` 安装业务站 |
+| `guangyue-panel-lite-0.20.0-linux-amd64.tar.gz` | 单 VPS 低资源部署 | Lite / SQLite / 单机管理 |
+| `guangyue-panel-pro-0.20.0-linux-amd64.tar.gz` | 主控或业务站 | 默认主控；传 `--role business` 安装业务站 |
 
 两个包共享核心业务代码，各自带有受校验的 `EDITION` 标记。安装器读取标记决定默认版本；`--edition` 可显式选择。升级默认沿用当前版本、角色与站点身份，不能通过普通升级把业务站改成主控。主控建议 2 核 2 GiB 起步；业务站建议 1 核 1 GiB，控制面沿用 Lite 的 48 MiB Go 内存目标与 160 MiB systemd 上限，不安装 PostgreSQL/Redis。总内存仍包含 Nginx、代理核心和操作系统。
 
@@ -102,3 +102,7 @@ sudo python3 deploy/upgrade.py --bundle "$PWD"
 健康状态应为 `edition=pro`、`role=business` 和注册的 `site_id`。健康接口证明进程运行，主控“已同步”证明配置已确认；最后仍需真实客户端分别验证 VLESS 和 HY2 的 TCP/UDP。保留升级恢复目录，不把注册文件、数据库、订阅 URI、二维码或密钥上传到 GitHub。
 
 原 0.15 的联邦管理位于 **独立面板接入**，用于仍拥有独立用户库和订阅的旧站点；它与本节业务站模式分别管理，不会自动合并旧用户。
+
+## Plans and node rates (0.20.0)
+
+See [the plans and accounting guide](PLANS.md) for permission groups, manual entitlements, weighted quotas, distributed periods, migration and downgrade restrictions.

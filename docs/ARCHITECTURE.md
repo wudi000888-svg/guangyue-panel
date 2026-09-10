@@ -39,3 +39,7 @@ Nginx stream 负责 TCP 443 的 SNI 分流：面板/网站进入本地 HTTPS，R
 站点管理员和成员权限由后端强制执行，前端守卫只控制可见导航。Pro 管理网关使用短期可撤销令牌、严格路由范围、HTTPS 校验、公网地址校验、禁止重定向和请求/响应上限；不转发 Cookie。远端身份与注册时 site_id 不符则拒绝。站点 schema 不替代不同租户的数据库安全权限。
 
 备份先形成一致快照，网络下载不会长期持有业务锁。恢复先在暂存目录验证密钥、加密集合、迁移和生成配置，再替换业务数据与文件，失败尝试回滚。跨文件与数据库恢复不具备断电原子性；升级专门保存数据库 schema dump，并保留人工恢复资料。[运维指南](OPERATIONS.md)说明限制与操作步骤。
+
+## Plans and node rates (0.20.0)
+
+See [the plans and accounting guide](PLANS.md) for permission groups, manual entitlements, weighted quotas, distributed periods, migration and downgrade restrictions.

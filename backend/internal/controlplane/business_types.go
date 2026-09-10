@@ -27,17 +27,31 @@ type BusinessInfo struct {
 	ShortID       string `json:"short_id"`
 }
 type BusinessGrant struct {
-	UserID int64 `json:"user_id"`
-	Quota  int64 `json:"quota"`
+	PeriodID string `json:"period_id,omitempty"`
+	Budget   int64  `json:"budget,omitempty"`
+	UserID   int64  `json:"user_id"`
+	Quota    int64  `json:"quota"`
 }
 type BusinessUsage struct {
-	Upload   int64 `json:"upload"`
-	Download int64 `json:"download"`
-	VLESS    int64 `json:"vless"`
-	HY2      int64 `json:"hy2"`
+	PeriodID          string `json:"period_id,omitempty"`
+	UploadRemainder   int64  `json:"upload_remainder,omitempty"`
+	DownloadRemainder int64  `json:"download_remainder,omitempty"`
+	Metered           bool   `json:"metered,omitempty"`
+	QuotaUpload       int64  `json:"quota_upload,omitempty"`
+	QuotaDownload     int64  `json:"quota_download,omitempty"`
+	Upload            int64  `json:"upload"`
+	Download          int64  `json:"download"`
+	VLESS             int64  `json:"vless"`
+	HY2               int64  `json:"hy2"`
 }
 
-func (v BusinessUsage) total() int64 { return v.Upload + v.Download }
+func (v BusinessUsage) total() int64 {
+	if v.Metered {
+		return v.QuotaUpload + v.QuotaDownload
+	}
+	return v.Upload + v.Download
+}
+func (v BusinessUsage) rawTotal() int64 { return v.Upload + v.Download }
 
 type BusinessCommand struct {
 	ID      string `json:"id"`
@@ -47,6 +61,11 @@ type BusinessCommand struct {
 	State   string `json:"state"`
 }
 type BusinessSite struct {
+	DefaultNodes      []Node                  `json:"default_nodes,omitempty"`
+	RateRules         map[string]int64        `json:"rate_rules,omitempty"`
+	PeriodRules       map[string]bool         `json:"period_rules,omitempty"`
+	UsageBaseline     map[int64]BusinessUsage `json:"usage_baseline,omitempty"`
+	NodeUsage         []NodeUsage             `json:"-"`
 	Commands          []BusinessCommand       `json:"commands,omitempty"`
 	ID                string                  `json:"id"`
 	Name              string                  `json:"name"`
@@ -76,6 +95,15 @@ type BusinessSite struct {
 }
 
 func (v *BusinessSite) defaults() {
+	if v.RateRules == nil {
+		v.RateRules = map[string]int64{}
+	}
+	if v.PeriodRules == nil {
+		v.PeriodRules = map[string]bool{}
+	}
+	if v.UsageBaseline == nil {
+		v.UsageBaseline = map[int64]BusinessUsage{}
+	}
 	if v.Nodes == nil {
 		v.Nodes = []Node{}
 	}
@@ -109,6 +137,7 @@ type BusinessAccount struct {
 	Credentials Credentials `json:"credentials"`
 }
 type BusinessSnapshot struct {
+	UsageAck     []NodeUsage       `json:"usage_ack,omitempty"`
 	Commands     []BusinessCommand `json:"commands,omitempty"`
 	SiteID       string            `json:"site_id"`
 	Revision     string            `json:"revision"`
@@ -119,13 +148,16 @@ type BusinessSnapshot struct {
 	RuntimeMode  string            `json:"runtime_mode"`
 }
 type BusinessHeartbeat struct {
-	Version  string                  `json:"version,omitempty"`
-	Commands map[string]string       `json:"commands,omitempty"`
-	SiteID   string                  `json:"site_id"`
-	Applied  string                  `json:"applied"`
-	Usage    map[int64]BusinessUsage `json:"usage"`
-	Reports  []Node                  `json:"reports"`
-	Error    string                  `json:"error"`
+	Protocol      int                     `json:"protocol,omitempty"`
+	NodeUsage     []NodeUsage             `json:"node_usage,omitempty"`
+	UsageBaseline map[int64]BusinessUsage `json:"usage_baseline,omitempty"`
+	Version       string                  `json:"version,omitempty"`
+	Commands      map[string]string       `json:"commands,omitempty"`
+	SiteID        string                  `json:"site_id"`
+	Applied       string                  `json:"applied"`
+	Usage         map[int64]BusinessUsage `json:"usage"`
+	Reports       []Node                  `json:"reports"`
+	Error         string                  `json:"error"`
 }
 
 func validateControllerURL(address string, dev bool) error {
@@ -200,19 +232,34 @@ func businessSnapshotRevision(v BusinessSnapshot) string {
 	v.IssuedAt = 0
 	v.LeaseSeconds = 0
 	v.Commands = nil
+	v.UsageAck = nil
 	v.Users = append([]BusinessAccount{}, v.Users...)
 	for i := range v.Users {
 		v.Users[i].User.Upload = 0
 		v.Users[i].User.Download = 0
 		v.Users[i].User.VLESSTraffic = 0
 		v.Users[i].User.HY2Traffic = 0
+		if m := v.Users[i].User.Meter; m != nil {
+			copy := *m
+			copy.Upload = 0
+			copy.Download = 0
+			copy.UploadRemainder = 0
+			copy.DownloadRemainder = 0
+			copy.BaseUpload = 0
+			copy.BaseDownload = 0
+			copy.RawBaseUpload = 0
+			copy.RawBaseDownload = 0
+			copy.InitialUpload = 0
+			copy.InitialDownload = 0
+			v.Users[i].User.Meter = &copy
+		}
 	}
 	b, _ := json.Marshal(v)
 	return digest(string(b))
 }
 func validBusinessInfo(v BusinessInfo) bool {
 	key, err := base64.RawURLEncoding.DecodeString(v.RealityPublic)
-	if err != nil || len(key) != 32 || v.Protocol != 1 || len(v.Version) > 32 || len(v.ShortID) != 16 {
+	if err != nil || len(key) != 32 || (v.Protocol != 1 && v.Protocol != 2) || len(v.Version) > 32 || len(v.ShortID) != 16 {
 		return false
 	}
 	if _, err = hex.DecodeString(v.ShortID); err != nil {

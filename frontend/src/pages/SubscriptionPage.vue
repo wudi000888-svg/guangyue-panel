@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { usePanelContext } from "../composables/panelContext";
+import {quotaUsed,rawPeriodUsed} from "../lib/quota";
 const { state, busy, sub, subUser, format, subProtocol, qr, qrError, subLoading, subError, simpleMode, publicSubPage, owner, userStatus, subURL, bytes, date, go, confirmUser, loadSub, copy, downloadSub } = usePanelContext();
 import { Copy, Download, KeyRound, LoaderCircle, QrCode, RefreshCw } from "lucide-vue-next";
 import { t } from "../i18n";
+import UsageDetails from "../components/UsageDetails.vue";
 import NodeSubscriptionCards from "../NodeSubscriptionCards.vue";
 </script>
 <template>
@@ -32,7 +34,7 @@ import NodeSubscriptionCards from "../NodeSubscriptionCards.vue";
                 <div>
                   <strong>{{ sub.user.username }}</strong
                   ><small>{{
-                    sub.user.role === "owner" ? t("管理员") : t("企业成员")
+                    sub.user.entitlement?.name || t("独立配置")
                   }}</small>
                 </div>
               </div>
@@ -41,9 +43,9 @@ import NodeSubscriptionCards from "../NodeSubscriptionCards.vue";
               }}</span
               ><span class="spacer"></span>
               <div>
-                <small>{{ t("已用流量") }}</small
+                <small>{{ t("配额用量") }}</small
                 ><strong
-                  >{{ bytes(sub.user.upload + sub.user.download)
+                  >{{ bytes(quotaUsed(sub.user))
                   }}<em>
                     / {{ sub.user.quota ? bytes(sub.user.quota) : t("不限") }}</em
                   ></strong
@@ -54,7 +56,8 @@ import NodeSubscriptionCards from "../NodeSubscriptionCards.vue";
                 ><strong>{{ date(sub.user.expires) }}</strong>
               </div>
             </div>
-            <div class="section-head">
+            <div class="quota-detail"><span>{{t("实际周期流量")}} · {{bytes(rawPeriodUsed(sub.user))}}</span><span>{{t("下次重置")}} · {{sub.user.meter?.end?date(sub.user.meter.end):t("不自动重置")}}</span><span>{{t("普通与公共订阅共用账号配额")}}</span></div>
+ <UsageDetails :user="sub.user"/><div class="section-head">
               <h2>{{ t("订阅配置") }}</h2>
               <span class="muted">{{
                 (state.runtime?.mode === 'no_logs' || state.runtime?.subscription_access_enabled === false)
@@ -144,3 +147,7 @@ import NodeSubscriptionCards from "../NodeSubscriptionCards.vue";
           >
         </section>
 </template>
+
+<style scoped>
+.quota-detail{display:flex;flex-wrap:wrap;gap:12px 24px;color:var(--muted);font-size:12px;padding:0 0 20px}.quota-detail span{line-height:1.7}
+</style>

@@ -23,7 +23,7 @@ func TestDefaultDirectMigrationPreservesExistingRoutesAndCredentials(t *testing.
 	nodes, _ := a.store.nodes()
 	defaults := map[string]string{}
 	for _, n := range nodes {
-		if n.ID == legacy.ID && !reflect.DeepEqual(n, legacy) {
+		if n.ID == legacy.ID && !reflect.DeepEqual(n, normalizeNodePolicy(legacy)) {
 			t.Fatal("legacy proxy route changed")
 		}
 		if n.DefaultDirect {

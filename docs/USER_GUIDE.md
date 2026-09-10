@@ -113,3 +113,7 @@ Shadowrocket、Mihomo 等客户端导入后，核对 Reality 参数与 HY2 支�
 - 私有订阅里有公共节点：应分别检查订阅 URL 和客户端缓存，两个池使用不同令牌；异常请脱敏报告。
 - 删除后客户端仍看到节点：客户端保留旧订阅缓存，手动更新；服务端权限以当前状态为准。
 - 保存设置后网络短暂断开：核心配置/路由变更可能触发重启；详见运维文档。
+
+## Plans and node rates (0.20.0)
+
+See [the plans and accounting guide](PLANS.md) for permission groups, manual entitlements, weighted quotas, distributed periods, migration and downgrade restrictions.

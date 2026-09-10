@@ -29,6 +29,20 @@ func openStore(dir string) (*Store, error) {
 	return openConfiguredStore(Config{StateDir: dir})
 }
 func openConfiguredStore(cfg Config) (*Store, error) {
+	s, err := openUninitializedStore(cfg)
+	if err != nil {
+		return nil, err
+	}
+	if err = s.initEntitlements(); err != nil {
+		s.db.Close()
+		return nil, err
+	}
+	return s, nil
+}
+
+// Import targets must remain empty until the source snapshot is copied. Schema
+// migrations and meta defaults are safe; business seed rows are deferred.
+func openUninitializedStore(cfg Config) (*Store, error) {
 	if err := os.MkdirAll(cfg.StateDir, 0700); err != nil {
 		return nil, err
 	}
@@ -122,12 +136,12 @@ func (s *Store) nodes() ([]Node, error) {
 		if err = s.vault.open(b, &n); err != nil {
 			return nil, err
 		}
-		out = append(out, n)
+		out = append(out, normalizeNodePolicy(n))
 	}
 	return out, rows.Err()
 }
 func (s *Store) saveNode(n Node) error {
-	b, err := s.vault.seal(n)
+	b, err := s.vault.seal(normalizeNodePolicy(n))
 	if err != nil {
 		return err
 	}
@@ -188,92 +202,11 @@ func (s *Store) bootstrap(dir string) error {
 }
 
 type Counter struct {
-	Key, Generation, Protocol, Direction string
-	UserID                               int64
-	Value                                int64
+	Key, Generation, Protocol, Direction, NodeID string
+	UserID                                       int64
+	Value                                        int64
 }
 
-func (s *Store) account(counters []Counter) error {
-	s.runtimeMu.RLock()
-	defer s.runtimeMu.RUnlock()
-	recordHistory := s.logsEnabledLocked()
-	tx, err := s.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	type delta struct{ up, down, vless, hy2 int64 }
-	changes := map[int64]*delta{}
-	for _, c := range counters {
-		if c.Value < 0 {
-			continue
-		}
-		var gen string
-		var last int64
-		err = tx.QueryRow("SELECT generation,value FROM checkpoints WHERE key=?", c.Key).Scan(&gen, &last)
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return err
-		}
-		d := c.Value
-		if gen == c.Generation && c.Value >= last {
-			d = c.Value - last
-		}
-		if _, err = tx.Exec("INSERT INTO checkpoints(key,generation,value) VALUES(?,?,?) ON CONFLICT(key) DO UPDATE SET generation=excluded.generation,value=excluded.value", c.Key, c.Generation, c.Value); err != nil {
-			return err
-		}
-		if d == 0 {
-			continue
-		}
-		if changes[c.UserID] == nil {
-			changes[c.UserID] = &delta{}
-		}
-		x := changes[c.UserID]
-		if c.Direction == "up" {
-			x.up += d
-		} else {
-			x.down += d
-		}
-		if c.Protocol == "vless" {
-			x.vless += d
-		} else {
-			x.hy2 += d
-		}
-	}
-	for id, d := range changes {
-		var b []byte
-		if err = tx.QueryRow("SELECT doc FROM users WHERE id=?", id).Scan(&b); errors.Is(err, sql.ErrNoRows) {
-			continue
-		} else if err != nil {
-			return err
-		}
-		var u User
-		if err = json.Unmarshal(b, &u); err != nil {
-			return err
-		}
-		u.Upload += d.up
-		u.Download += d.down
-		u.VLESSTraffic += d.vless
-		u.HY2Traffic += d.hy2
-		b, err = json.Marshal(u)
-		if err != nil {
-			return err
-		}
-		if _, err = tx.Exec("UPDATE users SET doc=? WHERE id=?", b, id); err != nil {
-			return err
-		}
-		if recordHistory {
-			if _, err = tx.Exec("INSERT INTO traffic(hour,user_id,upload,download) VALUES(?,?,?,?) ON CONFLICT(hour,user_id) DO UPDATE SET upload=traffic.upload+excluded.upload,download=traffic.download+excluded.download", time.Now().Unix()/3600*3600, id, d.up, d.down); err != nil {
-				return err
-			}
-		}
-	}
-	if recordHistory {
-		if _, err = tx.Exec("DELETE FROM traffic WHERE hour<?", time.Now().Add(-30*24*time.Hour).Unix()); err != nil {
-			return err
-		}
-	}
-	return tx.Commit()
-}
 func email(id int64, node string) string { return fmt.Sprintf("u%d.%s@personal", id, node) }
 func idFromEmail(s string) int64         { var id int64; _, _ = fmt.Sscanf(s, "u%d.", &id); return id }
 func hyID(id int64) string               { return "u" + strconv.FormatInt(id, 10) }

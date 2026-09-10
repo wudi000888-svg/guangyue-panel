@@ -49,7 +49,7 @@ func xrayConfig(c Config, records []Record, nodes []Node) object {
 		}
 		users := []string{}
 		for _, r := range records {
-			if !r.Active() || !r.VLESS {
+			if !memberMayUseNode(r, n) {
 				continue
 			}
 			id := r.Credentials.VLESS[n.ID]
@@ -215,6 +215,10 @@ func (a *App) verifyHYCore() error {
 // Only fields that affect routing belong in runtime identity. Quality scans,
 // labels, ownership and default-node protection must not restart live cores.
 func runtimeNode(n Node) Node {
+	n.PolicyVersion = 0
+	n.RateMilli = 0
+	n.RateRevision = ""
+	n.GroupIDs = nil
 	n.ExitID = ""
 	n.Name = ""
 	n.ProbeIP = ""
@@ -340,7 +344,7 @@ func (a *App) applyCoreConfiguration() error {
 			continue
 		}
 		for _, n := range nodes {
-			if n.Protocol == "hy2" && n.Enabled {
+			if n.Protocol == "hy2" && memberMayUseNode(r, n) {
 				allowed[hyNodeIdentity(r, n)] = true
 			}
 		}
@@ -432,7 +436,7 @@ func (a *App) collect() error {
 				if parts[3] == "uplink" {
 					direction = "up"
 				}
-				counters = append(counters, Counter{Key: "x:" + s.Name, Generation: generation, UserID: idFromEmail(parts[1]), Protocol: "vless", Direction: direction, Value: value})
+				counters = append(counters, Counter{Key: "x:" + s.Name, Generation: generation, UserID: idFromEmail(parts[1]), NodeID: nodeFromEmail(parts[1]), Protocol: "vless", Direction: direction, Value: value})
 			}
 		}
 	}
@@ -451,7 +455,7 @@ func (a *App) collect() error {
 			for id, s := range result {
 				uid, _ := strconv.ParseInt(strings.TrimPrefix(strings.SplitN(id, ".", 2)[0], "u"), 10, 64)
 				// HY2 Tx/Rx is measured at the server-to-target side: Tx is upload.
-				counters = append(counters, Counter{Key: "hy:" + id + ":upload", Generation: generation, UserID: uid, Protocol: "hy2", Direction: "up", Value: s.TX}, Counter{Key: "hy:" + id + ":download", Generation: generation, UserID: uid, Protocol: "hy2", Direction: "down", Value: s.RX})
+				counters = append(counters, Counter{Key: "hy:" + id + ":upload", Generation: generation, UserID: uid, NodeID: nodeFromHY(id), Protocol: "hy2", Direction: "up", Value: s.TX}, Counter{Key: "hy:" + id + ":download", Generation: generation, UserID: uid, NodeID: nodeFromHY(id), Protocol: "hy2", Direction: "down", Value: s.RX})
 			}
 		}
 	}
@@ -505,7 +509,7 @@ func subscriptionEntries(c Config, r Record, nodes []Node, protocol string) []su
 	entries := []subscriptionEntry{}
 	usedNames := map[string]int{}
 	for _, n := range nodes {
-		if !n.Enabled || (protocol != "" && protocol != n.Protocol) {
+		if !nodeGroupAllowed(r, n) || !n.Enabled || (protocol != "" && protocol != n.Protocol) {
 			continue
 		}
 		if n.Protocol == "vless" && (!r.VLESS || r.Credentials.VLESS[n.ID] == "") || n.Protocol == "hy2" && !r.HY2 {
@@ -516,6 +520,9 @@ func subscriptionEntries(c Config, r Record, nodes []Node, protocol string) []su
 		}
 		entry := subscriptionEntry{node: n}
 		base := n.Name + " · " + strings.ToUpper(n.Protocol)
+		if n.PolicyVersion > 0 {
+			base += "｜" + rateLabel(n)
+		}
 		if n.ManagedBy == publicManager {
 			base += " · 公共"
 		}

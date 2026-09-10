@@ -2,12 +2,14 @@
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue';
 import { Check, Clock3, Copy, FileSearch, LoaderCircle, QrCode, RefreshCw, ShieldCheck, X } from 'lucide-vue-next';
 import QRCode from 'qrcode';
+import {rateText} from "./lib/quota";
 import CountryMark from './CountryMark.vue';
 import QualityTags from './QualityTags.vue';
 import { locale, t } from './i18n';
 import type { IPQuality } from './quality';
 
 export type SubscriptionNode = {
+ rate_milli?:number;
   dns?: {mode: string; doh?: string; ipv6?: string};
   site_id?: string;
   site_name?: string;
@@ -115,7 +117,7 @@ onUnmounted(() => { alive = false; qrSequence++; clearTimeout(copiedTimer); qrDi
       <label v-if="availableNodes.length > 3 || search" class="subscription-node-search"><span>{{ t('筛选节点') }}</span><input v-model="search" type="search" :placeholder="t('搜索名称、IP、国家或协议')"/></label>
       <div class="subscription-node-grid">
         <article v-for="node in visibleNodes" :key="node.id" class="subscription-node-card">
-          <header><CountryMark :code="node.country_code" :country="node.country"/><div><h3>{{ node.name }}</h3><p>{{ node.probe_ip || t('出口待确认') }}</p></div><span :class="['tag', node.protocol === 'hy2' ? 'hy2' : 'vless']">{{ protocolName(node) }}</span></header>
+          <header><CountryMark :code="node.country_code" :country="node.country"/><div><h3>{{ node.name.replace(/｜[0-9.]+×/, "") }}</h3><span class="badge neutral" :title="t('节点流量按此倍率计入配额')">{{rateText(node)}}</span><p>{{ node.probe_ip || t('出口待确认') }}</p></div><span :class="['tag', node.protocol === 'hy2' ? 'hy2' : 'vless']">{{ protocolName(node) }}</span></header>
           <div v-if="node.site_name" class="subscription-node-sni"><span>{{t('业务站')}}</span><strong>{{node.site_name}}</strong></div>
           <div v-if="nodeSNI(node)" class="subscription-node-sni"><span>SNI</span><strong>{{nodeSNI(node)}}</strong></div><div v-if="node.dns?.mode === 'secure'" class="subscription-node-sni"><ShieldCheck :size="12"/><span>{{t('出口 DNS 防护')}}</span><strong>{{node.dns.ipv6 === 'block' ? t('IPv6 已阻止') : 'IPv4 / IPv6'}}</strong></div>
           <div class="subscription-node-quality"><QualityTags :value="node.quality?.at ? node.quality : undefined" :name="node.name" read-only/></div>

@@ -108,3 +108,7 @@ PY
 安装/升级备份不会自动清理，管理员需安排保留策略并监控磁盘。删除前至少保留一个已验收版本和离线备份。
 
 提交 issue 需要：版本、系统、部署方式、重现步骤、预期/实际结果、脱敏错误、相关测试。不要提供真实密码、私钥、订阅 URL、数据库、完整诊断包或客户信息。
+
+## Plans and node rates (0.20.0)
+
+See [the plans and accounting guide](PLANS.md) for permission groups, manual entitlements, weighted quotas, distributed periods, migration and downgrade restrictions.

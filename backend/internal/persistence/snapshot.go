@@ -14,7 +14,7 @@ func nowUnix() int64 { return time.Now().Unix() }
 
 // Tables is ordered by foreign-key dependencies. schema_migrations is local to
 // each dialect; its contents are checked by Migrate rather than copied blindly.
-var Tables = []string{"users", "nodes", "ip_pool", "meta", "import_sources", "quality_geo_cache", "messages", "public_blacklist", "public_source_cache", "public_source_tasks", "public_custom_sources", "audit", "checkpoints", "revocations", "traffic", "sessions", "message_recipients", "tasks", "fleet_peers", "fleet_tokens", "core_revisions", "business_sites"}
+var Tables = []string{"users", "nodes", "ip_pool", "meta", "import_sources", "quality_geo_cache", "messages", "public_blacklist", "public_source_cache", "public_source_tasks", "public_custom_sources", "audit", "checkpoints", "revocations", "traffic", "sessions", "message_recipients", "tasks", "fleet_peers", "fleet_tokens", "core_revisions", "business_sites", "node_groups", "plans", "plan_versions", "quota_periods", "node_usage", "entitlement_operations", "node_meter_policies", "business_node_usage", "business_usage_acks"}
 
 // Copy replaces destination data in one transaction from a consistent source
 // snapshot. Callers must stop all site controllers before migration or restore.
@@ -89,15 +89,38 @@ func Copy(ctx context.Context, src, dst *DB, requireEmpty bool) error {
 			return err
 		}
 	}
-	if dst.driver == "postgres" {
-		for _, table := range []string{"users", "messages", "audit"} {
-			// Explicit IDs are preserved; advance sequences so future INSERTs work.
-			q := "SELECT setval(pg_get_serial_sequence(?, 'id'), COALESCE(MAX(id),1), COUNT(*)>0) FROM " + dst.tableName(table)
-			if _, err = w.ExecContext(ctx, q, dst.schema+"."+table); err != nil {
+	// Preserve retired identities as well as live IDs. Reusing a deleted user ID
+	// after a copy would attach its retained node ledger or remote grant to a new user.
+	for _, table := range []string{"users", "messages", "audit"} {
+		var high int64
+		if src.driver == "postgres" {
+			err = r.QueryRowContext(ctx, "SELECT COALESCE(pg_sequence_last_value(pg_get_serial_sequence(?, 'id')::regclass),0)", src.schema+"."+table).Scan(&high)
+		} else {
+			err = r.QueryRowContext(ctx, "SELECT COALESCE(MAX(seq),0) FROM sqlite_sequence WHERE name=?", table).Scan(&high)
+		}
+		if err != nil {
+			return err
+		}
+		if dst.driver == "postgres" {
+			var previous int64
+			if err = w.QueryRowContext(ctx, "SELECT COALESCE(pg_sequence_last_value(pg_get_serial_sequence(?, 'id')::regclass),0)", dst.schema+"."+table).Scan(&previous); err != nil {
+				return err
+			}
+			high = max(high, previous)
+			q := "SELECT setval(pg_get_serial_sequence(?, 'id'), GREATEST(COALESCE(MAX(id),0),?,1), GREATEST(COALESCE(MAX(id),0),?)>0) FROM " + dst.tableName(table)
+			if _, err = w.ExecContext(ctx, q, dst.schema+"."+table, high, high); err != nil {
+				return err
+			}
+		} else {
+			if _, err = w.ExecContext(ctx, "UPDATE sqlite_sequence SET seq=MAX(seq,?) WHERE name=?", high, table); err != nil {
+				return err
+			}
+			if _, err = w.ExecContext(ctx, "INSERT INTO sqlite_sequence(name,seq) SELECT ?,? WHERE NOT EXISTS (SELECT 1 FROM sqlite_sequence WHERE name=?)", table, high, table); err != nil {
 				return err
 			}
 		}
 	}
+
 	if err = r.Commit(); err != nil {
 		return err
 	}

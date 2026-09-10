@@ -14,6 +14,17 @@ func businessDefaultNodes() []Node {
 }
 func (a *App) materializeBusinessNodes(v BusinessSite) ([]Node, error) {
 	out := businessDefaultNodes()
+	for i := range out {
+		out[i] = normalizeNodePolicy(out[i])
+		for _, policy := range v.DefaultNodes {
+			if policy.ID == out[i].ID {
+				out[i].PolicyVersion = policy.PolicyVersion
+				out[i].RateMilli = policy.RateMilli
+				out[i].RateRevision = policy.RateRevision
+				out[i].GroupIDs = policy.GroupIDs
+			}
+		}
+	}
 	for _, template := range v.Nodes {
 		p, err := a.store.pool(template.ExitID)
 		if err != nil || !p.Enabled {
@@ -54,6 +65,9 @@ func (a *App) businessSnapshot(v *BusinessSite) (BusinessSnapshot, error) {
 	if err != nil {
 		return out, err
 	}
+	if err = a.store.resolveAccess(users); err != nil {
+		return out, err
+	}
 	grants := []BusinessGrant{}
 	for _, r := range users {
 		if !v.Enabled || !a.businessOwnerEnabled(*v) || !r.Active() {
@@ -67,7 +81,33 @@ func (a *App) businessSnapshot(v *BusinessSite) (BusinessSnapshot, error) {
 			if g.Quota > 0 && used.total() >= g.Quota {
 				continue
 			}
+			if v.Info != nil && v.Info.Protocol < 2 && r.Entitlement != nil {
+				continue
+			}
 			r = businessRecord(r, v.ID, nodes)
+			r.InitMeter("legacy-"+businessUsageKey(r.ID), r.Created)
+			compiled := append([]string{}, r.AllowedGroups...)
+			r.CompiledGroups = &compiled
+			if r.Meter != nil {
+				m := *r.Meter
+				m.Upload = 0
+				m.Download = 0
+				m.BaseUpload = 0
+				m.BaseDownload = 0
+				m.RawBaseUpload = 0
+				m.RawBaseDownload = 0
+				m.UploadRemainder = 0
+				m.DownloadRemainder = 0
+				m.InitialUpload = 0
+				m.InitialDownload = 0
+				r.Meter = &m
+				g.PeriodID = m.PeriodID
+				v.PeriodRules[businessUsageKey(r.ID)+"/"+m.PeriodID] = true
+			}
+			if v.Info != nil && v.Info.Protocol < 2 {
+				r.Meter = nil
+				r.CompiledGroups = nil
+			}
 			r.Quota = g.Quota
 			r.Upload = 0
 			r.Download = 0
@@ -89,6 +129,10 @@ func (a *App) businessSnapshot(v *BusinessSite) (BusinessSnapshot, error) {
 	v.Desired = out.Revision
 	v.SentGrants = grants
 	v.SentNodes = nodes
+	for _, n := range nodes {
+		n = normalizeNodePolicy(n)
+		v.RateRules[n.ID+"/"+n.RateRevision] = n.RateMilli
+	}
 	v.LeaseUntil = out.IssuedAt + out.LeaseSeconds
 	for _, g := range grants {
 		if g.Quota == 0 {
@@ -173,6 +217,29 @@ func (a *App) validateBusinessPolicy(v BusinessSite) error {
 			}
 		}
 	}
+	if v.Info != nil && v.Info.Protocol < 2 {
+		ns, e := a.materializeBusinessNodes(v)
+		if e != nil {
+			return e
+		}
+		for _, n := range ns {
+			n = normalizeNodePolicy(n)
+			expected := legacyPrivateGroup
+			if n.ManagedBy == publicManager {
+				expected = legacyPublicGroup
+			}
+			if n.RateMilli != 1000 || len(n.GroupIDs) != 1 || n.GroupIDs[0] != expected {
+				return errors.New("旧业务站不支持节点倍率和权限组，请先升级业务站")
+			}
+		}
+		for _, u := range users {
+			for _, g := range v.Grants {
+				if g.UserID == u.ID && u.Entitlement != nil {
+					return errors.New("旧业务站不支持套餐权限，请先升级业务站")
+				}
+			}
+		}
+	}
 	return a.validateBusinessAllocations(v)
 }
 func simpleID(s string) bool {
@@ -184,7 +251,7 @@ func simpleID(s string) bool {
 	return s != ""
 }
 func businessNodeTemplate(n Node) Node {
-	return Node{ID: n.ID, Protocol: n.Protocol, ExitID: n.ExitID, Enabled: n.Enabled, RealitySNI: strings.TrimSpace(n.RealitySNI), DNS: n.DNS, Name: n.Name}
+	return Node{PolicyVersion: n.PolicyVersion, RateMilli: n.RateMilli, RateRevision: n.RateRevision, GroupIDs: n.GroupIDs, ID: n.ID, Protocol: n.Protocol, ExitID: n.ExitID, Enabled: n.Enabled, RealitySNI: strings.TrimSpace(n.RealitySNI), DNS: n.DNS, Name: n.Name}
 }
 func (a *App) checkExclusiveBusinessExit(exitID string) error {
 	if !a.cfg.controller() || exitID == "" {
@@ -207,6 +274,8 @@ func (a *App) checkExclusiveBusinessExit(exitID string) error {
 }
 func equalBusinessInfo(a, b BusinessInfo) bool {
 	a.Version = ""
+	a.Protocol = 0
+	b.Protocol = 0
 	b.Version = ""
 	x, _ := json.Marshal(a)
 	y, _ := json.Marshal(b)

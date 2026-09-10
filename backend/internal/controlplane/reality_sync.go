@@ -43,6 +43,9 @@ func (a *App) xrayUsers(tag string) (map[string]string, error) {
 // Credentials belong to exactly one SNI group, while their email-based routing
 // and statistics retain the existing user/node identity across SNI changes.
 func (a *App) reconcileRealityUsers(xc object, configPath, nodeHash string) error {
+	return a.reconcileRealityUsersAttempt(xc, configPath, nodeHash, true)
+}
+func (a *App) reconcileRealityUsersAttempt(xc object, configPath, nodeHash string, mayRestart bool) error {
 	states := []realityUserState{}
 	desiredGroups := map[string]map[string]string{}
 	changed := false
@@ -62,11 +65,22 @@ func (a *App) reconcileRealityUsers(xc object, configPath, nodeHash string) erro
 		state := realityUserState{Inbound: inbound, Tag: tag, Desired: desired, Current: current}
 		for email, id := range current {
 			if desired[email] != id {
-				if _, err = a.xapi("rmu", "-tag="+tag, email); err != nil {
-					return errors.New("Xray user revocation failed")
+				// Removing a UUID prevents new handshakes but does not close all
+				// established Xray streams. Revoke by a verified controlled restart.
+				if !mayRestart {
+					return errors.New("Xray revocation verification failed")
 				}
-				delete(current, email)
-				state.Changed, changed = true, true
+				if err = a.collect(); err != nil {
+					return err
+				}
+				if err = restartCore("guangyue-xray.service"); err != nil {
+					return err
+				}
+				if err = waitPort("127.0.0.1:19185"); err != nil {
+					return err
+				}
+				a.lastUsers = ""
+				return a.reconcileRealityUsersAttempt(xc, configPath, nodeHash, false)
 			}
 		}
 		states = append(states, state)
