@@ -255,14 +255,18 @@ func (m *Manager) execute(parent context.Context, t Task) {
 	m.mu.Unlock()
 	defer func() { cancel(); m.mu.Lock(); delete(m.cancels, t.ID); m.mu.Unlock() }()
 	current, err := m.Get(ctx, t.ID)
-	if err != nil || current.State != "running" {
+	if err == nil && current.State != "running" {
 		return
 	}
 	var result json.RawMessage
-	if h := m.handlers[t.Kind]; h != nil {
-		result, err = invoke(ctx, h, t)
-	} else {
-		err = errors.New("task type is no longer supported")
+	// A claimed task must always reach finalization, even when shutdown cancels
+	// the context before its initial read. Otherwise it stays running forever.
+	if err == nil {
+		if h := m.handlers[t.Kind]; h != nil {
+			result, err = invoke(ctx, h, t)
+		} else {
+			err = errors.New("task type is no longer supported")
+		}
 	}
 	finishCtx, finishCancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer finishCancel()
