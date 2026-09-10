@@ -75,6 +75,10 @@ func (a *App) advanceQuotaPeriods(now int64) error {
 		if err = a.collect(); err != nil {
 			return err
 		}
+		if err = a.settleHYRevocations(); err != nil {
+			return err
+		}
+
 		u, err = a.store.record(u.ID)
 		if err != nil {
 			return err
@@ -159,6 +163,31 @@ func (a *App) advanceQuotaPeriods(now int64) error {
 		if e = tx.Commit(); e != nil {
 			return e
 		}
+	}
+	return nil
+}
+
+// Upstream /kick consumes one marker on a connection's next traffic event.
+// Funding a new period or acknowledging a remote withdrawal must first close
+// idle old streams and clear their kick markers, including after a restart.
+func (a *App) settleHYRevocations() error {
+	if a.cfg.Dev || a.oldHYConnections == 0 {
+		return nil
+	}
+	if err := a.collect(); err != nil {
+		return err
+	}
+	if err := restartCore("guangyue-hy2.service"); err != nil {
+		return err
+	}
+	if err := waitPort("127.0.0.1:19199"); err != nil {
+		return err
+	}
+	if err := a.reconcile(); err != nil {
+		return err
+	}
+	if a.oldHYConnections > 0 {
+		return fmt.Errorf("old HY2 connections have not been revoked")
 	}
 	return nil
 }

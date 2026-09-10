@@ -83,20 +83,32 @@ try:
  new_user={'username':'after-update','password':'synthetic-after-update-password','enabled':True,'vless':True,'hy2':True,'expires':0,'quota':0}
  api('/api/users',new_user,cookie)
  state_before,_=api('/api/state',cookie=cookie);assert any(u['username']=='after-update' for u in state_before['users'])
- request=dict(action='rollback',version='0.16.0',expected_version=target,request_id=str(uuid.uuid4()))
- api('/api/updates/apply',request,cookie);result=finished()
- assert result['current_version']=='0.16.0' and result['installed_version']=='0.16.0'
- state_after,_=api('/api/state',cookie=cookie);assert any(u['username']=='after-update' for u in state_after['users'])
- after,_=api('/api/subscription',cookie=cookie);same_connections(before,after)
- print('PASS '+edition+' authenticated rollback preserves new users, subscription and installation floor',flush=True)
- forbidden=dict(action='rollback',version='0.15.0',expected_version='0.16.0',request_id=str(uuid.uuid4()))
- assert updater('/apply',forbidden)[0]==409;assert api('/api/health')[0]['version']=='0.16.0'
- print('PASS server rejects versions below the original installation even after rollback',flush=True)
- # Update once more through the retained helper, proving old UI rollback is recoverable.
- request=dict(action='update',version=target,expected_version='0.16.0',request_id=str(uuid.uuid4()))
- assert updater('/apply',request)[0]==200;finished()
- assert api('/api/health')[0]['version']==target
- print('PASS retained helper upgrades again after rollback to the older panel',flush=True)
+ rollback=next(v for v in result['rollback_versions'] if v['version']=='0.16.0')
+ if not rollback['compatible']:
+  # New permission/meter schemas must never be interpreted by the old binary.
+  request=dict(action='rollback',version='0.16.0',expected_version=target,request_id=str(uuid.uuid4()))
+  assert updater('/apply',request)[0]==409
+  assert api('/api/health')[0]['version']==target
+  current,_=api('/api/state',cookie=cookie);assert any(u['username']=='after-update' for u in current['users'])
+  after,_=api('/api/subscription',cookie=cookie);same_connections(before,after)
+  forbidden=dict(action='rollback',version='0.15.0',expected_version=target,request_id=str(uuid.uuid4()))
+  assert updater('/apply',forbidden)[0]==409
+  print('PASS '+edition+' schema-incompatible downgrade and below-floor rejection preserve current users and subscription',flush=True)
+ else:
+  request=dict(action='rollback',version='0.16.0',expected_version=target,request_id=str(uuid.uuid4()))
+  api('/api/updates/apply',request,cookie);result=finished()
+  assert result['current_version']=='0.16.0' and result['installed_version']=='0.16.0'
+  state_after,_=api('/api/state',cookie=cookie);assert any(u['username']=='after-update' for u in state_after['users'])
+  after,_=api('/api/subscription',cookie=cookie);same_connections(before,after)
+  print('PASS '+edition+' authenticated rollback preserves new users, subscription and installation floor',flush=True)
+  forbidden=dict(action='rollback',version='0.15.0',expected_version='0.16.0',request_id=str(uuid.uuid4()))
+  assert updater('/apply',forbidden)[0]==409;assert api('/api/health')[0]['version']=='0.16.0'
+  print('PASS server rejects versions below the original installation even after rollback',flush=True)
+  # Update once more through the retained helper, proving old UI rollback is recoverable.
+  request=dict(action='update',version=target,expected_version='0.16.0',request_id=str(uuid.uuid4()))
+  assert updater('/apply',request)[0]==200;finished()
+  assert api('/api/health')[0]['version']==target
+  print('PASS retained helper upgrades again after rollback to the older panel',flush=True)
 finally:
  journal=subprocess.run(['journalctl','-u','guangyue-updater','--no-pager','-o','cat'],capture_output=True,text=True).stdout
  for line in journal.splitlines():

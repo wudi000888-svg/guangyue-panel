@@ -136,7 +136,7 @@ def verify_entitlements(bundle, temp, cert, api, cookie):
             assert receive(sock, 6) == b'before'
             held.append(sock)
         group['enabled'] = False
-        call('/node-groups', group)
+        group = call('/node-groups', group)
         # Allow the regular 10-second reconciliation loop to revoke credentials.
         time.sleep(12)
         for sock in held:
@@ -155,6 +155,42 @@ def verify_entitlements(bundle, temp, cert, api, cookie):
                 usable = False
             assert not usable, 'saved link bypassed revoked group'
         print('PASS group revocation closes existing VLESS/HY2 streams and denies saved links')
+
+        for sock in held:
+            sock.close()
+        held.clear()
+        group['enabled'] = True
+        group = call('/node-groups', group)
+        wait_applied()
+        for port in [19891, 19892]:
+            sock, _ = socks(port, 1, tcp.server_address[1])
+            sock.sendall(b'old-period')
+            assert receive(sock, 10) == b'old-period'
+            held.append(sock)
+        previous_period = call('/usage?user_id=' + str(user['id']))['user']['meter']['period_id']
+        reset = {'ids': [user['id']], 'action': 'reset', 'operation_id': secrets.token_urlsafe(24)}
+        preview = call('/entitlements/batch', dict(reset, preview=True))
+        call('/entitlements/batch', dict(reset, expected=preview['expected']))
+        deadline = time.monotonic() + 45
+        while time.monotonic() < deadline:
+            current = call('/usage?user_id=' + str(user['id']))
+            if current['user']['meter']['period_id'] != previous_period and not current['user']['meter']['pending_reset']:
+                break
+            time.sleep(1)
+        else:
+            raise AssertionError('local quota reset did not settle')
+        for sock in held:
+            try:
+                sock.sendall(b'new-period')
+                survived = receive(sock, 10) == b'new-period'
+            except OSError:
+                survived = False
+            assert not survived, 'old stream survived quota-period reset'
+        assert current['quota_used'] == 0 and current['user']['upload'] > 0, 'reset erased lifetime usage'
+        for port in [19891, 19892]:
+            roundtrip(port)
+        print('PASS local quota reset closes idle old VLESS/HY2 streams, preserves lifetime usage and admits new connections')
+
     finally:
         for sock in held:
             sock.close()

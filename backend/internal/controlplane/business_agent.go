@@ -242,9 +242,7 @@ func (a *App) applyBusinessSnapshot(ctx context.Context, snapshot BusinessSnapsh
 		}
 		return a.reconcileIfNeeded()
 	}
-	if err = a.collect(); err != nil {
-		return err
-	}
+	collectionError := a.collect()
 	oldRuntime := a.store.runtimeSnapshot()
 	oldNodes, err := a.store.nodes()
 	if err != nil {
@@ -257,6 +255,9 @@ func (a *App) applyBusinessSnapshot(ctx context.Context, snapshot BusinessSnapsh
 	oldUsers, err := a.store.records()
 	if err != nil {
 		return err
+	}
+	if collectionError != nil && len(oldUsers) > 0 && a.businessLeaseDeadline() > now {
+		return collectionError
 	}
 	nodes := append([]Node{}, snapshot.Nodes...)
 	seen := map[string]bool{}
@@ -458,7 +459,20 @@ func (a *App) applyBusinessSnapshot(ctx context.Context, snapshot BusinessSnapsh
 	if err = a.store.saveBusinessAgent(state); err == nil {
 		err = a.reconcile()
 	}
+	if err == nil {
+		err = a.settleHYRevocations()
+	}
 	if err != nil {
+		// Core revocation may have taken a final sample after the policy write.
+		// Restore authorization without rewinding counters past their checkpoints.
+		currentUsers, readErr := a.store.records()
+		if readErr != nil {
+			previous.LeaseUntil = 0
+			_ = a.store.saveBusinessAgent(previous)
+			_ = a.reconcile()
+			return errors.New("business accounting recovery failed; authorization closed")
+		}
+		oldUsers = preserveBusinessAccounting(oldUsers, currentUsers)
 		restoreDB := a.replaceBusinessState(oldUsers, oldNodes, oldPools)
 		_, _, restoreMode := a.store.changeRuntimeMode(oldRuntime.Mode, a.store.runtimeSnapshot().Revision)
 		restoreLease := a.store.saveBusinessAgent(previous)
@@ -476,6 +490,35 @@ func (a *App) applyBusinessSnapshot(ctx context.Context, snapshot BusinessSnapsh
 	state.Error = ""
 	return a.store.saveBusinessAgent(state)
 }
+
+func preserveBusinessAccounting(previous, current []Record) []Record {
+	latest := map[int64]Record{}
+	for _, u := range current {
+		latest[u.ID] = u
+	}
+	for i := range previous {
+		old := &previous[i]
+		if u, ok := latest[old.ID]; ok {
+			delete(latest, old.ID)
+			old.Upload, old.Download = u.Upload, u.Download
+			old.VLESSTraffic, old.HY2Traffic = u.VLESSTraffic, u.HY2Traffic
+			if u.Meter != nil {
+				if old.Meter != nil && old.Meter.PeriodID != u.Meter.PeriodID {
+					old.Enabled = false // A failed new-period apply must remain withdrawn.
+				}
+				meter := *u.Meter
+				old.Meter = &meter
+			}
+		}
+	}
+	for _, u := range latest {
+		u.Enabled = false
+		u.Username = "~retired:" + businessUsageKey(u.ID)
+		previous = append(previous, u)
+	}
+	return previous
+}
+
 func (a *App) replaceBusinessState(records []Record, nodes []Node, pools []IPResource) error {
 	tx, err := a.store.db.Begin()
 	if err != nil {

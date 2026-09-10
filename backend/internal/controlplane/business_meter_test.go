@@ -168,3 +168,26 @@ func TestBusinessExitDeletionCleansGroupsAndRestoresOnFailure(t *testing.T) {
 		t.Fatal("deleted exit retained business node membership")
 	}
 }
+
+func TestBusinessRollbackPreservesFinalMeterAndFailsClosedAcrossPeriods(t *testing.T) {
+	a := testApp(t)
+	u := testUser(t, a, "member", "user")
+	u.InitMeter("old", 1)
+	before := u
+	if err := a.store.save(&u); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.store.account([]Counter{{Key: "rollback", Generation: "one", UserID: u.ID, NodeID: "vless-main", Protocol: "vless", Direction: "up", Value: 7}}); err != nil {
+		t.Fatal(err)
+	}
+	current, _ := a.store.record(u.ID)
+	restored := preserveBusinessAccounting([]Record{before}, []Record{current})[0]
+	if restored.Upload != 7 || restored.QuotaUsed() != 7 || !restored.Enabled {
+		t.Fatal("rollback rewound settled usage")
+	}
+	current.Meter.PeriodID = "next"
+	restored = preserveBusinessAccounting([]Record{before}, []Record{current})[0]
+	if restored.Enabled || restored.Meter.PeriodID != "next" || restored.QuotaUsed() != 7 {
+		t.Fatal("cross-period rollback reopened a retired grant")
+	}
+}
