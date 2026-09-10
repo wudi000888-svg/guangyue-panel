@@ -26,7 +26,7 @@ button:focus-visible,a:focus-visible,summary:focus-visible{outline:2px solid var
  .metrics>div{padding:18px 14px}.metrics span,.user-stat-grid span{font-size:12px}.user-stat-grid strong{font-size:24px}.user-stat-grid>div{padding:16px 14px}
  .node-card-head{padding:16px;align-items:flex-start}.node-card-head h2{font-size:15px;line-height:1.5;overflow-wrap:anywhere}.node-card-footer{gap:8px;padding:12px 16px}.node-card-footer button{font-size:13px}.node-details>div{font-size:13px;gap:10px;min-height:40px}
  .resource-tabs{display:flex;overflow-x:auto;max-width:100%;gap:6px}.resource-tabs>button{min-height:44px;font-size:12px}
- .table-scroll:has(>.adaptive-table),.table-wrap:has(>.adaptive-table){border:0;background:transparent;overflow:visible;box-shadow:none}
+ .content .table-scroll:has(>.adaptive-table),.content .table-wrap:has(>.adaptive-table){border:0;background:transparent;overflow:visible;box-shadow:none}
  .adaptive-table{display:block;min-width:0!important;width:100%;border:0;background:transparent}.adaptive-table thead{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
  .adaptive-table tbody{display:grid;gap:14px}.adaptive-table tbody tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;padding:16px;border:1px solid var(--border);border-radius:12px;background:var(--surface);min-width:0}
  .adaptive-table tbody td{display:block;border:0;padding:0;min-width:0!important;max-width:none;white-space:normal;overflow-wrap:anywhere;font-size:13px;text-align:left}.adaptive-table td:before{content:attr(data-label);display:block;color:var(--muted);font-size:11px;margin-bottom:7px;line-height:1.4}

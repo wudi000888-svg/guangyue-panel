@@ -8,7 +8,7 @@
  .topbar .page-context h1{display:block;font-size:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
  .topbar .page-context p,.topbar .breadcrumb-group,.topbar .top-actions>.desktop-action,.topbar .header-theme,.topbar .header-account,.topbar .live-label,.topbar .inbox-bell{display:none}
  .topbar .top-actions{flex-basis:auto;flex-wrap:nowrap;gap:4px;margin-left:0}
- .topbar .language-switch{gap:0}.topbar .language-switch>svg{display:none}.topbar .language-switch select{width:92px;font-size:14px;min-height:44px}
+ .topbar .language-switch{gap:0}.topbar .language-switch>svg{display:none}.topbar .language-switch select{width:108px;font-size:16px;min-height:44px}
  .topbar .mobile-tools-button{display:inline-flex}
  .app-shell .sidebar{width:min(310px,calc(100vw - 32px));padding:0 14px;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom);z-index:100}
  .sidebar .brand{padding-right:40px}.drawer-close{display:flex;position:absolute;right:14px;top:calc(14px + env(safe-area-inset-top))}
