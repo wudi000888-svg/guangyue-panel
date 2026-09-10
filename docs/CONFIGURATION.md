@@ -4,9 +4,12 @@
 
 | 字段 | 默认/意义 | 注意 |
 | --- | --- | --- |
-| `edition` | `lite` / `pro` | Pro 必须同时配置 PostgreSQL 与 Redis |
+| `edition` | `lite` / `pro` | Pro 主控必须配置 PostgreSQL 与 Redis；业务站使用 SQLite |
+| `role` | Lite: `standalone` / Pro: `controller` 或 `business` | 由安装器确定，不支持普通升级改变角色 |
+| `controller_url` | 业务站主控 HTTPS 根地址 | 公网、可信证书、禁止重定向 |
+| `enrollment_token` | 安装注册文件写入 | 首次同步后失效，长期令牌在本地加密状态中 |
 | `site_id` | `default` | 小写字母开头、字母数字下划线、最多 40 字符；生产启用后不可直接修改 |
-| `database.driver` | Lite: `sqlite` / Pro: `postgres` | 禁止用 Lite 连接 PostgreSQL |
+| `database.driver` | Lite/业务站: `sqlite` / 主控: `postgres` | 禁止用 Lite 连接 PostgreSQL |
 | `database.dsn` | PostgreSQL URI | 密码仅存私有配置；远程库使用 TLS 校验 |
 | `database.max_connections` | Pro: 8 | 范围 2–64，包含独占控制连接 |
 | `redis_url` | `redis://` 或 `rediss://` | 缓存实例凭据；故障降级为数据库查询 |

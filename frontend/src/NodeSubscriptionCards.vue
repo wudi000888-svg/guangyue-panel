@@ -9,6 +9,8 @@ import type { IPQuality } from './quality';
 
 export type SubscriptionNode = {
   dns?: {mode: string; doh?: string; ipv6?: string};
+  site_id?: string;
+  site_name?: string;
   id: string;
   name: string;
   protocol: 'vless' | 'hy2';
@@ -25,7 +27,7 @@ const search = ref(''), copied = ref(''), copyError = ref('');
 const availableNodes = computed(() => props.active ? props.nodes.filter(node => !!node.id && !!node.uri) : []);
 const visibleNodes = computed(() => {
   const query = search.value.trim().toLowerCase();
-  return availableNodes.value.filter(node => !query || [node.name, node.probe_ip, node.country, node.country_code, node.protocol, node.protocol === 'hy2' ? 'hysteria2' : 'vless'].some(value => (value || '').toLowerCase().includes(query)));
+  return availableNodes.value.filter(node => !query || [node.name, node.probe_ip, node.country, node.country_code, node.site_name, node.protocol, node.protocol === 'hy2' ? 'hysteria2' : 'vless'].some(value => (value || '').toLowerCase().includes(query)));
 });
 const reportCount = computed(() => availableNodes.value.filter(node => !!node.quality?.at).length);
 const protocolName = (node: SubscriptionNode) => node.protocol === 'hy2' ? 'HY2' : 'VLESS';
@@ -114,6 +116,7 @@ onUnmounted(() => { alive = false; qrSequence++; clearTimeout(copiedTimer); qrDi
       <div class="subscription-node-grid">
         <article v-for="node in visibleNodes" :key="node.id" class="subscription-node-card">
           <header><CountryMark :code="node.country_code" :country="node.country"/><div><h3>{{ node.name }}</h3><p>{{ node.probe_ip || t('出口待确认') }}</p></div><span :class="['tag', node.protocol === 'hy2' ? 'hy2' : 'vless']">{{ protocolName(node) }}</span></header>
+          <div v-if="node.site_name" class="subscription-node-sni"><span>{{t('业务站')}}</span><strong>{{node.site_name}}</strong></div>
           <div v-if="nodeSNI(node)" class="subscription-node-sni"><span>SNI</span><strong>{{nodeSNI(node)}}</strong></div><div v-if="node.dns?.mode === 'secure'" class="subscription-node-sni"><ShieldCheck :size="12"/><span>{{t('出口 DNS 防护')}}</span><strong>{{node.dns.ipv6 === 'block' ? t('IPv6 已阻止') : 'IPv4 / IPv6'}}</strong></div>
           <div class="subscription-node-quality"><QualityTags :value="node.quality?.at ? node.quality : undefined" :name="node.name" read-only/></div>
           <div class="subscription-node-report"><Clock3 :size="12"/><span>{{ t('报告时间') }} · {{ reportDate(node) }}</span></div>

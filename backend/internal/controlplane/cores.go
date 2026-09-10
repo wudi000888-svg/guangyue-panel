@@ -182,7 +182,7 @@ func (a *App) prepare() error {
 			return err
 		}
 	}
-	records, err := a.store.records()
+	records, err := a.coreRecords()
 	if err != nil {
 		return err
 	}
@@ -242,7 +242,7 @@ func (a *App) applyCoreConfiguration() error {
 	if err := a.ensureBridge(); err != nil {
 		return err
 	}
-	records, err := a.store.records()
+	records, err := a.coreRecords()
 	if err != nil {
 		return err
 	}
@@ -479,10 +479,12 @@ func subscription(c Config, r Record, nodes []Node, format, protocol string) ([]
 }
 
 type subscriptionEntry struct {
-	node  Node
-	name  string
-	uri   string
-	proxy object
+	siteID   string
+	siteName string
+	node     Node
+	name     string
+	uri      string
+	proxy    object
 }
 
 func subscriptionEntries(c Config, r Record, nodes []Node, protocol string) []subscriptionEntry {
@@ -537,10 +539,14 @@ func subscriptionEntries(c Config, r Record, nodes []Node, protocol string) []su
 }
 
 func renderSubscription(c Config, r Record, nodes []Node, format, protocol string, public bool) ([]byte, string, error) {
+	return renderSubscriptionEntries(c, nodes, subscriptionEntries(c, r, nodes, protocol), format, public)
+}
+
+func renderSubscriptionEntries(c Config, nodes []Node, entries []subscriptionEntry, format string, public bool) ([]byte, string, error) {
 	lines := []string{}
 	proxies := []object{}
 	names := []string{}
-	for _, entry := range subscriptionEntries(c, r, nodes, protocol) {
+	for _, entry := range entries {
 		lines = append(lines, entry.uri)
 		proxies = append(proxies, entry.proxy)
 		names = append(names, entry.name)
@@ -563,7 +569,7 @@ func renderSubscription(c Config, r Record, nodes []Node, format, protocol strin
 			fallback, group = "REJECT", "广月公共"
 		}
 		protectedDNS := false
-		for _, entry := range subscriptionEntries(c, r, nodes, protocol) {
+		for _, entry := range entries {
 			protectedDNS = protectedDNS || secureDNS(entry.node)
 		}
 		if protectedDNS {
@@ -575,11 +581,17 @@ func renderSubscription(c Config, r Record, nodes []Node, format, protocol strin
 			doc["ipv6"] = true
 			doc["dns"] = object{"enable": true, "ipv6": true, "enhanced-mode": "fake-ip", "nameserver": []string{"tcp://1.1.1.1#" + group}, "fallback": []string{}, "proxy-server-nameserver": []string{"https://1.1.1.1/dns-query"}}
 			doc["tun"] = object{"enable": false, "auto-route": true, "strict-route": true, "dns-hijack": []string{"any:53", "tcp://any:53"}}
-			for _, n := range nodes {
+			hosts := object{}
+			for _, entry := range entries {
+				n := entry.node
 				if n.DefaultDirect && n.Exit == "direct" && publicIP(n.ProbeIP) {
-					doc["hosts"] = object{c.VLESSHost: n.ProbeIP, c.HY2Host: n.ProbeIP}
-					break
+					if host, ok := entry.proxy["server"].(string); ok {
+						hosts[host] = n.ProbeIP
+					}
 				}
+			}
+			if len(hosts) > 0 {
+				doc["hosts"] = hosts
 			}
 		}
 		b, err := yaml.Marshal(doc)

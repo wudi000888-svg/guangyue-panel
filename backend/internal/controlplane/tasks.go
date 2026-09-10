@@ -15,7 +15,7 @@ import (
 
 func (a *App) initTasks() {
 	workers, capacity := 1, 64
-	if a.cfg.edition() == "pro" {
+	if a.cfg.controller() {
 		workers, capacity = 4, 256
 	}
 	a.jobs = jobs.New(a.store.db, jobs.Options{Workers: workers, Capacity: capacity, Timeout: 3 * time.Minute, RetainHistory: func() bool {
@@ -81,7 +81,7 @@ func (a *App) taskGuard(kind, target string) (string, error) {
 }
 func (a *App) runTask(ctx context.Context, t jobs.Task) (json.RawMessage, error) {
 	actor, err := a.store.record(t.ActorID)
-	systemTask := t.ActorID == 0 && (t.Kind == "import-source" || t.Kind == "public-source" || t.Kind == "public-cycle")
+	systemTask := t.ActorID == 0 && (a.cfg.businessAgent() && a.businessLeaseDeadline() > time.Now().Unix() && (t.Kind == "speed" || t.Kind == "quality") || t.Kind == "import-source" || t.Kind == "public-source" || t.Kind == "public-cycle")
 	if !systemTask && (err != nil || !actor.Enabled || actor.Role != "owner") {
 		return nil, errors.New("任务发起者已无管理权限")
 	}

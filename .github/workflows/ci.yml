@@ -65,6 +65,7 @@ jobs:
             build/releases/SBOM.spdx.json
           retention-days: 7
   installation:
+    name: installation (${{ matrix.os }}, ${{ matrix.edition }})
     needs: check
     strategy:
       fail-fast: false
@@ -74,6 +75,9 @@ jobs:
             edition: lite
           - os: ubuntu-24.04
             edition: pro
+          - os: ubuntu-24.04
+            edition: business
+            asset: pro
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     steps:
@@ -89,11 +93,11 @@ jobs:
           sudo systemctl enable --now nginx
           cd build/releases
           sha256sum -c SHA256SUMS
-          tar -xzf guangyue-panel-*-linux-amd64.tar.gz
-          cd guangyue-panel-*-linux-amd64
+          tar -xzf guangyue-panel-${{ matrix.asset || matrix.edition }}-*-linux-amd64.tar.gz
+          cd guangyue-panel-${{ matrix.asset || matrix.edition }}-*-linux-amd64
           GY_BIN_DIR="$PWD/bin" bash scripts/fetch-xray.sh
           GY_BIN_DIR="$PWD/bin" bash scripts/fetch-mihomo.sh
       - name: Real systemd installation, certificate rotation, edition migration and rollback
         env:
           GY_INTEGRATION_EDITION: ${{ matrix.edition }}
-        run: sudo --preserve-env=GITHUB_ACTIONS,GY_INTEGRATION_EDITION python3 deploy/tests/integration.py "$(realpath build/releases/guangyue-panel-*-linux-amd64)"
+        run: sudo --preserve-env=GITHUB_ACTIONS,GY_INTEGRATION_EDITION python3 deploy/tests/integration.py "$(realpath build/releases/guangyue-panel-${{ matrix.asset || matrix.edition }}-*-linux-amd64)"

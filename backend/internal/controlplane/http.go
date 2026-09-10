@@ -46,10 +46,12 @@ func decode(w http.ResponseWriter, r *http.Request, v any) bool {
 func (a *App) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/login", a.login)
+	mux.HandleFunc("POST /api/business/enroll", a.businessEnroll)
+	mux.HandleFunc("POST /api/business/sync", a.businessSync)
 	mux.HandleFunc("POST /api/fleet-gateway", a.fleetGateway)
 	mux.HandleFunc("GET /api/site", a.siteInfo)
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
-		jsonResponse(w, 200, object{"ok": true, "version": version, "edition": a.cfg.edition(), "product": a.cfg.productName(), "site_id": a.cfg.siteID()})
+		jsonResponse(w, 200, object{"ok": true, "version": version, "edition": a.cfg.edition(), "product": a.cfg.productName(), "site_id": a.cfg.siteID(), "role": a.cfg.deploymentRole()})
 	})
 	mux.HandleFunc("GET /sub/{token}", a.serveSubscription)
 	mux.HandleFunc("GET /public-sub/{user}/{token}", a.serveSubscription)
@@ -69,6 +71,10 @@ func (a *App) routes() http.Handler {
 		files.ServeHTTP(w, r)
 	})
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if a.cfg.businessAgent() && r.URL.Path != "/api/health" {
+			failure(w, 404, "此业务站由主控管理")
+			return
+		}
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("X-Frame-Options", "DENY")
@@ -360,7 +366,7 @@ func (a *App) subscriptionInfo(w http.ResponseWriter, r *http.Request, actor Rec
 		failure(w, 404, "用户不存在")
 		return
 	}
-	nodes, err := a.store.nodes()
+	_, err = a.store.nodes()
 	if err != nil {
 		failure(w, 500, "读取节点失败")
 		return
@@ -379,15 +385,14 @@ func (a *App) subscriptionInfo(w http.ResponseWriter, r *http.Request, actor Rec
 	views := []SubscriptionNode{}
 	lines := []string{}
 	if record.Active() {
-		selected := []Node{}
-		for _, n := range nodes {
-			if (n.ManagedBy == publicManager) == public {
-				selected = append(selected, n)
-			}
+		entries, err := a.subscriptionCatalog(record, public, protocol)
+		if err != nil {
+			failure(w, 500, "读取订阅节点失败")
+			return
 		}
-		for _, entry := range subscriptionEntries(a.cfg, record, selected, protocol) {
+		for _, entry := range entries {
 			n := entry.node
-			views = append(views, SubscriptionNode{MemberNodeQuality: MemberNodeQuality{ID: n.ID, Name: entry.name, Protocol: n.Protocol, ProbeIP: n.ProbeIP, Country: n.Country, CountryCode: n.CountryCode, CheckedAt: n.CheckedAt, Quality: memberQualityReport(n)}, URI: entry.uri, DNS: n.DNS})
+			views = append(views, SubscriptionNode{MemberNodeQuality: MemberNodeQuality{ID: n.ID, Name: entry.name, Protocol: n.Protocol, ProbeIP: n.ProbeIP, Country: n.Country, CountryCode: n.CountryCode, CheckedAt: n.CheckedAt, Quality: memberQualityReport(n)}, URI: entry.uri, DNS: n.DNS, SiteID: entry.siteID, SiteName: entry.siteName})
 			lines = append(lines, entry.uri)
 		}
 	}
@@ -435,7 +440,12 @@ func (a *App) serveSubscription(w http.ResponseWriter, r *http.Request) {
 		failure(w, 500, "读取节点失败")
 		return
 	}
-	b, typ, err := scopedSubscription(a.cfg, record, nodes, r.URL.Query().Get("format"), r.URL.Query().Get("protocol"), public)
+	entries, err := a.subscriptionCatalog(record, public, r.URL.Query().Get("protocol"))
+	if err != nil {
+		failure(w, 500, "读取订阅节点失败")
+		return
+	}
+	b, typ, err := renderSubscriptionEntries(a.cfg, nodes, entries, r.URL.Query().Get("format"), public)
 	if err != nil {
 		if errors.Is(err, errNoNodes) {
 			failure(w, 403, "没有获授权的可用节点")
@@ -469,7 +479,7 @@ func (a *App) hyAuth(w http.ResponseWriter, r *http.Request) {
 		jsonResponse(w, 200, object{"ok": false})
 		return
 	}
-	records, err := a.store.records()
+	records, err := a.coreRecords()
 	nodes, e := a.store.nodes()
 	if err == nil && e == nil {
 		for _, record := range records {
@@ -530,6 +540,10 @@ func (a *App) password(w http.ResponseWriter, r *http.Request, actor Record) {
 }
 
 func (a *App) admin(w http.ResponseWriter, r *http.Request, actor Record) {
+	if r.URL.Path == "/api/business-sites" || strings.HasPrefix(r.URL.Path, "/api/business-sites/") {
+		a.businessAPI(w, r, actor)
+		return
+	}
 	switch {
 	case r.URL.Path == "/api/fleet" || strings.HasPrefix(r.URL.Path, "/api/fleet/"):
 		a.fleetAPI(w, r, actor)
@@ -778,6 +792,10 @@ func (a *App) changeUser(w http.ResponseWriter, r *http.Request, actor Record) {
 		failure(w, 405, "方法不支持")
 		return
 	}
+	if err = a.validateBusinessUserQuota(record); err != nil {
+		failure(w, 409, err.Error())
+		return
+	}
 	if err = a.store.save(&record); err != nil {
 		failure(w, 409, "账号重复或保存失败")
 		return
@@ -894,6 +912,10 @@ func (a *App) saveNode(w http.ResponseWriter, r *http.Request, actor Record) {
 		n.Upstream, n.UpstreamType, n.BridgePort, n.BridgePassword = nil, "", 0, ""
 	}
 	if n.ExitID != "" {
+		if err = a.checkExclusiveBusinessExit(n.ExitID); err != nil {
+			failure(w, 409, err.Error())
+			return
+		}
 		p, e := a.store.pool(n.ExitID)
 		if e != nil || !p.Enabled {
 			failure(w, 400, "请选择已启用的 IP 池资源")
@@ -959,6 +981,12 @@ func (a *App) saveNode(w http.ResponseWriter, r *http.Request, actor Record) {
 		}
 		applyEgress(&n, result, nil)
 	}
+	if n.Exit == "direct" && n.Quality == nil {
+		if q := a.reusableQuality(n); q != nil {
+			n.Quality = q
+			applyQualityIdentity(&n, *q)
+		}
+	}
 	// Direct is a built-in choice. Only proxy exits are adopted into the pool.
 	shared, savePools := []Node{n}, []IPResource{}
 	if n.Exit != "direct" {
@@ -982,6 +1010,10 @@ func (a *App) saveNode(w http.ResponseWriter, r *http.Request, actor Record) {
 			}
 			p := resourceFromNode(n)
 			selected = &p
+		}
+		if err = a.checkExclusiveBusinessExit(selected.ID); err != nil {
+			failure(w, 409, err.Error())
+			return
 		}
 		if !selected.Enabled {
 			failure(w, 400, "该 IP 已停用，请在 IP 管理中启用")

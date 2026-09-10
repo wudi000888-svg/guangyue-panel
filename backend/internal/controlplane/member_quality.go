@@ -162,15 +162,13 @@ func (a *App) memberNodeQuality(w http.ResponseWriter, r *http.Request, actor Re
 	}
 	views := []MemberNodeQuality{}
 	if current.Active() {
-		nodes, err := a.store.nodes()
+		entries, err := a.subscriptionCatalog(current, pool == "public", protocol)
 		if err != nil {
 			failure(w, 500, "读取节点失败")
 			return
 		}
-		for _, n := range nodes {
-			if !memberMayUseNode(current, n) || (n.ManagedBy == publicManager) != (pool == "public") || protocol != "" && n.Protocol != protocol {
-				continue
-			}
+		for _, entry := range entries {
+			n := entry.node
 			views = append(views, MemberNodeQuality{ID: n.ID, Name: n.Name, Protocol: n.Protocol, ProbeIP: n.ProbeIP, Country: n.Country, CountryCode: n.CountryCode, CheckedAt: n.CheckedAt, Quality: memberQualityReport(n)})
 		}
 	}

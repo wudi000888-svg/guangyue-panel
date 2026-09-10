@@ -98,7 +98,7 @@ func Run() {
 		}
 		return
 	}
-	if cfg.edition() == "pro" {
+	if cfg.controller() {
 		debug.SetMemoryLimit(192 << 20)
 	} else {
 		debug.SetMemoryLimit(48 << 20)
@@ -127,8 +127,10 @@ func Run() {
 		}
 		return
 	}
-	if err = store.bootstrap(cfg.StateDir); err != nil {
-		log.Fatal(err)
+	if !cfg.businessAgent() {
+		if err = store.bootstrap(cfg.StateDir); err != nil {
+			log.Fatal(err)
+		}
 	}
 	if err = store.migratePublicSubscriptions(); err != nil {
 		log.Fatal(err)
@@ -225,7 +227,11 @@ func Run() {
 			}
 		})
 	}
-	startWorker(a.scheduleTasks)
+	if cfg.businessAgent() {
+		startWorker(a.businessAgentLoop)
+	} else {
+		startWorker(a.scheduleTasks)
+	}
 	if !cfg.Dev {
 		startWorker(a.egressLoop)
 	}

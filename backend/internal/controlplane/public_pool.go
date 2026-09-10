@@ -326,6 +326,9 @@ func (a *App) applyPublicSetLocked(desired []IPResource) error {
 			}
 		}
 		wantPools[p.ID] = true
+		if a.checkExclusiveBusinessExit(p.ID) != nil {
+			continue
+		}
 		for _, proto := range []string{"vless", "hy2"} {
 			// A re-discovered address gets a new node incarnation, so deleted
 			// HY2 credentials cannot become valid again when that proxy returns.

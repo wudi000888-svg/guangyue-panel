@@ -15,6 +15,9 @@ func TestPostgresBehaviors(t *testing.T) {
 		name string
 		run  func(*testing.T)
 	}{
+		{"business_lifecycle", TestBusinessLifecycle},
+		{"business_quota", TestBusinessAllocationsAndCounterRollback},
+		{"shared_quality", TestDirectQualitySharedAcrossProtocols},
 		{"authentication", TestUserIsolationAndCSRF},
 		{"traffic_checkpoints", TestTrafficCheckpointRestartAndQuota},
 		{"no_logs_accounting", TestRuntimeNoLogsPreservesAccountingAndExistingHistory},
