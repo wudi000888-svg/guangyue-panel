@@ -66,11 +66,17 @@ func TestPostgresRoundTripAndIsolation(t *testing.T) {
 	if _, err := src.Exec("INSERT INTO audit(id,at,actor,action,target) VALUES(?,?,?,?,?)", 19, int64(9000000000), "fixture", "copy", "target"); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := src.Exec("INSERT INTO users(id,username,doc,credentials,password,token_hash) VALUES(?,?,?,?,?,?)", 99, "retired", []byte(`{}`), []byte{1}, []byte{1}, "retired-hash"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := src.Exec("DELETE FROM users WHERE id=99"); err != nil {
+		t.Fatal(err)
+	}
 	if err := Copy(ctx, src, pg, true); err != nil {
 		t.Fatal(err)
 	}
 	var id int64
-	if err := pg.QueryRow("INSERT INTO users(username,doc,credentials,password,token_hash) VALUES(?,?,?,?,?) RETURNING id", "next", []byte(`{}`), []byte{8}, []byte{9}, "next-hash").Scan(&id); err != nil || id <= 42 {
+	if err := pg.QueryRow("INSERT INTO users(username,doc,credentials,password,token_hash) VALUES(?,?,?,?,?) RETURNING id", "next", []byte(`{}`), []byte{8}, []byte{9}, "next-hash").Scan(&id); err != nil || id <= 99 {
 		t.Fatal("sequence not preserved", id, err)
 	}
 	if _, err := pg.Exec("INSERT INTO sessions VALUES(?,?,?)", "orphan", 9999, 0); err == nil {
@@ -83,6 +89,9 @@ func TestPostgresRoundTripAndIsolation(t *testing.T) {
 	var count int
 	if err := other.QueryRow("SELECT COUNT(*) FROM users").Scan(&count); err != nil || count != 0 {
 		t.Fatal("site data leaked", count, err)
+	}
+	if _, err := pg.Exec("SELECT nextval(pg_get_serial_sequence(?, 'id'))", pg.schema+".users"); err != nil {
+		t.Fatal(err)
 	}
 	path := filepath.Join(t.TempDir(), "panel.db")
 	if err := pg.Snapshot(ctx, path); err != nil {
@@ -100,6 +109,10 @@ func TestPostgresRoundTripAndIsolation(t *testing.T) {
 	}
 	if err := back.QueryRow("SELECT expires FROM sessions WHERE user_id=42").Scan(&expires); err != nil || expires != 9000000000 {
 		t.Fatal("64 bit value changed", err)
+	}
+	var watermark int64
+	if err := back.QueryRow("SELECT seq FROM sqlite_sequence WHERE name='users'").Scan(&watermark); err != nil || watermark <= id {
+		t.Fatal("retired postgres sequence lost in snapshot", watermark, err)
 	}
 	if err := Copy(ctx, back, other, true); err != nil {
 		t.Fatal(err)
@@ -132,5 +145,22 @@ func TestUnknownMigrationIsRejectedEvenWithSameCount(t *testing.T) {
 	}
 	if err := d.Migrate(context.Background()); err == nil {
 		t.Fatal("unknown schema accepted")
+	}
+}
+
+func TestSQLiteCopyPreservesRetiredUserIdentity(t *testing.T) {
+	src, dst := sqliteTestDB(t), sqliteTestDB(t)
+	if _, err := src.Exec("INSERT INTO users(id,username,doc,credentials,password,token_hash) VALUES(?,?,?,?,?,?)", 99, "retired", []byte(`{}`), []byte{1}, []byte{1}, "retired-hash"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := src.Exec("DELETE FROM users WHERE id=99"); err != nil {
+		t.Fatal(err)
+	}
+	if err := Copy(context.Background(), src, dst, true); err != nil {
+		t.Fatal(err)
+	}
+	var id int64
+	if err := dst.QueryRow("INSERT INTO users(username,doc,credentials,password,token_hash) VALUES(?,?,?,?,?) RETURNING id", "new", []byte(`{}`), []byte{1}, []byte{1}, "new-hash").Scan(&id); err != nil || id <= 99 {
+		t.Fatal("retired identity was reused", id, err)
 	}
 }
