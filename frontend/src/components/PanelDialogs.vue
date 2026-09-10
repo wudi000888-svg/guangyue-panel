@@ -1,14 +1,22 @@
 <script setup lang="ts">
+import { computed, ref } from "vue";
+import { useModalFocus } from "../composables/useModalFocus";
 import { usePanelContext } from "../composables/panelContext";
 const { state, busy, error, notice, modal, editingID, userForm, nodeForm, ipForm, importMode, importForm, importFile, importFileReading, importIssues, clearPrivateFile, readPrivateFile, importSubscription, ipPool, selectedIP, ipStatus, ipBadge, passwordForm, probeResult, displayedNodeName, confirmation, defaultRealitySNI, editingDefaultDirect, bytes, exitName, go, saveUser, confirmUser, confirmed, editNode, probe, saveIP, saveNode, deleteNode, changePassword } = usePanelContext();
 import { Activity, ArrowUpRight, Check, CircleHelp, Download, Globe2, KeyRound, LoaderCircle, Plus, RefreshCw, ShieldCheck, Trash2, X } from "lucide-vue-next";
 import { t } from "../i18n";
 import CountryMark from "../CountryMark.vue";
+const editDialog=ref<HTMLElement|null>(null), confirmDialog=ref<HTMLElement|null>(null);
+useModalFocus(computed(()=>!!modal.value || !!confirmation.value), computed(()=>confirmation.value ? confirmDialog.value : editDialog.value), ()=>{
+  if(busy.value)return;
+  if(confirmation.value)confirmation.value=null;else modal.value='';
+});
 </script>
 <template>
 <div v-if="modal" class="modal-shade" @click.self="!busy && (modal = '')">
     <section
       class="modal"
+      ref="editDialog" tabindex="-1" :inert="!!confirmation"
       role="dialog"
       aria-modal="true"
       :aria-label="
@@ -148,9 +156,8 @@ import CountryMark from "../CountryMark.vue";
             type="password"
             autocomplete="new-password"
             :required="!editingID"
-            minlength="12"
             maxlength="72"
-        /></label>
+        /></label><p class="field-help">{{t('密码至少 1 位，无复杂度要求，最多 72 字节。')}}</p>
         <div class="field-row">
           <label
             >{{ t("流量额度 / GB") }}<input
@@ -474,7 +481,6 @@ import CountryMark from "../CountryMark.vue";
             v-model="passwordForm.password"
             type="password"
             autocomplete="new-password"
-            minlength="12"
             maxlength="72"
             required /></label
         ><label
@@ -482,10 +488,9 @@ import CountryMark from "../CountryMark.vue";
             v-model="passwordForm.confirm"
             type="password"
             autocomplete="new-password"
-            minlength="12"
             maxlength="72"
             required
-        /></label>
+        /></label><p class="field-help">{{t('密码至少 1 位，无复杂度要求，最多 72 字节。')}}</p>
         <p v-if="error" class="error" role="alert">{{ t(error) }}</p>
         <div class="modal-footer">
           <button type="button" @click="modal = ''">{{ t("取消") }}</button
@@ -496,7 +501,7 @@ import CountryMark from "../CountryMark.vue";
     </section>
   </div>
 <div v-if="confirmation" class="modal-shade confirm-shade">
-    <section class="modal confirmation" role="alertdialog" aria-modal="true">
+    <section ref="confirmDialog" tabindex="-1" class="modal confirmation" role="alertdialog" aria-modal="true" :aria-label="confirmation.title">
       <h2>{{ confirmation.title }}</h2>
       <p>{{ confirmation.detail }}</p>
       <p v-if="error" class="error">{{ t(error) }}</p>

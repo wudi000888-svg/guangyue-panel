@@ -228,7 +228,8 @@ const {page:listPage,pages:listPages,rows:listRows}=usePagination(filteredIPs);
                 </tr>
               </tbody>
             </table>
-          </ListTable>
+          <template #mobile>
+          <label class="mobile-list-select"><input type="checkbox" :aria-label="t('选择全部当前结果')" :disabled="busy || !filteredIPs.length" :checked="!!filteredIPs.length && selectedIPIDs.length === filteredIPs.length" :indeterminate="!!selectedIPIDs.length && selectedIPIDs.length < filteredIPs.length" @change="selectAll('ips',$event)"/>{{t('选择全部当前结果')}}</label>
           <div class="pool-cards">
             <article v-for="p in listRows" :key="p.id" class="node-card">
               <div class="node-card-head"><input class="row-select" type="checkbox" v-model="selectedIPIDs" :value="p.id" :aria-label="t('选择')+' '+ p.name" :disabled="busy"/>
@@ -310,6 +311,8 @@ const {page:listPage,pages:listPages,rows:listRows}=usePagination(filteredIPs);
             </article>
             <p v-if="!filteredIPs.length" class="empty">{{ t("没有匹配的 IP 资源") }}</p>
           </div>
+          </template>
+          </ListTable>
           <div class="table-caption">
             <span>{{ t("共") }}{{ filteredIPs.length }}{{ t("项资源") }}</span
             ><span>{{ t("测速：VPS 经所选出口 → Cloudflare · 每次最多 8 MiB") }}</span>

@@ -508,8 +508,8 @@ func (a *App) password(w http.ResponseWriter, r *http.Request, actor Record) {
 	if !decode(w, r, &input) {
 		return
 	}
-	if len(input.Password) < 12 || len(input.Password) > 72 {
-		failure(w, 400, "密码长度需为 12–72 个字节")
+	if len(input.Password) == 0 || len(input.Password) > 72 {
+		failure(w, 400, "密码不能为空，且不能超过 72 个字节")
 		return
 	}
 	if bcrypt.CompareHashAndPassword(actor.Password, []byte(input.Current)) != nil {
@@ -660,8 +660,8 @@ func (a *App) createUser(w http.ResponseWriter, r *http.Request, actor Record) {
 	if !decode(w, r, &input) {
 		return
 	}
-	if !validUser(input) || len(input.Password) < 12 || len(input.Password) > 72 {
-		failure(w, 400, "账号需为 3–32 位字母、数字或 ._-，密码至少 12 位，额度与到期时间需有效")
+	if !validUser(input) || len(input.Password) == 0 || len(input.Password) > 72 {
+		failure(w, 400, "账号需为 3–32 位字母、数字或 ._-，密码需非空且不超过 72 个字节，额度与到期时间需有效")
 		return
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(input.Password), 12)
@@ -747,8 +747,8 @@ func (a *App) changeUser(w http.ResponseWriter, r *http.Request, actor Record) {
 			return
 		}
 		if input.Password != "" {
-			if len(input.Password) < 12 || len(input.Password) > 72 {
-				failure(w, 400, "密码长度需为 12–72 位")
+			if len(input.Password) > 72 {
+				failure(w, 400, "密码不能为空，且不能超过 72 个字节")
 				return
 			}
 			record.Password, err = bcrypt.GenerateFromPassword([]byte(input.Password), 12)

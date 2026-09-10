@@ -10,6 +10,7 @@ import sys
 import tempfile
 import time
 import urllib.request
+import urllib.parse
 import uuid
 from pathlib import Path
 if os.geteuid()!=0 or os.environ.get('GITHUB_ACTIONS')!='true':raise SystemExit('Disposable GitHub runner required')
@@ -32,6 +33,13 @@ def updater(path,body=None):
 def api(path,body=None,cookie=''):
  req=urllib.request.Request('http://127.0.0.1:19100'+path,data=None if body is None else json.dumps(body).encode(),headers={'Content-Type':'application/json','X-Requested-With':'guangyue','Cookie':cookie})
  with urllib.request.build_opener(urllib.request.ProxyHandler({})).open(req,timeout=35) as response:return json.load(response),response.headers.get('Set-Cookie','').split(';')[0]
+def same_connections(before,after):
+ # Egress discovery updates the display-only fragment asynchronously. Compare
+ # every connection parameter and each node ID without racing that label.
+ def connections(value):return {n['id']:urllib.parse.urldefrag(n['uri'])[0] for n in value['nodes']}
+ assert connections(before)==connections(after), 'node identity or connection parameters changed'
+ if sorted(n['uri'] for n in before['nodes'])!=sorted(n['uri'] for n in after['nodes']):
+  print('PASS automatic display-name refresh preserved every node connection parameter',flush=True)
 def finished():
  for _ in range(120):
   code,data=updater('/state');op=data.get('operation') or {}
@@ -68,7 +76,7 @@ try:
  code,replayed=updater('/apply',request);assert code==200 and replayed['request_id']==op['request_id']
  result=finished();assert result['current_version']==target and result['installed_version']=='0.16.0'
  assert api('/api/health')[0]['version']==target
- after,_=api('/api/subscription',cookie=cookie);assert sorted(n['uri'] for n in before['nodes'])==sorted(n['uri'] for n in after['nodes'])
+ after,_=api('/api/subscription',cookie=cookie);same_connections(before,after)
  code,newstate=api('/api/updates',cookie=cookie);assert code['available']
  print('PASS '+edition+' socket-activated verified update, idempotency, target health and stable subscription',flush=True)
  # Create data AFTER the upgrade; rolling back must not restore the older database snapshot.
@@ -79,7 +87,7 @@ try:
  api('/api/updates/apply',request,cookie);result=finished()
  assert result['current_version']=='0.16.0' and result['installed_version']=='0.16.0'
  state_after,_=api('/api/state',cookie=cookie);assert any(u['username']=='after-update' for u in state_after['users'])
- after,_=api('/api/subscription',cookie=cookie);assert sorted(n['uri'] for n in before['nodes'])==sorted(n['uri'] for n in after['nodes'])
+ after,_=api('/api/subscription',cookie=cookie);same_connections(before,after)
  print('PASS '+edition+' authenticated rollback preserves new users, subscription and installation floor',flush=True)
  forbidden=dict(action='rollback',version='0.15.0',expected_version='0.16.0',request_id=str(uuid.uuid4()))
  assert updater('/apply',forbidden)[0]==409;assert api('/api/health')[0]['version']=='0.16.0'

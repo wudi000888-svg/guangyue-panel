@@ -3,6 +3,7 @@ import {computed,nextTick,onMounted,onBeforeUnmount,ref,watch} from 'vue';
 import {ArrowUpCircle,History,RefreshCw,X,LoaderCircle,CheckCircle2,ExternalLink} from 'lucide-vue-next';
 import {t} from '../i18n';
 import {activeStages,newerVersion,updateOutcome,type UpdateState,type VersionOperation} from '../lib/updater';
+const emit=defineEmits<{open:[]}>();
 const props=defineProps<{version:string}>();
 const open=ref(false),busy=ref(false),error=ref(''),info=ref<UpdateState|null>(null),selected=ref(''),confirm=ref<'update'|'rollback'|null>(null),rollbackVersion=ref(''),pending=ref<VersionOperation|null>(null),countdown=ref<number|null>(null),waiting=ref(false);
 const storeKey='guangyue-version-operation';let timer:ReturnType<typeof setTimeout>|undefined;let stopped=false;let countdownUntil=0;
@@ -14,7 +15,8 @@ const running=computed(()=>!!pending.value);
 const operation=computed(()=>info.value?.operation?.request_id===pending.value?.request_id?info.value?.operation:pending.value);
 const available=computed(()=>!!info.value?.available);
 const dialog=ref<HTMLElement|null>(null);let previousFocus:HTMLElement|null=null;let previousOverflow='';let previousInert=false;let isolated=false;
-function releaseDialog(){if(!isolated)return;const app=document.getElementById('app');if(app)app.inert=previousInert;document.body.style.overflow=previousOverflow;previousFocus?.focus();isolated=false;}
+function releaseDialog(){if(!isolated)return;const app=document.getElementById('app');if(app)app.inert=previousInert;document.body.style.overflow=previousOverflow;isolated=false;void nextTick(()=>{if(previousFocus?.getClientRects().length&&getComputedStyle(previousFocus).visibility!=='hidden')previousFocus.focus();else document.querySelector<HTMLElement>('.mobile-menu')?.focus();});}
+watch(open,value=>{if(value)emit('open');},{flush:'sync'});
 watch([open,confirm,running],async()=>{
  if(!open.value){releaseDialog();return;}
  if(!isolated){previousFocus=document.activeElement as HTMLElement;previousOverflow=document.body.style.overflow;const app=document.getElementById('app');previousInert=app?.inert||false;if(app)app.inert=true;document.body.style.overflow='hidden';isolated=true;}

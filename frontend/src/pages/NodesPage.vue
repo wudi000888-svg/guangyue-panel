@@ -166,7 +166,8 @@ const {page:listPage,pages:listPages,rows:listRows}=usePagination(filteredNodes)
                 </tr>
               </tbody>
             </table>
-          </ListTable>
+          <template #mobile>
+          <label class="mobile-list-select"><input type="checkbox" :aria-label="t('选择全部当前结果')" :disabled="busy || !selectableNodes.length" :checked="!!selectableNodes.length && selectedNodeIDs.length === selectableNodes.length" :indeterminate="!!selectedNodeIDs.length && selectedNodeIDs.length < selectableNodes.length" @change="selectAll('nodes',$event)"/>{{t('选择全部当前结果')}}</label>
           <div class="node-cards mobile-node-cards">
             <article v-for="n in listRows" :key="n.id" class="node-card">
               <div class="node-card-head"><input class="row-select" type="checkbox" v-model="selectedNodeIDs" :value="n.id" :aria-label="t('选择')+' '+ n.name" :disabled="busy || n.default_direct"/>
@@ -267,6 +268,8 @@ const {page:listPage,pages:listPages,rows:listRows}=usePagination(filteredNodes)
             </article>
             <p v-if="!filteredNodes.length" class="empty">{{ t("没有匹配的节点") }}</p>
           </div>
+          </template>
+          </ListTable>
           <div class="table-caption">
             <span>{{ t("共") }}{{ filteredNodes.length }}{{ t("个节点") }}</span
             ><span>{{ t("名称根据实际出口自动更新") }}</span>

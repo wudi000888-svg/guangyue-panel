@@ -57,7 +57,7 @@ const {page:listPage,pages:listPages,rows:listRows}=usePagination(users);
             ><span class="muted">{{ users.length }}{{ t("位成员") }}</span>
           </div>
           <ListTable :total="users.length" v-model:page="listPage" :pages="listPages">
-            <table>
+            <table class="adaptive-table">
               <thead>
                 <tr>
                   <th>{{ t("成员") }}</th>
@@ -71,7 +71,7 @@ const {page:listPage,pages:listPages,rows:listRows}=usePagination(users);
               </thead>
               <tbody>
                 <tr v-for="u in listRows" :key="u.id">
-                  <td>
+                  <td :data-label="t('成员')">
                     <div class="user-cell">
                       <span class="avatar small">{{
                         u.username.slice(0, 1).toUpperCase()
@@ -84,20 +84,20 @@ const {page:listPage,pages:listPages,rows:listRows}=usePagination(users);
                       </div>
                     </div>
                   </td>
-                  <td>
+                  <td :data-label="t('状态')">
                     <span
                       :class="['badge', active(u) ? 'success' : 'danger']"
                       >{{ userStatus(u) }}</span
                     >
                   </td>
-                  <td>
+                  <td :data-label="t('协议')">
                     <div class="protocol-tags">
                       <span v-if="u.vless" class="tag vless">VLESS</span
                       ><span v-if="u.hy2" class="tag hy2">HY2</span
                       ><span v-if="!u.vless && !u.hy2" class="muted">{{ t("无") }}</span>
                     </div>
                   </td>
-                  <td>
+                  <td :data-label="t('流量使用')">
                     <div class="usage-text">
                       {{ bytes(u.upload + u.download)
                       }}<span>/ {{ u.quota ? bytes(u.quota) : t("不限") }}</span>
@@ -109,11 +109,11 @@ const {page:listPage,pages:listPages,rows:listRows}=usePagination(users);
                       />
                     </div>
                   </td>
-                  <td>{{ date(u.expires) }}</td>
-                  <td>
+                  <td :data-label="t('到期时间')">{{ date(u.expires) }}</td>
+                  <td :data-label="t('最近订阅')">
                     {{ u.last_sub ? date(u.last_sub, true) : t("尚未获取") }}
                   </td>
-                  <td>
+                  <td :data-label="t('操作')">
                     <div class="row-actions">
                       <button class="icon" :title="t('查看订阅')" @click="showSub(u)">
                         <QrCode :size="17" /></button
