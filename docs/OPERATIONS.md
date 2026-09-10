@@ -82,7 +82,7 @@ sudo systemctl start guangyue guangyue-xray guangyue-hy2
 
 ### BBR 与 HY2 优化
 
-0.19.0 起，Lite / Pro 主控 / Pro 业务站新安装默认启用两项优化；已有部署升级保留原系统参数和显式选择。
+0.19.1 起，Lite / Pro 主控 / Pro 业务站新安装默认启用两项优化；已有部署升级保留原系统参数和显式选择。
 
 - **BBR**：设置 `net.ipv4.tcp_congestion_control=bbr`、`net.core.default_qdisc=fq`，必要时加载 `tcp_bbr`。作用于新建 TCP 连接，不替换运行中网卡的 qdisc，不保证所有线路提速。
 - **HY2**：采用 `congestion.type=bbr`、`bbrProfile=standard`、`ignoreClientBandwidth=true`，避免客户端声明带宽强制限速或切换 Brutal。保持 2 MiB 流窗口 / 5 MiB 连接窗口和 256 流并发。UDP 接收/发送上限至少 8 MiB，已有更大值不下调，也不按上限预分配内存。

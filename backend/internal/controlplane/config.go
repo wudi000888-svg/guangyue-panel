@@ -17,7 +17,7 @@ import (
 	"path/filepath"
 )
 
-const version = "0.19.0"
+const version = "0.19.1"
 
 type Config struct {
 	HY2Optimized    bool                `json:"hy2_optimized,omitempty"`

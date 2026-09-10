@@ -124,6 +124,42 @@ func TestQueueShutdownRequeuesWork(t *testing.T) {
 	awaitState(t, m, task.ID, "queued")
 }
 
+func TestClaimedTaskCancelledBeforeHandlerStarts(t *testing.T) {
+	for _, terminal := range []string{"", "cancelled"} {
+		t.Run("state="+terminal, func(t *testing.T) {
+			m := testManager(t, 4)
+			m.Register("work", func(context.Context, Task) (json.RawMessage, error) {
+				t.Error("handler ran after shutdown")
+				return nil, nil
+			})
+			task, err := m.Submit(context.Background(), "work", "node", "v1", 2)
+			if err != nil {
+				t.Fatal(err)
+			}
+			claimed, found, err := m.claim(context.Background())
+			if err != nil || !found {
+				t.Fatal("task was not claimed", err)
+			}
+			if terminal == "cancelled" {
+				if err = m.Cancel(context.Background(), task.ID); err != nil {
+					t.Fatal(err)
+				}
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			cancel()
+			m.execute(ctx, claimed)
+			want := "queued"
+			if terminal != "" {
+				want = terminal
+			}
+			got, err := m.Get(context.Background(), task.ID)
+			if err != nil || got.State != want {
+				t.Fatalf("wanted %s after shutdown, got %s: %v", want, got.State, err)
+			}
+		})
+	}
+}
+
 func TestNoLogsPrunesIdleResults(t *testing.T) {
 	m := testManager(t, 4)
 	m.opts.RetainHistory = func() bool { return false }
@@ -154,6 +190,7 @@ func TestPostgresQueue(t *testing.T) {
 	t.Run("dedup_cancel", TestQueueDedupCapacityAndCancellation)
 	t.Run("recovery_delivery", TestQueueRecoveryAndDelivery)
 	t.Run("shutdown", TestQueueShutdownRequeuesWork)
+	t.Run("shutdown_before_handler", TestClaimedTaskCancelledBeforeHandlerStarts)
 }
 
 func TestQueueAlreadyCancelledShutdown(t *testing.T) {
