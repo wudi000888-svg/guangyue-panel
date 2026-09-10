@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import {computed,onMounted,onBeforeUnmount,ref} from 'vue';
+import {computed,nextTick,onMounted,onBeforeUnmount,ref,watch} from 'vue';
 import {ArrowUpCircle,History,RefreshCw,X,LoaderCircle,CheckCircle2,ExternalLink} from 'lucide-vue-next';
 import {t} from '../i18n';
 import {activeStages,newerVersion,updateOutcome,type UpdateState,type VersionOperation} from '../lib/updater';
@@ -13,6 +13,13 @@ const current=computed(()=>info.value?.current_version||props.version);
 const running=computed(()=>!!pending.value);
 const operation=computed(()=>info.value?.operation?.request_id===pending.value?.request_id?info.value?.operation:pending.value);
 const available=computed(()=>!!info.value?.available);
+const dialog=ref<HTMLElement|null>(null);let previousFocus:HTMLElement|null=null;let previousOverflow='';let previousInert=false;let isolated=false;
+function releaseDialog(){if(!isolated)return;const app=document.getElementById('app');if(app)app.inert=previousInert;document.body.style.overflow=previousOverflow;previousFocus?.focus();isolated=false;}
+watch([open,confirm,running],async()=>{
+ if(!open.value){releaseDialog();return;}
+ if(!isolated){previousFocus=document.activeElement as HTMLElement;previousOverflow=document.body.style.overflow;const app=document.getElementById('app');previousInert=app?.inert||false;if(app)app.inert=true;document.body.style.overflow='hidden';isolated=true;}
+ await nextTick();if(open.value&&!dialog.value?.contains(document.activeElement))dialog.value?.focus();
+});
 async function request(path:string,method='GET',body?:unknown){
  const response=await fetch('/api/updates'+path,{method,credentials:'same-origin',cache:'no-store',headers:{'Content-Type':'application/json','X-Requested-With':'guangyue'},body:body===undefined?undefined:JSON.stringify(body),signal:AbortSignal.timeout(30000)});
  let data:any={};try{data=await response.json();}catch{/* The proxy may return a restart page. */}
@@ -50,13 +57,23 @@ async function apply(){
  finally{busy.value=false;schedule();}
 }
 function close(){if(!running.value)open.value=false;confirm.value=null;}
-function escape(e:KeyboardEvent){if(e.key==='Escape')close();}
+function escape(e:KeyboardEvent){
+ if(!open.value)return;
+ if(e.key==='Escape'){e.preventDefault();close();}
+ if(e.key==='Tab'){
+  const items=Array.from(dialog.value?.querySelectorAll<HTMLElement>('button:not(:disabled),a[href],select:not(:disabled),summary,[tabindex="0"]')||[]).filter(el=>el.getClientRects().length);
+  const first=items[0],last=items.at(-1),active=document.activeElement;
+  if(!first){e.preventDefault();dialog.value?.focus();}
+  else if(e.shiftKey&&(active===first||active===dialog.value)){e.preventDefault();last?.focus();}
+  else if(!e.shiftKey&&(active===last||active===dialog.value)){e.preventDefault();first.focus();}
+ }
+}
 onMounted(async()=>{try{const saved=JSON.parse(sessionStorage.getItem(storeKey)||'null');if(saved?.request_id&&saved?.version){remember(saved);open.value=true;}}catch{/* Ignore invalid browser state. */}await load();schedule();document.addEventListener('keydown',escape);});
-onBeforeUnmount(()=>{stopped=true;clearTimeout(timer);document.removeEventListener('keydown',escape);});
+onBeforeUnmount(()=>{stopped=true;clearTimeout(timer);document.removeEventListener('keydown',escape);releaseDialog();});
 </script>
 <template>
  <div class="version-control"><button class="version-badge" :class="{update:releases.length}" @click="toggle" :title="t('版本与更新')" :aria-label="t('版本与更新')" :aria-expanded="open"><ArrowUpCircle :size="13"/><span>v{{current}}</span><i v-if="releases.length"/></button></div>
- <Teleport to="body"><div v-if="open" class="version-shade" @click.self="close"><section class="version-popover" role="dialog" aria-modal="true" :aria-label="t('版本与更新')">
+ <Teleport to="body"><div v-if="open" class="version-shade" @click.self="close"><section ref="dialog" tabindex="-1" class="version-popover" role="dialog" aria-modal="true" :aria-label="t('版本与更新')">
   <header><div><span class="eyebrow">GUANGYUE PANEL</span><h2>{{t('版本与更新')}}</h2></div><button class="icon" :disabled="running" @click="close" :aria-label="t('关闭')"><X :size="18"/></button></header>
   <div class="version-current"><strong>v{{current}}</strong><span>{{t('当前运行版本')}}</span><small v-if="info?.installed_version">{{t('安装基线')}} · v{{info.installed_version}}</small></div>
   <p v-if="error" class="error" role="alert">{{t(error)}}</p>

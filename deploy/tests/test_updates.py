@@ -99,6 +99,15 @@ class UpdateTests(unittest.TestCase):
             with self.assertRaises(ValueError):upgrade.rollback('0.17.0')
             mutation.assert_not_called()
 
+    def test_corrupted_backup_is_rejected_before_replacing_current_app(self):
+        old=self.root/'backup';(old/'app').mkdir(parents=True);(old/'app/VERSION').write_text('0.17.0')
+        (old/'app-checksums.json').write_text(json.dumps(upgrade.app_hashes(old/'app')))
+        (old/'app/VERSION').write_text('0.16.0')
+        with patch.object(state,'candidates',return_value=[{'version':'0.17.0','compatible':True,'backup':str(old)}]),patch.object(upgrade,'transaction') as mutation:
+            with self.assertRaises(ValueError):upgrade.rollback('0.17.0')
+            mutation.assert_not_called()
+        self.assertEqual(state.current(),'0.18.0')
+
     def test_manual_rollback_keeps_current_configuration_database_and_baseline(self):
         old = self.root/'backup';(old/'app').mkdir(parents=True);(old/'app/VERSION').write_text('0.17.0')
         (old/'app-checksums.json').write_text(json.dumps(upgrade.app_hashes(old/'app')))
@@ -115,6 +124,14 @@ class UpdateTests(unittest.TestCase):
         with patch.object(agent,'deployment_lock',return_value=nullcontext()),patch.object(upgrade,'restore_current') as restore:
             agent.recover();restore.assert_called_once_with(Path('/root/guangyue-backups/upgrade-fixture'))
         self.assertIsNone(state.read('transaction.json'));self.assertEqual(state.read('operation.json')['stage'],'failed');self.assertEqual(state.baseline()['version'],'0.17.0')
+
+    def test_interruption_before_backup_restarts_and_checks_original_version(self):
+        from contextlib import nullcontext
+        state.write('operation.json',dict(self.request(),stage='backing_up'))
+        state.write('transaction.json',{'target':'0.19.0','previous':'0.18.0','phase':'preparing'})
+        with patch.object(agent,'deployment_lock',return_value=nullcontext()),patch.object(upgrade,'run') as run,patch.object(upgrade,'health') as health,patch.object(upgrade,'restore_current') as restore:
+            agent.recover();run.assert_called_once_with('systemctl','start',*upgrade.UNITS);health.assert_called_once_with('0.18.0');restore.assert_not_called()
+        self.assertIsNone(state.read('transaction.json'));self.assertEqual(state.read('operation.json')['stage'],'failed')
 
     def test_symlink_cannot_redirect_root_state_write(self):
         victim=self.root/'victim';victim.write_text('original');(state.ROOT/'operation.json.new').symlink_to(victim)

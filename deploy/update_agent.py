@@ -188,7 +188,12 @@ def execute(request, local_bundle=None):
         # Record locations and exception type only; command arguments/output may
         # contain credentials and must never reach the journal or browser.
         frames = ','.join(Path(f.filename).name + ':' + str(f.lineno) for f in traceback.extract_tb(exc.__traceback__))
-        print('Update failure ' + type(exc).__name__ + ' at ' + frames, file=sys.stderr, flush=True)
+        detail = ''
+        if isinstance(exc, subprocess.CalledProcessError):
+            stderr = (exc.stderr or b'').decode(errors='replace') if isinstance(exc.stderr, bytes) else (exc.stderr or '')
+            markers = ['permission denied', 'read-only file system', 'operation not permitted', 'resource temporarily unavailable', 'no such file', 'already has a controller', 'could not acquire site controller lease', 'incomplete application configuration', 'runtime: failed', 'pam', 'rlimit', 'getcwd']
+            detail = ' exit=' + str(exc.returncode) + ' reasons=' + ','.join(m for m in markers if m in stderr.lower())
+        print('Update failure ' + type(exc).__name__ + ' at ' + frames + detail, file=sys.stderr, flush=True)
         with lock:
             op = state.read('operation.json') or dict(request)
             op.update(stage='failed', updated_at=int(time.time()), error=str(exc) if isinstance(exc, ValueError) else '更新未完成，已尝试恢复原版本；请检查运行状态')
