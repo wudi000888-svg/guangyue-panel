@@ -23,6 +23,8 @@ Codes use 128 random bits. Code records store a hash and suffix. Original genera
 
 ## Balance and orders
 
+Since 0.21.2, the header shows the signed-in account’s available balance and opens the wallet when clicked, including on mobile. The tooltip and accessible label include held funds. When an administrator selects another member in the wallet, the header continues to show the administrator’s own balance. Redemption, adjustments and order actions refresh it immediately; visible pages also refresh every 30 seconds and when revisited. Loading or failed reads display “—” instead of a misleading zero. Local balance is hidden while managing an independent remote site.
+
 Amounts are stored as integer cents. Minimum positive amount: CNY 0.01. Maximum transaction amount and total account balance: CNY 1 billion. An authenticated owner session can credit, gift or debit an unarchived account without a second password prompt. A reason is still required, every change is audited in the immutable ledger and integrity-checked, and regular members cannot adjust balances. Negative balances are prohibited.
 
 Every movement posts balanced ledger entries and updates the wallet in one transaction. Startup reconciliation and wallet checkpoints detect inconsistencies and block financial writes. These are internal accounting records, not proof of an externally verified payment. There are no withdrawals, transfers, overdrafts or automatic renewals. Node multipliers consume quota, not additional cash.

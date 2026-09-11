@@ -2,6 +2,14 @@
 .topbar .top-actions{flex-shrink:0}.topbar .page-context{flex:1;min-width:0}
 .topbar .header-account>span:last-child{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .drawer-close,.mobile-tools-button,.mobile-quick-nav{display:none}
+.topbar .header-balance{flex-shrink:0;display:inline-flex;align-items:center;gap:9px;min-height:44px;padding:6px 12px;border:1px solid var(--accent-soft);border-radius:12px;background:var(--accent-soft);color:var(--accent-text);text-align:left;white-space:nowrap}
+.header-balance-copy{display:flex;flex-direction:column;gap:2px}.header-balance-label{font-size:10px;line-height:1.2}.header-balance-amount{font-size:14px;line-height:1.25;font-weight:650;font-variant-numeric:tabular-nums}
+.topbar .header-balance:hover{border-color:var(--accent-text)}.topbar .header-balance.unavailable{background:var(--surface-raised);border-color:var(--border);color:var(--muted)}
+.topbar:has(.header-balance) .page-context p{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(min-width:901px) and (max-width:1200px){
+ .app-shell .topbar:has(.header-balance){display:grid;grid-template-columns:minmax(0,1fr) auto;height:auto;gap:8px 12px;padding-top:10px;padding-bottom:10px}
+ .topbar:has(.header-balance) .top-actions{grid-column:1/-1;justify-self:end}
+}
 @media(min-width:901px) and (max-width:1200px){.topbar .header-account>span:last-child,.topbar .page-context p,.topbar .breadcrumb-group{display:none}.topbar .top-actions{gap:5px}}
 @media(max-width:900px){
  .app-shell .topbar{height:64px;min-height:64px;flex-wrap:nowrap;padding:0 12px;gap:8px}
@@ -26,4 +34,8 @@
  .mobile-quick-nav{position:fixed;bottom:0;left:0;right:0;z-index:35;display:flex;flex-direction:row;justify-content:space-around;gap:0;padding:6px 8px calc(6px + env(safe-area-inset-bottom));background:var(--surface);border-top:1px solid var(--border);box-shadow:0 -4px 20px #00000005}
  .mobile-quick-nav button{height:auto;min-height:52px;flex:1;max-width:150px;gap:5px;padding:5px 2px;flex-direction:column;justify-content:center;font-size:11px;border-radius:10px;white-space:normal;text-align:center;line-height:1.25}
  .app-shell .content{padding-bottom:calc(80px + env(safe-area-inset-bottom))}
+ .app-shell .topbar:has(.header-balance){display:grid;grid-template-columns:auto minmax(0,1fr) auto;height:auto;gap:6px 8px;padding-top:8px;padding-bottom:10px}
+ .topbar:has(.header-balance) .top-actions{grid-column:3;grid-row:1}
+ .topbar .header-balance{grid-column:1/-1;grid-row:2;width:100%;padding:8px 12px}
+ .header-balance-copy{flex:1;min-width:0;flex-direction:row;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:2px 12px}.header-balance-label{font-size:12px}.header-balance-amount{font-size:16px}
 }
