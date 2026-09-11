@@ -36,6 +36,8 @@ type Plan struct {
 	GroupIDs    []string `json:"group_ids"`
 	VLESS       bool     `json:"vless"`
 	HY2         bool     `json:"hy2"`
+	// Price is the package's default catalog price in integer CNY cents.
+	Price int64 `json:"price,string,omitempty"`
 }
 
 func normalizeNodePolicy(n Node) Node {

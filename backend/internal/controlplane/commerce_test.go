@@ -311,3 +311,21 @@ func TestCommerceMoneyValidation(t *testing.T) {
 		t.Fatal(w.Code)
 	}
 }
+
+func TestAdminBalanceAdjustmentUsesOwnerSessionOnly(t *testing.T) {
+	a := testApp(t)
+	owner := testUser(t, a, "owner", "owner")
+	member := testUser(t, a, "member", "user")
+	// No password is sent: the authenticated owner session is the control.
+	w := req(t, a, owner, "POST", "/api/commerce/adjust", object{"user_id": member.ID, "amount": "1250", "kind": "credit", "reason": "support credit", "operation_id": randomToken(24)})
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	balance, e := a.store.wallet(member.ID)
+	if e != nil || balance.Available != 1250 {
+		t.Fatalf("balance=%+v err=%v", balance, e)
+	}
+	if w = req(t, a, member, "POST", "/api/commerce/adjust", object{"user_id": member.ID, "amount": "1", "kind": "credit", "reason": "forged", "operation_id": randomToken(24)}); w.Code != 403 {
+		t.Fatal(w.Code)
+	}
+}

@@ -4,7 +4,7 @@ import type { SiteSettings } from "./PanelSettings.vue";
 
 export type QuotaMeter = {period_id:string;start:number;end:number;pending_reset:boolean;upload:number;download:number;base_upload:number;base_download:number;raw_base_upload:number;raw_base_download:number};
 export type Entitlement = {plan_id:string;version:number;name:string;group_ids:string[];cycle:string;timezone:string;assigned_at:number;revision:string};
-export type Plan = {id:string;version:number;name:string;description:string;category:string;notes:string;archived:boolean;sort:number;quota:number;valid_days:number;cycle:string;timezone:string;group_ids:string[];vless:boolean;hy2:boolean};
+export type Plan = {id:string;version:number;name:string;description:string;category:string;notes:string;archived:boolean;sort:number;quota:number;valid_days:number;cycle:string;timezone:string;group_ids:string[];vless:boolean;hy2:boolean;price?:string};
 export type NodeGroup = {id:string;name:string;description:string;scope:'private'|'public';enabled:boolean;sort:number;revision:string};
 export type GroupMember = {site_id:string;node_id:string;name:string;protocol:string};
 export type User = {

@@ -185,15 +185,23 @@ func (a *App) adjustBalance(w http.ResponseWriter, r *http.Request, actor Record
 		Kind        string `json:"kind"`
 		Reason      string `json:"reason"`
 		OperationID string `json:"operation_id"`
-		Password    string `json:"password"`
+		// Accepted for backward compatibility with older clients; never read or
+		// persisted. A logged-in owner session is the authorization factor.
+		Password string `json:"password"`
 	}
 	if !decode(w, r, &in) {
 		return nil
 	}
-	if _, e := a.commerceActor(actor, true, in.Password); e != nil {
+	// A valid owner session is sufficient for manual balance operations. The
+	// operation remains audited and protected by the operation id and ledger
+	// integrity checks, so routine adjustments do not require a second prompt.
+	current, e := a.commerceActor(actor, false, "")
+	if e != nil {
 		return e
 	}
-	in.Password = ""
+	if current.Role != "owner" {
+		return commerceFail(403, "需要管理员权限")
+	}
 	amount, e := moneyValue(in.Amount)
 	if e != nil {
 		return e
