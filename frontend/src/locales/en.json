@@ -1993,5 +1993,11 @@
   "套餐价格": "Package price",
   "套餐价格 / 元": "Package price / CNY",
   "用于套餐目录和新销售配置，订单会保存价格快照": "Used in the package catalog and new offers; orders keep a price snapshot",
-  "当前管理员会话可直接调整余额，操作会永久记入资金流水": "The active administrator session can adjust balances directly; every change is permanently recorded"
+  "当前管理员会话可直接调整余额，操作会永久记入资金流水": "The active administrator session can adjust balances directly; every change is permanently recorded",
+  "请及时保存兑换码，列表支持重新查看明文": "Save the redemption codes securely. The list can reveal them again later.",
+  "部分历史兑换码未保存明文，无法恢复": "Some historical codes were never stored in plaintext and cannot be recovered.",
+  "已显示选中兑换码明文": "Selected redemption code plaintext is now visible.",
+  "已查看的兑换码明文": "Viewed redemption code plaintext",
+  "查看明文": "Reveal plaintext",
+  "历史兑换码无法恢复明文": "Historical code plaintext cannot be recovered"
 }

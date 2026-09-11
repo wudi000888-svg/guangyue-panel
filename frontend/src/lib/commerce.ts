@@ -8,7 +8,7 @@ export const walletRevision = ref(0);
 export interface MoneyTransaction {id:string;kind:string;amount:string;available:string;held:string;reason:string;reference:string;created:number}
 export interface Offer {id:string;version:number;enabled:boolean;price:string;plan:Plan}
 export interface Order {id:string;user_id:number;state:string;created:number;updated:number;expires:number;offer:Offer;action:string;before_expiry:number;message:string}
-export interface Redemption {id:string;batch_id:string;suffix:string;amount:string;expires:number;state:string;redeemed_by:number;redeemed_at:number;note:string}
+export interface Redemption {id:string;batch_id:string;suffix:string;amount:string;expires:number;state:string;redeemed_by:number;redeemed_at:number;note:string;has_secret?:boolean}
 export interface Ticket {id:string;user_id:number;title:string;category:string;state:string;priority:string;order_id:string;site_id:string;node_id:string;resource:string;created:number;updated:number;closed:number;revision:string}
 export interface TicketReply {id:string;ticket_id:string;user_id:number;sender:string;body:string;internal:boolean;attachments:string[];created:number}
 export function cents(value:string):string{if(!/^(0|[1-9]\d*)(\.\d{1,2})?$/.test(value))throw new Error(t('金额最多两位小数'));const [whole,fraction='']=value.split('.');const n=BigInt(whole)*100n+BigInt(fraction.padEnd(2,'0'));if(n<=0n||n>100000000000n)throw new Error(t('金额超出限制'));return n.toString()}

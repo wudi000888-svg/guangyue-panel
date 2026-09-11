@@ -62,6 +62,8 @@ func (a *App) commerceAPI(w http.ResponseWriter, r *http.Request, actor Record) 
 		e = a.generateCodes(w, r, actor)
 	case "codes/revoke":
 		e = a.revokeCodes(w, r, actor)
+	case "codes/reveal":
+		e = a.revealCodes(w, r, actor)
 	case "redeem":
 		e = a.redeemCode(w, r, actor)
 	case "offers":
@@ -143,7 +145,7 @@ func (a *App) commerceGet(w http.ResponseWriter, r *http.Request, actor Record, 
 		if actor.Role != "owner" {
 			return commerceFail(403, "需要管理员权限")
 		}
-		rows, e := a.store.db.Query("SELECT id,batch_id,suffix,amount,expires,revoked,redeemed_by,redeemed_at,created,note FROM redeem_codes WHERE id<? ORDER BY id DESC LIMIT 50", pageCursor(r))
+		rows, e := a.store.db.Query("SELECT id,batch_id,suffix,amount,expires,revoked,redeemed_by,redeemed_at,created,note,code_secret IS NOT NULL FROM redeem_codes WHERE id<? ORDER BY id DESC LIMIT 50", pageCursor(r))
 		if e != nil {
 			return e
 		}
@@ -152,7 +154,8 @@ func (a *App) commerceGet(w http.ResponseWriter, r *http.Request, actor Record, 
 		for rows.Next() {
 			var id, batch, suffix, note string
 			var amount, expires, revoked, user, used, created int64
-			if e = rows.Scan(&id, &batch, &suffix, &amount, &expires, &revoked, &user, &used, &created, &note); e != nil {
+			var hasSecret bool
+			if e = rows.Scan(&id, &batch, &suffix, &amount, &expires, &revoked, &user, &used, &created, &note, &hasSecret); e != nil {
 				return e
 			}
 			state := "unused"
@@ -163,7 +166,7 @@ func (a *App) commerceGet(w http.ResponseWriter, r *http.Request, actor Record, 
 			} else if expires > 0 && expires <= time.Now().Unix() {
 				state = "expired"
 			}
-			items = append(items, object{"id": id, "batch_id": batch, "suffix": suffix, "amount": moneyString(amount), "expires": expires, "state": state, "redeemed_by": user, "redeemed_at": used, "created": created, "note": note})
+			items = append(items, object{"id": id, "batch_id": batch, "suffix": suffix, "amount": moneyString(amount), "expires": expires, "state": state, "redeemed_by": user, "redeemed_at": used, "created": created, "note": note, "has_secret": hasSecret})
 		}
 		if e = rows.Err(); e != nil {
 			return e
@@ -293,7 +296,11 @@ func (a *App) generateCodes(w http.ResponseWriter, r *http.Request, actor Record
 		code := "GY-" + raw[:8] + "-" + raw[8:16] + "-" + raw[16:]
 		id := serial("GYC")
 		suffix := raw[len(raw)-6:]
-		if _, e = tx.Exec("INSERT INTO redeem_codes(id,batch_id,code_hash,suffix,amount,expires,created,actor_id,note) VALUES(?,?,?,?,?,?,?,?,?)", id, batch, digest(raw), suffix, amount, in.Expires, now, actor.ID, in.Note); e != nil {
+		secret, sealErr := a.store.vault.seal(code)
+		if sealErr != nil {
+			return sealErr
+		}
+		if _, e = tx.Exec("INSERT INTO redeem_codes(id,batch_id,code_hash,suffix,amount,expires,created,actor_id,note,code_secret) VALUES(?,?,?,?,?,?,?,?,?,?)", id, batch, digest(raw), suffix, amount, in.Expires, now, actor.ID, in.Note, secret); e != nil {
 			return e
 		}
 		codes = append(codes, object{"id": id, "code": code})
@@ -318,8 +325,12 @@ func (a *App) revokeCodes(w http.ResponseWriter, r *http.Request, actor Record) 
 	if !decode(w, r, &in) {
 		return nil
 	}
-	if _, e := a.commerceActor(actor, true, in.Password); e != nil {
+	current, e := a.commerceActor(actor, false, "")
+	if e != nil {
 		return e
+	}
+	if current.Role != "owner" {
+		return commerceFail(403, "需要管理员权限")
 	}
 	in.Password = ""
 	if len(in.IDs) < 1 || len(in.IDs) > 100 {
@@ -352,6 +363,65 @@ func (a *App) revokeCodes(w http.ResponseWriter, r *http.Request, actor Record) 
 	if e != nil {
 		return e
 	}
+	jsonResponse(w, 200, result)
+	return nil
+}
+
+// revealCodes recovers encrypted plaintext only for an already authenticated
+// owner session.  It deliberately does not accept a password: the session is
+// the authorization factor, matching the administrator's normal controls.
+func (a *App) revealCodes(w http.ResponseWriter, r *http.Request, actor Record) error {
+	var in struct {
+		IDs         []string `json:"ids"`
+		OperationID string   `json:"operation_id"`
+	}
+	if !decode(w, r, &in) {
+		return nil
+	}
+	current, e := a.commerceActor(actor, false, "")
+	if e != nil {
+		return e
+	}
+	if current.Role != "owner" {
+		return commerceFail(403, "需要管理员权限")
+	}
+	if len(in.IDs) < 1 || len(in.IDs) > 100 {
+		return commerceFail(400, "请选择 1–100 个兑换码")
+	}
+	if b, e := a.store.commerceReplay(actor.ID, in.OperationID, in); e != nil {
+		return e
+	} else if b != nil {
+		w.Header().Set("Cache-Control", "no-store")
+		jsonResponse(w, 200, json.RawMessage(b))
+		return nil
+	}
+	items := []object{}
+	seen := map[string]bool{}
+	for _, id := range in.IDs {
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		var secret []byte
+		if e = a.store.db.QueryRow("SELECT code_secret FROM redeem_codes WHERE id=?", id).Scan(&secret); errors.Is(e, sql.ErrNoRows) {
+			return commerceFail(404, "兑换码不存在")
+		} else if e != nil {
+			return e
+		}
+		if len(secret) == 0 {
+			items = append(items, object{"id": id, "available": false, "reason": "历史兑换码未保存明文，无法恢复"})
+			continue
+		}
+		var code string
+		if e = a.store.vault.open(secret, &code); e != nil {
+			return errors.New("兑换码明文解密失败")
+		}
+		items = append(items, object{"id": id, "available": true, "code": code})
+	}
+	result := object{"items": items}
+	// Do not persist this response: it contains plaintext credentials. The
+	// caller can request the same records again with a fresh operation id.
+	w.Header().Set("Cache-Control", "no-store")
 	jsonResponse(w, 200, result)
 	return nil
 }
