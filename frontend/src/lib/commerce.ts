@@ -3,6 +3,8 @@ import { useApi, isCancelled } from './api';
 import { t } from '../i18n';
 import type { Plan } from '../types';
 export interface Wallet {user_id:number;available:string;held:string;currency:string}
+// A successful money operation invalidates the header's read of our own wallet.
+export const walletRevision = ref(0);
 export interface MoneyTransaction {id:string;kind:string;amount:string;available:string;held:string;reason:string;reference:string;created:number}
 export interface Offer {id:string;version:number;enabled:boolean;price:string;plan:Plan}
 export interface Order {id:string;user_id:number;state:string;created:number;updated:number;expires:number;offer:Offer;action:string;before_expiry:number;message:string}
@@ -17,7 +19,7 @@ export const stateText=(s:string)=>t(states[s]||s);
 export function useCommerce(prefix='/commerce'){
  const api=useApi(prefix),busy=ref(false),error=ref(''),notice=ref(''),keys=new Map<string,string>();
  async function run<T>(path:string,body:Record<string,unknown>):Promise<T|null>{if(busy.value)return null;busy.value=true;error.value='';notice.value='';const safe={...body};delete safe.password;const fingerprint=path+JSON.stringify(safe),id=keys.get(fingerprint)||crypto.randomUUID();keys.set(fingerprint,id);
- try{const v=await api<T>(path,'POST',{...body,operation_id:id});keys.delete(fingerprint);return v}catch(e){if(!isCancelled(e))error.value=e instanceof Error?t(e.message):t('请求失败');return null}finally{busy.value=false}}
+ try{const v=await api<T>(path,'POST',{...body,operation_id:id});keys.delete(fingerprint);if(prefix==='/commerce'&&['/redeem','/adjust','/orders/action'].includes(path))walletRevision.value++;return v}catch(e){if(!isCancelled(e))error.value=e instanceof Error?t(e.message):t('请求失败');return null}finally{busy.value=false}}
  async function read<T>(path:string):Promise<T|null>{try{return await api<T>(path)}catch(e){if(!isCancelled(e))error.value=e instanceof Error?t(e.message):t('请求失败');return null}}
  return {api,run,read,busy,error,notice};
 }

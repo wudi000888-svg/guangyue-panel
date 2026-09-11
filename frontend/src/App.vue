@@ -5,6 +5,7 @@ import { usePanel } from "./composables/usePanel";
 import { panelKey } from "./composables/panelContext";
 import PanelDialogs from "./components/PanelDialogs.vue";
 import PanelUpdater from "./components/PanelUpdater.vue";
+import HeaderBalance from "./components/HeaderBalance.vue";
 const panel=usePanel();
 provide(panelKey,panel);
 const { selectedSite, selectedSiteName, switchSite, api, state, ready, busy, error, page, mobileNav, site, login, modal, theme, sideCollapsed, viewMode, simpleMode, toggleTheme, confirmation, owner, pendingHY, titles, pageDescriptions, nav, navGroups, currentGroup, date, refresh, task, signIn, signOut, go } = panel;
@@ -179,6 +180,7 @@ onBeforeUnmount(() => { closeMobile(); desktop?.removeEventListener('change', on
           </h1>
           <p>{{ t(pageDescriptions[page]) }}</p>
         </div>
+        <HeaderBalance v-if="!selectedSite" :key="state.me.id" :user-id="state.me.id"/>
         <div class="top-actions">
  <button v-if="selectedSite" class="site-switch desktop-action" @click="switchSite('')">{{selectedSiteName}} · {{t('返回本站')}}</button>
  <span v-else class="edition-badge desktop-action">{{state.system.edition==='pro'?'PRO':'LITE'}}</span>
