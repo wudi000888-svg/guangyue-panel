@@ -4,7 +4,7 @@ Available in **0.21.0+**, on Lite and Pro controllers. Open **Account & services
 
 ## Enable the services
 
-1. Create a plan with the required node groups, allowance, period, protocols and validity.
+1. Create a plan with the required node groups, allowance, period, protocols, validity and “Package price / CNY”. Prices are stored as integer cents and plan edits create a new template version.
 2. In **Buy a plan**, create an offer with a plan version and CNY price, then enable sales for that offer.
 3. In **System settings → Balance, redemption codes and support**, enable plan purchases and verify the current administrator password.
 4. Credit members using redemption codes or an administrator balance adjustment.
@@ -23,7 +23,7 @@ Codes use 128 random bits. Code records store a hash and suffix. Original genera
 
 ## Balance and orders
 
-Amounts are stored as integer cents. Minimum positive amount: CNY 0.01. Maximum transaction amount and total account balance: CNY 1 billion. Administrators can credit, gift or debit unarchived accounts, with a reason and password confirmation. Negative balances are prohibited.
+Amounts are stored as integer cents. Minimum positive amount: CNY 0.01. Maximum transaction amount and total account balance: CNY 1 billion. An authenticated owner session can credit, gift or debit an unarchived account without a second password prompt. A reason is still required, every change is audited in the immutable ledger and integrity-checked, and regular members cannot adjust balances. Negative balances are prohibited.
 
 Every movement posts balanced ledger entries and updates the wallet in one transaction. Startup reconciliation and wallet checkpoints detect inconsistencies and block financial writes. These are internal accounting records, not proof of an externally verified payment. There are no withdrawals, transfers, overdrafts or automatic renewals. Node multipliers consume quota, not additional cash.
 

@@ -199,7 +199,7 @@ func (a *App) validatePlan(p *Plan) error {
 	if p.Cycle == "" {
 		p.Cycle = "none"
 	}
-	if p.Sort < 0 || p.Sort > 9999 || p.Name == "" || len(p.Name) > 100 || len(p.Description) > 2000 || len(p.Category) > 100 || len(p.Notes) > 2000 || p.Quota < 0 || p.Quota > 1<<60 || p.ValidDays < 0 || p.ValidDays > 36500 || !p.VLESS && !p.HY2 || len(p.GroupIDs) == 0 {
+	if p.Sort < 0 || p.Sort > 9999 || p.Name == "" || len(p.Name) > 100 || len(p.Description) > 2000 || len(p.Category) > 100 || len(p.Notes) > 2000 || p.Quota < 0 || p.Quota > 1<<60 || p.Price < 0 || p.Price > moneyLimit || p.ValidDays < 0 || p.ValidDays > 36500 || !p.VLESS && !p.HY2 || len(p.GroupIDs) == 0 {
 		return errors.New("请填写有效的套餐名称、额度、有效期、协议和节点组")
 	}
 	if _, err := domain.NextPeriod(time.Now().Unix(), p.Cycle, p.Timezone); err != nil {

@@ -1986,5 +1986,9 @@
   "金额必须是正整数分": "Amount must be a positive integer in cents",
   "首版仅支持当前套餐同版本续费": "Only renewal of the same plan version is currently supported",
   "历史记录只读": "Historical records are read-only",
-  "订单需由所属用户确认": "The order must be confirmed by its account owner"
+  "订单需由所属用户确认": "The order must be confirmed by its account owner",
+  "套餐价格": "Package price",
+  "套餐价格 / 元": "Package price / CNY",
+  "用于套餐目录和新销售配置，订单会保存价格快照": "Used in the package catalog and new offers; orders keep a price snapshot",
+  "当前管理员会话可直接调整余额，操作会永久记入资金流水": "The active administrator session can adjust balances directly; every change is permanently recorded"
 }

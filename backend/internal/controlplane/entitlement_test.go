@@ -19,6 +19,27 @@ func createTestPlan(t *testing.T, a *App, owner Record) Plan {
 	}
 	return p
 }
+
+func TestPlanPriceRoundTrip(t *testing.T) {
+	a := testApp(t)
+	owner := testUser(t, a, "owner", "owner")
+	p := Plan{Name: "Starter", Price: 1999, Quota: 1000, ValidDays: 30, Cycle: "30d", GroupIDs: []string{legacyPrivateGroup}, VLESS: true}
+	w := req(t, a, owner, "POST", "/api/plans", p)
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	var saved Plan
+	if e := json.Unmarshal(w.Body.Bytes(), &saved); e != nil {
+		t.Fatal(e)
+	}
+	if saved.Price != 1999 {
+		t.Fatalf("saved price=%d", saved.Price)
+	}
+	plans, e := a.store.plans()
+	if e != nil || len(plans) != 1 || plans[0].Price != 1999 {
+		t.Fatalf("stored plans=%+v err=%v", plans, e)
+	}
+}
 func applyTestEntitlement(t *testing.T, a *App, owner Record, in entitlementRequest) {
 	t.Helper()
 	in.Preview = true
