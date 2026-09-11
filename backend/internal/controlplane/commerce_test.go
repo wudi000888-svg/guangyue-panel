@@ -7,6 +7,7 @@ import (
 	"image"
 	"image/png"
 	"net/http"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -131,6 +132,41 @@ func TestCommerceRedemptionAtomicAndRevocation(t *testing.T) {
 	a.store.db.QueryRow("SELECT SUM(available) FROM wallet_accounts").Scan(&total)
 	if total != 5000 {
 		t.Fatal(total)
+	}
+}
+
+func TestCommerceCodeRevokeWithoutPasswordAndReveal(t *testing.T) {
+	a := testApp(t)
+	owner := testUser(t, a, "owner", "owner")
+	alice := testUser(t, a, "alice", "user")
+	codes := testCodes(t, a, owner, 2, time.Now().Unix()+1000)
+
+	// A valid owner session is sufficient for batch revocation.
+	w := req(t, a, owner, "POST", "/api/commerce/codes/revoke", object{
+		"ids": []any{codes[0]["id"], codes[1]["id"]}, "operation_id": randomToken(24),
+	})
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"revoked":2`) {
+		t.Fatalf("passwordless batch revoke: %d %s", w.Code, w.Body.String())
+	}
+
+	// Plaintext is encrypted at rest and can be recovered by the owner after
+	// the UI hides it. A regular user cannot use the reveal endpoint.
+	w = req(t, a, alice, "POST", "/api/commerce/codes/reveal", object{"ids": []any{codes[0]["id"]}, "operation_id": randomToken(24)})
+	if w.Code != 403 {
+		t.Fatalf("non-owner reveal: %d", w.Code)
+	}
+	w = req(t, a, owner, "POST", "/api/commerce/codes/reveal", object{"ids": []any{codes[0]["id"], codes[1]["id"]}, "operation_id": randomToken(24)})
+	if w.Code != 200 || !strings.Contains(w.Body.String(), codes[0]["code"].(string)) || !strings.Contains(w.Body.String(), codes[1]["code"].(string)) {
+		t.Fatalf("owner reveal: %d %s", w.Code, w.Body.String())
+	}
+	for _, id := range []any{codes[0]["id"], codes[1]["id"]} {
+		var encrypted []byte
+		if e := a.store.db.QueryRow("SELECT code_secret FROM redeem_codes WHERE id=?", id).Scan(&encrypted); e != nil || len(encrypted) == 0 {
+			t.Fatalf("missing encrypted secret: %v", e)
+		}
+		if bytes.Contains(encrypted, []byte(codes[0]["code"].(string))) {
+			t.Fatal("plaintext redemption code stored at rest")
+		}
 	}
 }
 func commerceOffer(t *testing.T, a *App, owner Record) Offer {
