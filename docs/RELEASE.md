@@ -22,7 +22,18 @@
 
 ## 构建和草稿 Release
 
-1. 更新 VERSION、后端常量、前端 package/lock、文档与 CHANGELOG。
+### 主分支自动发布
+
+`.github/workflows/auto-release.yml` 在每次提交进入 `main` 后自动执行：
+
+1. 将 `VERSION` 的补丁号递增，并同步 Go、Vue、README 和变更记录。
+2. 运行完整检查、前端生产构建、Go 构建和 HY2 核心测试构建。
+3. 生成 Lite/Pro Linux amd64 安装包、`SHA256SUMS` 与 `SBOM.spdx.json`。
+4. 提交版本更新、创建对应 `vX.Y.Z` tag，并创建 GitHub Draft Release。
+
+版本提交带有 `[skip ci] [skip release]`，不会再次触发发布循环。任一检查或构建失败时不会创建 tag 或 Release。功能分支提交只运行 CI，合并到 `main` 后才生成版本和安装包。
+
+1. 手动发布仍可更新 VERSION、后端常量、前端 package/lock、文档与 CHANGELOG。
 2. 运行 `scripts/check.sh`、HY2 补丁测试、许可证收集与打包；执行 `gitleaks dir` 及提交历史扫描。
 3. 运行 Ubuntu 部署集成 CI，检查安装、Nginx/服务、证书、升级与回滚结果；网络协议回归需单独验证真实客户端。
 4. 提交并打版本 tag，等待 CI 成功。通过 Actions 的 `Draft release` 手动流程生成草稿，或维护者从已验证本地包上传。
