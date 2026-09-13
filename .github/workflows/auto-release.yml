@@ -1,0 +1,58 @@
+name: Commit release
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: commit-release-main
+  cancel-in-progress: false
+
+jobs:
+  release:
+    # A commit to main produces the next patch release and its two install bundles.
+    if: ${{ !contains(github.event.head_commit.message, '[skip release]') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          token: ${{ github.token }}
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: '1.26.8'
+          cache-dependency-path: backend/go.sum
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d682002 # v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Increment patch version
+        id: version
+        run: echo "version=$(python3 scripts/bump-version.py)" >> "$GITHUB_OUTPUT"
+      - name: Run checks and build install cores
+        run: bash scripts/check.sh && bash scripts/build.sh && bash scripts/build-hy2-core.sh --test
+      - name: Build notices and install bundles
+        run: python3 scripts/third-party.py && python3 scripts/package.py
+      - name: Commit version and tag
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add VERSION backend/internal/controlplane/config.go frontend/package.json frontend/package-lock.json README.md CHANGELOG.md
+          git commit -m "release: v${VERSION} [skip ci] [skip release]"
+          git tag -a "v${VERSION}" -m "广月面板 v${VERSION}"
+          git push origin HEAD:main "v${VERSION}"
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          gh release create "v${VERSION}" --verify-tag --title "广月面板 v${VERSION}" \
+            --notes-file CHANGELOG.md --draft \
+            build/releases/*.tar.gz build/releases/SHA256SUMS build/releases/SBOM.spdx.json
