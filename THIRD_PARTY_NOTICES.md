@@ -3,7 +3,7 @@
 | 组件 | 固定版本/来源 | 许可 | 分发方式 |
 | --- | --- | --- | --- |
 | 广月面板 | 本仓库 | LGPL-3.0-only | 源码与应用二进制，保留 fake-ui 上游版权 |
-| Xray-core | [v26.3.27](https://github.com/XTLS/Xray-core/tree/v26.3.27) | MPL-2.0 | 获取脚本直接从上游下载，未捆绑在本项目应用包 |
+| Xray-core | [v26.3.27](https://github.com/XTLS/Xray-core/tree/v26.3.27) + guangyue-sessions1 | MPL-2.0 | 包内提供会话计数扩展版、完整修改源码、补丁与原始许可；见 core-patches |
 | Hysteria | app/v2.9.2 / `c3a806b5cbbb20fe72099529573da26b1a2e9f22` | MIT | 应用包含节点路由补丁版；补丁和构建说明在 core-patches |
 | Mihomo | [v1.19.30](https://github.com/MetaCubeX/mihomo/tree/v1.19.30) | GPL-3.0 | 获取脚本直接从上游下载，未捆绑在本项目应用包 |
 | Vue | 以 package-lock.json 为准 | MIT | 编译进入前端 |

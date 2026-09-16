@@ -218,6 +218,8 @@ func (a *App) dispatchAuthenticated(w http.ResponseWriter, r *http.Request, acto
 		a.state(w, r, actor)
 	case r.Method == "GET" && r.URL.Path == "/api/dashboard":
 		a.dashboard(w, r, actor)
+	case r.Method == "GET" && r.URL.Path == "/api/monitor":
+		a.liveAPI(w, r, actor)
 	case r.Method == "GET" && r.URL.Path == "/api/subscription":
 		a.subscriptionInfo(w, r, actor)
 	case r.Method == "GET" && r.URL.Path == "/api/usage":

@@ -411,8 +411,10 @@ func (a *App) collect() error {
 		return nil
 	}
 	counters := []Counter{}
+	live := liveInput{counts: [2]map[int64]int64{{}, {}}}
 	var errs []error
-	b, err := a.xapi("statsquery", "-pattern=user>>>")
+	// A non-reset query includes the capability marker and session gauges.
+	b, err := a.xapi("statsquery")
 	if err == nil {
 		var result struct {
 			Stat []struct {
@@ -423,13 +425,22 @@ func (a *App) collect() error {
 		err = json.Unmarshal(b, &result)
 		if err == nil {
 			generation := strconv.Itoa(corePID("guangyue-xray.service"))
+			live.generation[0], live.traffic[0] = generation, true
 			for _, s := range result.Stat {
-				parts := strings.Split(s.Name, ">>>")
-				if len(parts) != 4 {
+				value, e := s.Value.Int64()
+				if e != nil || value < 0 {
 					continue
 				}
-				value, e := s.Value.Int64()
-				if e != nil {
+				if s.Name == "guangyue>>>monitor>>>version" && value == 1 {
+					live.connections[0] = true
+					continue
+				}
+				parts := strings.Split(s.Name, ">>>")
+				if len(parts) == 3 && parts[0] == "user" && parts[2] == "connections" {
+					live.counts[0][idFromEmail(parts[1])] += value
+					continue
+				}
+				if len(parts) != 4 || parts[0] != "user" || parts[2] != "traffic" || (parts[3] != "uplink" && parts[3] != "downlink") || idFromEmail(parts[1]) <= 0 {
 					continue
 				}
 				direction := "down"
@@ -452,6 +463,7 @@ func (a *App) collect() error {
 		err = json.Unmarshal(b, &result)
 		if err == nil {
 			generation := strconv.Itoa(corePID("guangyue-hy2.service"))
+			live.generation[1], live.traffic[1] = generation, true
 			for id, s := range result {
 				uid, _ := strconv.ParseInt(strings.TrimPrefix(strings.SplitN(id, ".", 2)[0], "u"), 10, 64)
 				// HY2 Tx/Rx is measured at the server-to-target side: Tx is upload.
@@ -462,6 +474,20 @@ func (a *App) collect() error {
 	if err != nil {
 		errs = append(errs, errors.New("HY2 traffic unavailable"))
 	}
+	if b, e := a.hyRequest("GET", "/online", nil); e == nil {
+		var online map[string]int64
+		if json.Unmarshal(b, &online) == nil && online != nil {
+			live.connections[1] = true
+			for id, count := range online {
+				uid, _ := strconv.ParseInt(strings.TrimPrefix(strings.SplitN(id, ".", 2)[0], "u"), 10, 64)
+				if uid > 0 && count >= 0 {
+					live.counts[1][uid] += count
+				}
+			}
+		}
+	}
+	live.at, live.counters = time.Now(), counters
+	a.monitor.sample(live)
 	if err = a.store.account(counters); err != nil {
 		return err
 	}

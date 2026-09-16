@@ -1,0 +1,60 @@
+[
+  {
+    "id": "clash-verge", "name": "Clash Verge Rev", "version": "2.5.2", "format": "Mihomo", "protocols": ["VLESS", "HY2"], "paid": false,
+    "source": "https://github.com/clash-verge-rev/clash-verge-rev/releases", "note": "桌面端 Mihomo 客户端；Linux 直链为 Debian / Ubuntu 安装包。",
+    "downloads": [
+      {"platform":"Windows","arch":"x64","url":"https://github.com/clash-verge-rev/clash-verge-rev/releases/download/v2.5.2/Clash.Verge_2.5.2_x64-setup.exe"},
+      {"platform":"Windows","arch":"ARM64","url":"https://github.com/clash-verge-rev/clash-verge-rev/releases/download/v2.5.2/Clash.Verge_2.5.2_arm64-setup.exe"},
+      {"platform":"macOS","arch":"Apple Silicon","url":"https://github.com/clash-verge-rev/clash-verge-rev/releases/download/v2.5.2/Clash.Verge_2.5.2_aarch64.dmg"},
+      {"platform":"macOS","arch":"Intel","url":"https://github.com/clash-verge-rev/clash-verge-rev/releases/download/v2.5.2/Clash.Verge_2.5.2_x64.dmg"},
+      {"platform":"Linux","arch":"x64 · DEB","url":"https://github.com/clash-verge-rev/clash-verge-rev/releases/download/v2.5.2/Clash.Verge_2.5.2_amd64.deb"},
+      {"platform":"Linux","arch":"ARM64 · DEB","url":"https://github.com/clash-verge-rev/clash-verge-rev/releases/download/v2.5.2/Clash.Verge_2.5.2_arm64.deb"}
+    ]
+  },
+  {
+    "id":"flclash", "name":"FlClash", "version":"0.8.98", "format":"Mihomo", "protocols":["VLESS","HY2"], "paid":false,
+    "source":"https://github.com/chen08209/FlClash/releases", "note":"支持手机与桌面；Linux 直链为 Debian / Ubuntu 安装包。",
+    "downloads":[
+      {"platform":"Android","arch":"ARM64","url":"https://github.com/chen08209/FlClash/releases/download/v0.8.98/FlClash-0.8.98-android-arm64-v8a.apk"},
+      {"platform":"Android","arch":"ARMv7","url":"https://github.com/chen08209/FlClash/releases/download/v0.8.98/FlClash-0.8.98-android-armeabi-v7a.apk"},
+      {"platform":"Android","arch":"x64","url":"https://github.com/chen08209/FlClash/releases/download/v0.8.98/FlClash-0.8.98-android-x86_64.apk"},
+      {"platform":"Windows","arch":"x64","url":"https://github.com/chen08209/FlClash/releases/download/v0.8.98/FlClash-0.8.98-windows-amd64-setup.exe"},
+      {"platform":"Windows","arch":"ARM64","url":"https://github.com/chen08209/FlClash/releases/download/v0.8.98/FlClash-0.8.98-windows-arm64-setup.exe"},
+      {"platform":"macOS","arch":"Apple Silicon","url":"https://github.com/chen08209/FlClash/releases/download/v0.8.98/FlClash-0.8.98-macos-arm64.dmg"},
+      {"platform":"macOS","arch":"Intel","url":"https://github.com/chen08209/FlClash/releases/download/v0.8.98/FlClash-0.8.98-macos-amd64.dmg"},
+      {"platform":"Linux","arch":"x64 · DEB","url":"https://github.com/chen08209/FlClash/releases/download/v0.8.98/FlClash-0.8.98-linux-amd64.deb"},
+      {"platform":"Linux","arch":"ARM64 · DEB","url":"https://github.com/chen08209/FlClash/releases/download/v0.8.98/FlClash-0.8.98-linux-arm64.deb"}
+    ]
+  },
+  {
+    "id":"v2rayn", "name":"v2rayN", "version":"7.24.9", "format":"Base64 / Raw", "protocols":["VLESS"], "paid":false,
+    "source":"https://github.com/2dust/v2rayN/releases", "note":"HY2 需选择支持 Hysteria 2 的核心（如 sing-box）；默认 Xray 不提供 HY2。",
+    "downloads":[
+      {"platform":"Windows","arch":"x64 · ZIP","url":"https://github.com/2dust/v2rayN/releases/download/7.24.9/v2rayN-windows-64.zip"},
+      {"platform":"Windows","arch":"ARM64 · ZIP","url":"https://github.com/2dust/v2rayN/releases/download/7.24.9/v2rayN-windows-arm64.zip"},
+      {"platform":"macOS","arch":"Apple Silicon","url":"https://github.com/2dust/v2rayN/releases/download/7.24.9/v2rayN-macos-arm64.dmg"},
+      {"platform":"macOS","arch":"Intel","url":"https://github.com/2dust/v2rayN/releases/download/7.24.9/v2rayN-macos-64.dmg"},
+      {"platform":"Linux","arch":"x64 · DEB","url":"https://github.com/2dust/v2rayN/releases/download/7.24.9/v2rayN-linux-64.deb"},
+      {"platform":"Linux","arch":"ARM64 · DEB","url":"https://github.com/2dust/v2rayN/releases/download/7.24.9/v2rayN-linux-arm64.deb"}
+    ]
+  },
+  {
+    "id":"v2rayng", "name":"v2rayNG", "version":"2.2.6", "format":"Base64 / Raw", "protocols":["VLESS"], "paid":false,
+    "source":"https://github.com/2dust/v2rayNG/releases", "note":"Android Xray 客户端；请在面板订阅中选择 VLESS。",
+    "downloads":[
+      {"platform":"Android","arch":"ARM64","url":"https://github.com/2dust/v2rayNG/releases/download/2.2.6/v2rayNG_2.2.6_arm64-v8a.apk"},
+      {"platform":"Android","arch":"ARMv7","url":"https://github.com/2dust/v2rayNG/releases/download/2.2.6/v2rayNG_2.2.6_armeabi-v7a.apk"},
+      {"platform":"Android","arch":"x64","url":"https://github.com/2dust/v2rayNG/releases/download/2.2.6/v2rayNG_2.2.6_x86_64.apk"}
+    ]
+  },
+  {
+    "id":"cfa", "name":"Clash Meta for Android", "version":"", "format":"Mihomo", "protocols":["VLESS","HY2"], "paid":false,
+    "source":"https://github.com/MetaCubeX/ClashMetaForAndroid", "note":"F-Droid 下载页会标明版本与架构，请按设备选择 APK。",
+    "downloads":[{"platform":"Android","arch":"F-Droid","url":"https://f-droid.org/packages/com.github.metacubex.clash.meta/"}]
+  },
+  {
+    "id":"shadowrocket", "name":"Shadowrocket", "version":"", "format":"Base64 / Raw", "protocols":["VLESS","HY2"], "paid":true,
+    "source":"https://apps.apple.com/us/app/shadowrocket/id932747118", "note":"美区 App Store 官方页面；价格、系统要求与是否上架以账户所在地区商店为准。",
+    "downloads":[{"platform":"iOS / iPadOS","arch":"App Store","url":"https://apps.apple.com/us/app/shadowrocket/id932747118"}]
+  }
+]

@@ -2,6 +2,7 @@
 import { computed, toRaw, onMounted, onUnmounted, reactive, ref } from 'vue';
 import { Plus, RefreshCw, Server, Settings2, Download, Trash2, X } from 'lucide-vue-next';
 import { useApi, isCancelled } from '../lib/api';
+import { serialPoll } from '../lib/requests';
 import { download } from '../lib/download';
 import { usePanelContext } from '../composables/panelContext';
 import TablePageLayout from '../components/TablePageLayout.vue';
@@ -29,7 +30,10 @@ function addNode(){if(!editing.value||!pools.value.length)return;editing.value.n
 async function save(){const s=editing.value;if(!s)return;busy.value=true;error.value='';try{const grants=Object.entries(members.value).filter(([,v])=>v.selected).map(([id,v])=>({user_id:Number(id),quota:Math.round(v.gib*1073741824)}));await api('/'+s.id,'PUT',{name:s.name,group:s.group,enabled:s.enabled,exclusive:s.exclusive,revision:s.revision,default_nodes:s.default_nodes,nodes:s.nodes,grants});editing.value=null;await load();await refresh();}catch(e){if(!isCancelled(e))error.value=(e as Error).message;}finally{busy.value=false;}}
 async function remove(){if(!removing.value)return;busy.value=true;try{await api('/'+removing.value.id,'DELETE',{});removing.value=null;await load();}catch(e){if(!isCancelled(e))error.value=(e as Error).message;}finally{busy.value=false;}}
 async function detect(n:Node,kind:string){if(!editing.value)return;busy.value=true;error.value='';try{await api('/'+editing.value.id+'/tasks','POST',{kind,node_id:n.id});await load();editing.value.commands=sites.value.find(s=>s.id===editing.value?.id)?.commands;}catch(e){if(!isCancelled(e))error.value=(e as Error).message;}finally{busy.value=false;}}
-let timer:ReturnType<typeof setInterval>;onMounted(()=>{load();timer=setInterval(()=>{if(!busy.value&&!editing.value&&!creating.value&&!removing.value)load();},15000);});onUnmounted(()=>{clearInterval(timer);enrollment.value=null;});
+// Schedule after each request completes so a slow business-site response cannot
+// overlap the next refresh. Hidden tabs also stop polling until they are shown.
+const poll=serialPoll(async()=>{if(document.hidden||busy.value||editing.value||creating.value||removing.value)return;await load()},()=>15000);
+onMounted(()=>{void load();poll.start();});onUnmounted(()=>{poll.stop();enrollment.value=null;});
 </script>
 <template>
 <div class="business-page">

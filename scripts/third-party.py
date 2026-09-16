@@ -50,6 +50,9 @@ go_version = subprocess.check_output([go, 'env', 'GOVERSION'], cwd=root / 'backe
 collect('golang-go', go_version, goroot, 'generic', 'BSD-3-Clause')
 (out / 'GO-LICENSE.txt').write_text((Path(goroot) / 'LICENSE').read_text())
 go_modules(root / 'backend')
+xray_source = root / '.cache/xray-monitor-source'
+collect('github.com/xtls/xray-core', 'v26.3.27-guangyue-sessions1', xray_source, 'golang', 'MPL-2.0')
+go_modules(xray_source)
 for source in sorted((root / '.cache').glob('hysteria-node-*')):
     if (source / 'app/go.mod').is_file():
         go_modules(source / 'app')

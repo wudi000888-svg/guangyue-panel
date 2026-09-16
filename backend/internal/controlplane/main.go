@@ -50,6 +50,7 @@ type App struct {
 	status           string
 	syncError        string
 	trafficError     string
+	monitor          liveMonitor
 	appliedAt        int64
 	lastCoreHash     string
 	lastCoreCheck    time.Time

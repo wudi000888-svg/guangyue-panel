@@ -42,6 +42,9 @@ func AllowedGateway(method, path, scope string) bool {
 	if scope != "manage" {
 		return scope == "read" && method == "GET" && (u.Path == "/api/operations" || u.Path == "/api/dashboard")
 	}
+	if method == "GET" && u.Path == "/api/monitor" {
+		return true
+	}
 	for _, p := range []string{"/api/state", "/api/dashboard", "/api/subscription", "/api/node-quality", "/api/ips", "/api/nodes", "/api/users", "/api/import-sources", "/api/public-pool", "/api/tasks", "/api/settings", "/api/runtime-settings", "/api/operations"} {
 		if u.Path == p || strings.HasPrefix(u.Path, p+"/") {
 			return true

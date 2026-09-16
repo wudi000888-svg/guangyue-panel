@@ -1,0 +1,67 @@
+diff --git a/app/dispatcher/default.go b/app/dispatcher/default.go
+index e6f8965..d050464 100644
+--- a/app/dispatcher/default.go
++++ b/app/dispatcher/default.go
+@@ -122,6 +122,9 @@ func (d *DefaultDispatcher) Init(config *Config, om outbound.Manager, router rou
+ 	d.router = router
+ 	d.policy = pm
+ 	d.stats = sm
++	if c, _ := stats.GetOrRegisterCounter(sm, "guangyue>>>monitor>>>version"); c != nil {
++		c.Set(1)
++	}
+ 	return nil
+ }
+ 
+diff --git a/proxy/vless/inbound/inbound.go b/proxy/vless/inbound/inbound.go
+index 02dc947..230467c 100644
+--- a/proxy/vless/inbound/inbound.go
++++ b/proxy/vless/inbound/inbound.go
+@@ -597,6 +597,9 @@ func (h *Handler) Process(ctx context.Context, network net.Network, connection s
+ 		return errors.New("unknown request flow " + requestAddons.Flow).AtWarning()
+ 	}
+ 
++	if statsPolicy := h.policyManager.ForLevel(request.User.Level).Stats; statsPolicy.UserUplink || statsPolicy.UserDownlink {
++		dispatcher.TrackSession(ctx, h.stats, request.User.Email)
++	}
+ 	if request.Command != protocol.RequestCommandMux {
+ 		ctx = log.ContextWithAccessMessage(ctx, &log.AccessMessage{
+ 			From:   connection.RemoteAddr(),
+diff --git a/app/dispatcher/guangyue_sessions.go b/app/dispatcher/guangyue_sessions.go
+new file mode 100644
+index 0000000..a7b949d
+--- /dev/null
++++ b/app/dispatcher/guangyue_sessions.go
+@@ -0,0 +1,33 @@
++// SPDX-License-Identifier: MPL-2.0
++// Guangyue extension: authenticated VLESS sessions, not unique source IPs.
++package dispatcher
++
++import (
++	"context"
++	"sync"
++
++	"github.com/xtls/xray-core/features/stats"
++)
++
++// Registration must be serialized: simultaneous first sessions for one user
++// can otherwise lose a count when GetOrRegisterCounter loses its insert race.
++var sessionRegistration sync.Mutex
++
++// TrackSession is called once by the VLESS inbound, before any mux dispatch.
++// Counting at this boundary prevents counting both a mux carrier and its flows.
++func TrackSession(ctx context.Context, manager stats.Manager, email string) {
++	if email == "" {
++		return
++	}
++	if ctx.Done() == nil {
++		return
++	}
++	sessionRegistration.Lock()
++	c, _ := stats.GetOrRegisterCounter(manager, "user>>>"+email+">>>connections")
++	sessionRegistration.Unlock()
++	if c == nil {
++		return
++	}
++	c.Add(1)
++	context.AfterFunc(ctx, func() { c.Add(-1) })
++}
