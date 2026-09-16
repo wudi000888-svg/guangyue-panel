@@ -94,7 +94,7 @@ python3 scripts/package.py
 
 ## 5. 下载代理核心
 
-应用发布包包含广月程序、前端与经过节点路由补丁的 Hysteria。Xray 和 Mihomo 使用脚本从各自官方 Release 下载固定版本并核验 SHA256，不捆绑在应用压缩包内。
+应用发布包包含广月程序、前端、经过节点路由补丁的 Hysteria 和支持用户会话计数的 Xray（附完整修改源码）。Xray 脚本校验包内核心，不重复下载；Mihomo 脚本从官方 Release 下载固定版本并核验 SHA256。
 
 在已解压的版本包目录执行：
 

@@ -54,7 +54,7 @@ jobs:
           gitleaks dir "$scan_dir" --redact --no-banner
           gitleaks git . --redact --no-banner --log-opts=--all
       - run: bash scripts/build.sh
-      - run: bash scripts/build-hy2-core.sh --test
+      - run: bash scripts/build-hy2-core.sh --test && bash scripts/build-xray-core.sh --test
       - run: python3 scripts/third-party.py && python3 scripts/package.py
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:

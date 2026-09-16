@@ -10,7 +10,7 @@
 
 [English](README_EN.md) · [安装指南](docs/INSTALL.md) · [使用手册](docs/USER_GUIDE.md) · [Nginx 共存](docs/NGINX.md) · [运维与备份](docs/OPERATIONS.md)
 
-![version](https://img.shields.io/badge/version-0.21.5-2563eb)
+![version](https://img.shields.io/badge/version-0.22.0-2563eb)
 ![license](https://img.shields.io/badge/panel_license-LGPL--3.0-16a34a)
 ![platform](https://img.shields.io/badge/server-Linux_amd64-475569)
 
@@ -29,6 +29,8 @@
 | 套餐与倍率 | 节点 0–100×倍率、节点权限组、套餐分类与版本，手动分配/续期/周期重置，实际与配额双计量；[使用指南](docs/PLANS.md) |
 | 账户与服务 | 站内余额、定额兑换码（有效期/作废）、套餐订单、退款、图片工单与内部备注；[使用指南](docs/COMMERCE.md) |
 | 仪表盘 | 用户、节点、流量、出口与服务状态，快速进入常用操作 |
+| 实时监控 | 管理员查看每用户 VLESS 会话、HY2 连接与实时流量曲线；约 5 秒采样，当前站点范围 |
+| 客户端中心 | 6 款常见代理客户端，按系统与 CPU 架构提供官方安装入口；[使用说明](docs/LIVE-MONITORING.md) |
 | 节点管理 | VLESS Reality / Hysteria 2 多用户；保留两个默认直连节点；绑定出口创建新节点；批量操作 |
 | 私有 IP 池 | 独立出口 / 订阅出口 / 订阅来源分栏；HTTP CONNECT、SOCKS5、单节点和订阅导入 |
 | 来源管理 | 手动更新、删除，默认每日错峰自动更新；删除来源清理独占资源及绑定节点 |

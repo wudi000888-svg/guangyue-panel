@@ -52,7 +52,11 @@ def finished():
 try:
  # Use an authentic previous release, never a binary with an edited version label.
  old=agent.fetch_bundle('0.16.0',edition,base)
- for name in ['xray','mihomo']:shutil.copyfile(candidate/'bin'/(name+'-linux-amd64'),old/'bin'/(name+'-linux-amd64'));(old/'bin'/(name+'-linux-amd64')).chmod(0o755)
+ # The authentic old bundle expects its own upstream hashes. Fetch its pinned
+ # cores before verification; the candidate custom Xray is introduced only by
+ # the upgrade transaction.
+ agent.cores(old)
+ agent.verify_payload(old)
  cert,key=base/'cert.pem',base/'key.pem'
  run('openssl','req','-x509','-newkey','rsa:2048','-nodes','-days','3','-subj','/CN=panel.example.com','-addext','subjectAltName=DNS:panel.example.com,DNS:node.example.com','-keyout',str(key),'-out',str(cert))
  command=[sys.executable,str(old/'deploy/install.py'),'--bundle',str(old),'--panel-domain','panel.example.com','--node-domain','node.example.com','--cert',str(cert),'--key',str(key),'--apply']

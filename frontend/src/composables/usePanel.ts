@@ -364,6 +364,7 @@ const pendingHY = computed(
     )?.hy2_old_connections || 0,
 );
 const titles: Record<string, string> = {
+  clients: "客户端中心", monitor: "实时监控",
   wallet: "账户余额", shop: "购买套餐", orders: "订单管理", tickets: "工单中心", "redeem-codes": "兑换码管理",
   overview: "仪表盘",
   plans: "套餐管理",
@@ -382,6 +383,7 @@ const titles: Record<string, string> = {
   sources: "订阅来源",
 };
 const pageDescriptions: Record<string, string> = {
+  clients: "按系统与架构下载客户端，再导入对应格式的面板订阅", monitor: "查看每位用户的活跃连接与实时流量",
   wallet: "查看可用余额、冻结金额与收支明细", shop: "使用站内余额开通或续费套餐", orders: "追踪订单、开通进度与退款状态", tickets: "提交服务问题并跟进处理进度", "redeem-codes": "生成定额兑换码，管理有效期与作废状态",
   overview: "集中查看企业网络用量、出口与运行状态",
   plans: "管理套餐权益、节点权限组与手动授权",
@@ -400,7 +402,7 @@ const pageDescriptions: Record<string, string> = {
   sources: "管理上游订阅链接与每日错峰更新",
 };
 const allNavGroups = computed(() => [
-  {id:'workspace',label:t('工作台'),items:[{id:'overview',label:t('仪表盘'),icon:LayoutDashboard}]},
+  {id:'workspace',label:t('工作台'),items:[{id:'overview',label:t('仪表盘'),icon:LayoutDashboard},{id:'clients',label:t('客户端中心'),icon:Package},...(owner.value?[{id:'monitor',label:t('实时监控'),icon:RadioTower}]:[])]},
  {id:'access',label:t('成员与权益'),items:[...(owner.value?[{id:'users',label:t('用户管理'),icon:Users},{id:'plans',label:t('套餐管理'),icon:Package}]:[]),{id:'messages',label:t('站内信'),icon:Mail}]},
   ...(!selectedSite.value?[{id:'commerce',label:t('账户与服务'),items:[{id:'wallet',label:t('账户余额'),icon:Wallet},{id:'shop',label:t('购买套餐'),icon:ShoppingBag},{id:'orders',label:t('订单管理'),icon:Receipt},{id:'tickets',label:t('工单中心'),icon:Ticket},...(owner.value?[{id:'redeem-codes',label:t('兑换码管理'),icon:Gift}]:[])]}]:[]),
   {id:'business',label:t('业务资源'),items:[...(owner.value?[{id:'ips',label:t('私有 IP 池'),icon:Database},{id:'nodes',label:t('普通节点'),icon:RadioTower}]:[]),{id:'subscription',label:t('普通订阅'),icon:QrCode}]},
@@ -410,8 +412,8 @@ const allNavGroups = computed(() => [
 const navGroups = computed(() => {
   if (!simpleMode.value) return allNavGroups.value;
   const allowed = new Set(owner.value
-    ? ["overview", "users", "plans", "ips", "nodes", "subscription", "settings", "wallet", "shop", "orders", "tickets", "redeem-codes", "messages"]
-    : ["subscription", "wallet", "shop", "orders", "tickets", "messages"]);
+    ? ["overview", "clients", "monitor", "users", "plans", "ips", "nodes", "subscription", "settings", "wallet", "shop", "orders", "tickets", "redeem-codes", "messages"]
+    : ["clients", "subscription", "wallet", "shop", "orders", "tickets", "messages"]);
   return allNavGroups.value
     .map(group => ({ ...group, items: group.items.filter(item => allowed.has(item.id)) }))
     .filter(group => group.items.length);

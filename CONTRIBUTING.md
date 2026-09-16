@@ -10,6 +10,7 @@
 bash scripts/check.sh
 bash scripts/build.sh
 bash scripts/build-hy2-core.sh --test
+bash scripts/build-xray-core.sh --test
 python3 scripts/third-party.py
 python3 scripts/package.py
 ```
@@ -47,7 +48,7 @@ Hysteria 补丁变更必须运行其真实 QUIC/TCP/UDP 集成测试。测试使
 
 ## PR 与版本
 
-保持改动集中，描述用户可见行为、触发条件、测试与限制。修复安全问题遵循 SECURITY.md；不要在公开 issue 粘贴利用凭证。同步更新 `VERSION`、Go 版本常量、前端 package/lock 版本、文档与变更记录。发布流程只创建草稿，不自动转公开仓库。
+保持改动集中，描述用户可见行为、触发条件、测试与限制。修复安全问题遵循 SECURITY.md；不要在公开 issue 粘贴利用凭证。同步更新 `VERSION`、Go 版本常量、前端 package/lock 版本、文档与变更记录。版本发布流程上传并验证完整资产后发布 Release，不修改仓库公开状态。
 
 提交代码表示你有权以项目 LGPL-3.0-only 许可证贡献该代码；第三方代码需保留其原始许可与归属。
 

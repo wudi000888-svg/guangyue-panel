@@ -26,6 +26,8 @@ STATE = Path('/var/lib/guangyue')
 CONFIG = Path('/etc/guangyue-personal.json')
 UNITS = ['guangyue', 'guangyue-xray', 'guangyue-hy2']
 DEPLOY = Path(__file__).resolve().parent
+# package.py pins xray to the bundled reproducible build. Keeping the literal
+# map also lets older updater agents install it without replacing it upstream.
 UPSTREAM_HASHES = {
     'xray': '8255dd939c34cf966cc91517b6324dd3c8d0bcf49ffac8beca049a38c46845ed',
     'mihomo': '8ad44e28fe72be4640254b96741b677f4074991b99186cc4486a1c28ded02b1a',  # gitleaks:allow public upstream SHA256

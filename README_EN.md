@@ -26,7 +26,7 @@ The release installer supports **Linux amd64 with Debian 12/13 or Ubuntu 22.04/2
 
 1. Point one or two DNS names to your VPS. One name works; separate panel and node names are recommended. Open TCP 80/443 and UDP 443.
 2. Follow the [complete installation guide](docs/INSTALL.md) for packages, ACME certificates and checksum-verified release artifacts.
-3. Fetch pinned upstream Xray/Mihomo using the included scripts. Our application release does not redistribute those binaries.
+3. Verify the bundled Xray session extension and fetch pinned upstream Mihomo using the included scripts. Xray source and its MPL license are included.
 4. Run `python3 deploy/install.py --help`. Preflight is read-only; installation requires `--apply`.
 5. Read initial owner credentials locally on the server, sign in, change the password, create a member and import the member subscription into a compatible client.
 
