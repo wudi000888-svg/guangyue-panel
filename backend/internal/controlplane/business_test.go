@@ -217,7 +217,7 @@ func TestBusinessSnapshotAliasesOwnerNameCollision(t *testing.T) {
 	for i := range nodes {
 		nodes[i] = normalizeNodePolicy(nodes[i])
 	}
-	account := BusinessAccount{User: User{ID: 7, Username: "owner", Role: "user", Enabled: true, VLESS: true, HY2: true}, Credentials: Credentials{HY2: randomToken(43), Token: randomToken(32), VLESS: map[string]string{"vless-main": uuid()}}}
+	account := BusinessAccount{User: User{ID: 7, Username: "owner", Role: "user", Enabled: true, VLESS: true, HY2: true}, Credentials: Credentials{HY2: randomToken(32), Token: randomToken(32), VLESS: map[string]string{"vless-main": uuid()}}}
 	snapshot := BusinessSnapshot{SiteID: "edge", IssuedAt: time.Now().Unix(), LeaseSeconds: businessLeaseSeconds, Nodes: nodes, Users: []BusinessAccount{account}, RuntimeMode: runtimeNormal}
 	snapshot.Revision = businessSnapshotRevision(snapshot)
 	if err := a.applyBusinessSnapshot(context.Background(), snapshot); err != nil {
