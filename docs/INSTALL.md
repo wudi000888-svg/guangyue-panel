@@ -1,8 +1,8 @@
 # 安装指南
 
-适用于广月面板 0.21.0。首次部署按本文从上到下执行。已有部署使用[升级流程](OPERATIONS.md)，不要重新运行安装器覆盖数据。
+适用于广月面板 0.23.0。首次部署按本文从上到下执行。已有部署使用[升级流程](OPERATIONS.md)，不要重新运行安装器覆盖数据。
 
-Release assets 已拆分 Lite / Pro；包内标记决定默认版本。本文演示 Lite；Pro 主控和轻量业务站见[业务站指南](BUSINESS-SITES.md)。安装 Pro 或从 Lite 升级，先阅读[双版本部署指南](EDITIONS.md)。证书、Nginx 与代理核心步骤两版通用。
+Release assets 已拆分 Lite / Pro；包内标记决定默认版本。本文演示显式独立 Lite（`--role standalone`）；Lite 默认子站和 Pro 默认主站的安装见[业务站指南](BUSINESS-SITES.md)。安装 Pro 或从 Lite 升级，先阅读[双版本部署指南](EDITIONS.md)。证书、Nginx 与代理核心步骤两版通用。
 
 ## 1. 系统、资源与域名
 
@@ -63,14 +63,14 @@ sudo certbot certonly --webroot -w /var/www/html \
 
 ```bash
 # 在工作电脑或服务器执行。
-release_url=https://github.com/wudi000888-svg/guangyue-panel/releases/download/v0.21.0
-curl -fL --retry 3 -O "$release_url/guangyue-panel-lite-0.21.0-linux-amd64.tar.gz"
+release_url=https://github.com/wudi000888-svg/guangyue-panel/releases/download/v0.23.0
+curl -fL --retry 3 -O "$release_url/guangyue-panel-lite-0.23.0-linux-amd64.tar.gz"
 curl -fL --retry 3 -O "$release_url/SHA256SUMS"
 # Linux：
 sha256sum --ignore-missing -c SHA256SUMS
 # macOS 对已下载文件可用 shasum -a 256，并与 SHA256SUMS 对照。
-tar -xzf guangyue-panel-lite-0.21.0-linux-amd64.tar.gz
-cd guangyue-panel-lite-0.21.0-linux-amd64
+tar -xzf guangyue-panel-lite-0.23.0-linux-amd64.tar.gz
+cd guangyue-panel-lite-0.23.0-linux-amd64
 ```
 
 校验文件来自同一个 Release；SHA256 检测损坏，不替代对发布账号与签名的信任。此版本不声称有独立的离线签名。
@@ -82,7 +82,7 @@ cd guangyue-panel-lite-0.21.0-linux-amd64
 ```bash
 git clone https://github.com/wudi000888-svg/guangyue-panel.git
 cd guangyue-panel
-git checkout v0.21.0
+git checkout v0.23.0
 bash scripts/check.sh
 bash scripts/build.sh
 bash scripts/build-hy2-core.sh --test
@@ -108,7 +108,7 @@ GY_BIN_DIR="$PWD/bin" bash scripts/fetch-mihomo.sh
 ## 6. 预检查与安装
 
 ```bash
-sudo python3 deploy/install.py --bundle "$PWD" \
+sudo python3 deploy/install.py --bundle "$PWD" --role standalone \
   --panel-domain panel.example.com --node-domain node.example.com \
   --cert /etc/letsencrypt/live/panel.example.com/fullchain.pem \
   --key /etc/letsencrypt/live/panel.example.com/privkey.pem
@@ -117,7 +117,7 @@ sudo python3 deploy/install.py --bundle "$PWD" \
 预检查是只读操作。它验证系统、端口、文件校验和、证书、Nginx worker 与实际模板。通过后使用同一命令加 `--apply`：
 
 ```bash
-sudo python3 deploy/install.py --bundle "$PWD" \
+sudo python3 deploy/install.py --bundle "$PWD" --role standalone \
   --panel-domain panel.example.com --node-domain node.example.com \
   --cert /etc/letsencrypt/live/panel.example.com/fullchain.pem \
   --key /etc/letsencrypt/live/panel.example.com/privkey.pem --apply

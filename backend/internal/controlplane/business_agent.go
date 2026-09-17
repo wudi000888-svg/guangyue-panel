@@ -78,6 +78,8 @@ func (a *App) businessRequest(ctx context.Context, client *http.Client, path, to
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Requested-With", "guangyue")
+	// Headers let older masters keep accepting the unchanged protocol-2 body.
+	req.Header.Set("X-Guangyue-Edition", a.cfg.edition())
 	resp, err := client.Do(req)
 	if err != nil {
 		return errors.New("controller connection unavailable")

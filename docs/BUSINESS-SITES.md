@@ -1,6 +1,6 @@
-# 主控站与业务站
+# 主站与子站（主控与业务站）
 
-0.16.0 的 Pro 使用一个主控管理多个业务站。用户在主控登录、领取统一订阅；业务站负责所在 VPS 的 VLESS Reality、HY2、出口连接和检测。主控可以同时提供本机节点，因此已有单机 Pro 升级后仍保留原节点与订阅。
+从 0.23.0 起，Lite 新安装默认作为子站（`business`），Pro 新安装默认作为主站（`controller`）。一个 Pro 主站最多管理 64 个 Lite / Pro 子站。用户在主控登录、领取统一订阅；业务站负责所在 VPS 的 VLESS Reality、HY2、出口连接和检测。主控可以同时提供本机节点，因此已有单机 Pro 升级后仍保留原节点与订阅。
 
 ```mermaid
 flowchart TB
@@ -19,10 +19,10 @@ flowchart TB
 
 | Release asset | 用途 | 默认行为 |
 | --- | --- | --- |
-| `guangyue-panel-lite-0.21.0-linux-amd64.tar.gz` | 单 VPS 低资源部署 | Lite / SQLite / 单机管理 |
-| `guangyue-panel-pro-0.21.0-linux-amd64.tar.gz` | 主控或业务站 | 默认主控；传 `--role business` 安装业务站 |
+| `guangyue-panel-lite-0.23.0-linux-amd64.tar.gz` | 低资源子站 | Lite / SQLite / 默认 `business`，需要主站注册文件 |
+| `guangyue-panel-pro-0.23.0-linux-amd64.tar.gz` | 主站或兼容 Pro 子站 | 默认 `controller`；传 `--role business` 安装子站 |
 
-两个包共享核心业务代码，各自带有受校验的 `EDITION` 标记。安装器读取标记决定默认版本；`--edition` 可显式选择。升级默认沿用当前版本、角色与站点身份，不能通过普通升级把业务站改成主控。主控建议 2 核 2 GiB 起步；业务站建议 1 核 1 GiB，控制面沿用 Lite 的 48 MiB Go 内存目标与 160 MiB systemd 上限，不安装 PostgreSQL/Redis。总内存仍包含 Nginx、代理核心和操作系统。
+两个包共享核心业务代码，各自带有受校验的 `EDITION` 标记。安装器读取标记决定默认版本；`--edition` 可显式选择。独立 Lite 安装可显式选择 `--role standalone`。升级默认沿用当前版本、角色与站点身份；旧 Lite（包括未记录角色的历史配置）保持独立站，已有 Pro 业务站保持原版子站。普通升级不能变更子站版本类型、角色、站点 ID 或主站注册关系，也不会把旧用户自动合并到主站。要建立托管子站，请在新 VPS 上使用主站注册文件安装；不要直接修改已有独立站的角色覆盖其账号与计量数据。主控建议 2 核 2 GiB 起步；业务站建议 1 核 1 GiB，控制面沿用 Lite 的 48 MiB Go 内存目标与 160 MiB systemd 上限，不安装 PostgreSQL/Redis。总内存仍包含 Nginx、代理核心和操作系统。
 
 ## 安装主控
 
@@ -41,24 +41,32 @@ sudo python3 deploy/install.py --bundle "$PWD" --role controller --site-id contr
 
 ## 注册业务站
 
-1. 主控 → **群站管理 → 业务站 → 添加业务站**。填写唯一标识、名称、分组，下载注册 JSON。
+1. 主控 → **群站管理 → 子站 → 添加子站**。填写唯一标识、名称、分组，下载注册 JSON。
 2. 将注册文件通过可信通道保存到目标 VPS `/root/enrollment.json`，执行 `chmod 600 /root/enrollment.json`。文件不是命令脚本，不通过 URL 或 shell 参数传递令牌。
-3. 目标 VPS 下载 **Pro** 包。按安装指南准备域名、证书、Nginx 和固定核心；无需运行基础设施安装器。最低只需一个域名同时用于节点与健康入口，推荐分开。
+3. 目标 VPS 下载 **Lite** 包（也可在主站注册文件弹窗直接下载）。按安装指南准备域名、证书、Nginx 和固定核心；无需运行基础设施安装器。最低只需一个域名同时用于节点与健康入口，推荐分开。
 4. 执行以下只读预检查，通过后加 `--apply` 安装：
 
 ```bash
-sudo python3 deploy/install.py --bundle "$PWD" --role business \
+sudo python3 deploy/install.py --bundle "$PWD" \
   --enrollment-file /root/enrollment.json \
   --panel-domain agent.example.com --node-domain edge.example.com \
   --cert /etc/letsencrypt/live/agent.example.com/fullchain.pem \
   --key /etc/letsencrypt/live/agent.example.com/privkey.pem
 ```
 
+Lite 安装时省略 `--role` 即选择 `business`；缺少注册文件会在只读预检查时报错，不会静默创建独立管理员。已有 Pro 子站安装方式保留：使用 Pro 包并加 `--role business`。
+
 站点 ID 自动从注册文件读取。注册需要主控的有效 HTTPS 证书和公网地址，不支持自签证书、跳过校验或重定向。业务站主动访问主控 TCP 443；无需从主控连接业务站管理端口。代理入口仍需要 TCP/UDP 443，与每站 Nginx 兼容。
 
 注册文件有效期 24 小时。主控固定首次上报的域名、站点 ID、Reality 公钥与 Short ID；首次同步后注册凭据失效，业务长期令牌加密保存在本站状态。业务站配置内原注册令牌随后已不可再次使用；安装源文件可删除。业务站没有管理员登录页或初始管理员密码，公网只开放 `/api/health`，管理必须在主控进行。
 
 未注册且令牌过期，可在主控停用该记录、清空成员、删除后重新创建。已注册机器损坏应恢复原机器配套配置、密钥及最新状态，不要通过修改站点身份绕过计量水位；无法恢复时保留旧站点额度，停用旧机器后新建站点。当前不提供自动转移离线未结算额度的强制按钮。
+
+## 主站权限与子站边界
+
+Pro 主站管理员可以创建、配置、停用和删除全部子站，决定每个子站的成员名单、站点额度、节点权限组、计费倍率、出口分配与检测任务。成员管理中的账号启用、VLESS/HY2 协议许可、到期时间以及套餐权限会同步到该成员获授权的所有子站。普通成员不能管理子站。
+
+子站只有 `/api/health` 健康入口；不生成初始管理员，不开放登录、管理、订阅和群站转发接口。原始主站密码、订阅令牌和站点私钥不下发。授权修改在下一次成功同步后由子站核心执行；断网最多沿用 15 分钟租约，到期撤销。主站列表显示已上报的 LITE / PRO 版本标识；旧子站未上报时显示“子站”，不推测其版本类型。
 
 ## 分配成员、出口和节点
 
@@ -90,7 +98,7 @@ sudo python3 deploy/install.py --bundle "$PWD" --role business \
 
 ## 运维与升级
 
-主控按 Pro PostgreSQL 流程备份；业务站备份本机 `/etc/guangyue-personal.json`、完整 `/var/lib/guangyue`、证书来源与 Nginx 配置，保留权限并加密离机保存。停止业务服务后备份状态可避免 SQLite 与计量检查点不一致。业务站使用同一 Pro 包的 `deploy/upgrade.py`，自动按 SQLite 分支备份和回滚，不请求数据库基础设施。
+主控按 Pro PostgreSQL 流程备份；业务站备份本机 `/etc/guangyue-personal.json`、完整 `/var/lib/guangyue`、证书来源与 Nginx 配置，保留权限并加密离机保存。停止业务服务后备份状态可避免 SQLite 与计量检查点不一致。业务站使用与当前 edition 一致的 Lite / Pro 包的 `deploy/upgrade.py`，自动按 SQLite 分支备份和回滚，不请求数据库基础设施。
 
 ```bash
 curl -fsS http://127.0.0.1:19100/api/health
@@ -99,7 +107,7 @@ sudo python3 deploy/upgrade.py --bundle "$PWD"
 # 检查通过后加 --apply。
 ```
 
-健康状态应为 `edition=pro`、`role=business` 和注册的 `site_id`。健康接口证明进程运行，主控“已同步”证明配置已确认；最后仍需真实客户端分别验证 VLESS 和 HY2 的 TCP/UDP。保留升级恢复目录，不把注册文件、数据库、订阅 URI、二维码或密钥上传到 GitHub。
+Lite 子站健康状态应为 `edition=lite`、`role=business`，兼容 Pro 子站则为 `edition=pro`、`role=business` 和注册的 `site_id`。健康接口证明进程运行，主控“已同步”证明配置已确认；最后仍需真实客户端分别验证 VLESS 和 HY2 的 TCP/UDP。保留升级恢复目录，不把注册文件、数据库、订阅 URI、二维码或密钥上传到 GitHub。
 
 原 0.15 的联邦管理位于 **独立面板接入**，用于仍拥有独立用户库和订阅的旧站点；它与本节业务站模式分别管理，不会自动合并旧用户。
 

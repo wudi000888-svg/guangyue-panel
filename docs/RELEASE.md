@@ -1,6 +1,6 @@
 # 发布准备与仓库管理
 
-项目名称：广月面板 / Guangyue Panel。仓库 slug：`guangyue-panel`。双版本发布：`0.22.1`。项目定位：新一代跨境电商企业级解决方案，提供 Lite 单机版和 Pro 群站管理版。
+项目名称：广月面板 / Guangyue Panel。仓库 slug：`guangyue-panel`。双版本发布：`0.23.0`。项目定位：新一代跨境电商企业级解决方案，提供 Lite 子站版和 Pro 主站管理版。
 
 ## 公开发布策略
 
@@ -10,7 +10,7 @@
 
 ## 发布产物
 
-- `guangyue-panel-lite-<version>-linux-amd64.tar.gz`：默认单机 SQLite 安装。
+- `guangyue-panel-lite-<version>-linux-amd64.tar.gz`：默认 SQLite 子站，使用主站注册文件；独立部署需 `--role standalone`。
 - `guangyue-panel-pro-<version>-linux-amd64.tar.gz`：默认主控安装，支持 `--role business` 安装轻量业务站。
 - 两包均包含面板、前端、自定义 HY2 与 Xray、安装/升级脚本、文档及受校验的 `EDITION` 标记。
 - `SHA256SUMS`：外层压缩包与 SBOM 校验；压缩包内还有逐文件校验。
@@ -26,7 +26,7 @@
 
 `.github/workflows/auto-release.yml` 在每次提交进入 `main` 后自动执行：
 
-1. 等待源提交完整 CI（含安装、业务站与升级测试）成功，再将 `VERSION` 的补丁号递增，并同步 Go、Vue、README 和变更记录。
+1. 等待源提交完整 CI（含独立安装、Lite/Pro 子站与升级测试）成功，再将 `VERSION` 的补丁号递增，并同步 Go、Vue、README 和变更记录。
 2. 运行完整检查、前端生产构建、Go 构建及 HY2/Xray 核心测试构建。
 3. 生成 Lite/Pro Linux amd64 安装包、`SHA256SUMS` 与 `SBOM.spdx.json`。
 4. 提交版本更新、创建对应 `vX.Y.Z` tag，上传并校验完整资产后正式发布 GitHub Release。

@@ -273,6 +273,8 @@ func (a *App) checkExclusiveBusinessExit(exitID string) error {
 	return nil
 }
 func equalBusinessInfo(a, b BusinessInfo) bool {
+	a.Edition = ""
+	b.Edition = ""
 	a.Version = ""
 	a.Protocol = 0
 	b.Protocol = 0

@@ -172,10 +172,35 @@ class BusinessDeploymentTests(unittest.TestCase):
             self.assertEqual(config['database']['driver'],'sqlite')
             self.assertEqual(config['redis_url'],'')
             self.assertEqual(config['role'],'business')
-            self.assertEqual(infrastructure.edition_config(config,'pro','site_east'),config)
+            self.assertEqual(infrastructure.edition_config(config,'pro','site_east',existing=True),config)
             unit=Path(install.DEPLOY)/'guangyue.service'
             self.assertIn('MemoryMax=160M',infrastructure.service_text(unit,'pro','business'))
-            with self.assertRaises(ValueError):infrastructure.edition_config({},'lite','site_east',role='business',enrollment=path)
+            lite=infrastructure.edition_config({},'lite','site_east',enrollment=path)
+            self.assertEqual(lite['edition'],'lite')
+            self.assertEqual(lite['role'],'business')
+            self.assertEqual(lite['database'],{'driver':'sqlite'})
+            self.assertEqual(infrastructure.edition_config(lite,'lite','site_east',existing=True),lite)
+            self.assertIn('MemoryMax=160M',infrastructure.service_text(unit,'lite','business'))
+            for edition,site,role in [('lite','site_west',None),('pro','site_east',None),('lite','site_east','standalone')]:
+                with self.assertRaisesRegex(ValueError,'existing sub-site'):
+                    infrastructure.edition_config(lite,edition,site,role=role,existing=True)
             with self.assertRaises(ValueError):infrastructure.edition_config({},'pro','site_west',role='business',enrollment=path)
             path.chmod(0o644)
             with self.assertRaises(ValueError):infrastructure.edition_config({},'pro','site_east',role='business',enrollment=path)
+
+    def test_new_defaults_and_legacy_upgrade(self):
+        with self.assertRaisesRegex(ValueError,'Lite defaults to a sub-site'):
+            infrastructure.edition_config({},'lite','edge')
+        independent=infrastructure.edition_config({},'lite','edge',role='standalone')
+        self.assertEqual(independent['role'],'standalone')
+        for legacy in ({'state_dir':'/synthetic/state'},{'edition':'lite'},{'edition':'lite','role':'standalone'}):
+            updated=infrastructure.edition_config(legacy,'lite','default',existing=True)
+            self.assertEqual(updated['role'],'standalone')
+            self.assertEqual(updated['database'],{'driver':'sqlite'})
+            self.assertEqual(legacy.get('role'), 'standalone' if 'role' in legacy else None)
+        pro={'database':{'driver':'postgres','dsn':'postgres://localhost/fixture'},'redis_url':'redis://localhost/0'}
+        self.assertEqual(infrastructure.edition_config(pro,'pro','control')['role'],'controller')
+        legacy_pro=dict(pro,edition='pro')
+        self.assertEqual(infrastructure.edition_config(legacy_pro,'pro','control',existing=True)['role'],'controller')
+        self.assertEqual(infrastructure.edition_config(dict(independent,**pro),'pro','control',existing=True)['role'],'controller')
+        with self.assertRaises(ValueError):infrastructure.edition_config({},'lite','edge',role='controller')

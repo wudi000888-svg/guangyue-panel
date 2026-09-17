@@ -5,7 +5,7 @@
 | 字段 | 默认/意义 | 注意 |
 | --- | --- | --- |
 | `edition` | `lite` / `pro` | Pro 主控必须配置 PostgreSQL 与 Redis；业务站使用 SQLite |
-| `role` | Lite: `standalone` / Pro: `controller` 或 `business` | 由安装器确定，不支持普通升级改变角色 |
+| `role` | 新安装 Lite: `business` / Pro: `controller`；两版均支持 `business`，Lite 可显式选 `standalone` | 由安装器确定；升级保留原角色，历史未记录角色的 Lite 保持独立站 |
 | `controller_url` | 业务站主控 HTTPS 根地址 | 公网、可信证书、禁止重定向 |
 | `enrollment_token` | 安装注册文件写入 | 首次同步后失效，长期令牌在本地加密状态中 |
 | `site_id` | `default` | 小写字母开头、字母数字下划线、最多 40 字符；生产启用后不可直接修改 |

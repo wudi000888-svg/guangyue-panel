@@ -78,7 +78,7 @@ class TLSController(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         size=int(self.headers.get('Content-Length','0'))
         if size>2<<20:self.send_error(413);return
-        req=urllib.request.Request('http://127.0.0.1:19400'+self.path,data=self.rfile.read(size),headers={key:self.headers[key] for key in ('Authorization','X-Requested-With','Content-Type') if key in self.headers})
+        req=urllib.request.Request('http://127.0.0.1:19400'+self.path,data=self.rfile.read(size),headers={key:self.headers[key] for key in ('Authorization','X-Requested-With','Content-Type','X-Guangyue-Edition') if key in self.headers})
         try:
             with no_proxy.open(req,timeout=40) as response:
                 data=response.read();self.send_response(response.status);self.send_header('Content-Type','application/json');self.end_headers();self.wfile.write(data)
@@ -113,17 +113,20 @@ try:
     enrollment=base/'enrollment.json';enrollment.write_text(json.dumps(created['enrollment']));enrollment.chmod(0o600)
     policy={'name':'CI edge','group':'Validation','enabled':True,'exclusive':False,'revision':created['site']['revision'],'nodes':[],'grants':[{'user_id':me['me']['id'],'quota':0}]}
     api('/api/business-sites/ci_edge',policy,'PUT',cookie)
-    command=[sys.executable,str(bundle/'deploy/install.py'),'--bundle',str(bundle),'--role','business','--enrollment-file',str(enrollment),'--panel-domain','panel.example.com','--node-domain','node.example.com','--cert',str(cert),'--key',str(key)]
+    command=[sys.executable,str(bundle/'deploy/install.py'),'--bundle',str(bundle),'--enrollment-file',str(enrollment),'--panel-domain','panel.example.com','--node-domain','node.example.com','--cert',str(cert),'--key',str(key)]
+    edition=(bundle/'EDITION').read_text().strip()
+    if edition=='pro': command+=['--role','business']
     run(*command);assert not install.CONFIG.exists()
     run(*command,'--apply');install.health()
-    actual=json.loads(install.CONFIG.read_text());assert actual['role']=='business' and actual['database']['driver']=='sqlite' and not actual['redis_url']
+    actual=json.loads(install.CONFIG.read_text());assert actual['edition']==edition and actual['role']=='business' and actual['database']['driver']=='sqlite' and not actual['redis_url']
     assert not (install.STATE/'initial-owner.json').exists()
     assert 'MemoryMax=160M' in Path('/etc/systemd/system/guangyue.service').read_text()
     def synchronized():
         sites,_=api('/api/business-sites',cookie=cookie);site=sites['sites'][0]
         return site if site['applied'] and site['applied']==site['desired'] else None
     wait_for(synchronized)
-    print('PASS Pro business installation: SQLite, low memory budget, HTTPS enrollment and acknowledged configuration',flush=True)
+    assert synchronized()['info']['edition']==edition
+    print('PASS '+edition+' business installation: SQLite, low memory budget, HTTPS enrollment and acknowledged configuration',flush=True)
     sub,_=api('/api/subscription',cookie=cookie);nodes=[n for n in sub['nodes'] if n.get('site_id')=='ci_edge'];assert {n['protocol'] for n in nodes}=={'vless','hy2'}
     from urllib.parse import urlparse,parse_qs,unquote
     for node in nodes:
@@ -143,6 +146,7 @@ try:
         child.terminate();child.wait(timeout=10)
     run(sys.executable,str(bundle/'deploy/upgrade.py'),'--bundle',str(bundle),'--apply');install.health();wait_for(synchronized)
     assert json.loads(install.CONFIG.read_text())['role']=='business'
+    assert json.loads(install.CONFIG.read_text())['edition']==edition
     bad=base/'bad-bundle';shutil.copytree(bundle,bad);(bad/'bin/guangyue-linux-amd64').write_text('#!/bin/sh\nexit 42\n')
     rows=[hashlib.sha256((bad/name).read_bytes()).hexdigest()+'  '+name for _,name in (row.split('  ',1) for row in (bad/'SHA256SUMS').read_text().splitlines())];(bad/'SHA256SUMS').write_text('\n'.join(rows)+'\n')
     assert run(sys.executable,str(bundle/'deploy/upgrade.py'),'--bundle',str(bad),'--apply',success=False).returncode!=0

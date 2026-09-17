@@ -139,7 +139,7 @@ def transaction(change, target, new_config, progress=lambda stage: None, provisi
 def upgrade(bundle, edition=None, site_id=None, infrastructure_file=None, progress=lambda stage: None):
     bundle = Path(bundle).resolve()
     old_config = json.loads(CONFIG.read_text())
-    new_config = edition_config(old_config, edition or old_config.get('edition', 'lite'), site_id or old_config.get('site_id', 'default'), infrastructure_file)
+    new_config = edition_config(old_config, edition or old_config.get('edition', 'lite'), site_id or old_config.get('site_id', 'default'), infrastructure_file, existing=True)
     if old_config.get('edition') == 'pro' and (new_config['site_id'] != old_config.get('site_id', 'default') or new_config['database'] != old_config.get('database')):
         raise ValueError('changing an existing Pro site ID or database requires a separate site migration')
     migrating = old_config.get('edition', 'lite') == 'lite' and new_config['edition'] == 'pro'
@@ -198,7 +198,7 @@ def main():
     p.add_argument('--apply', action='store_true'); args = p.parse_args()
     preflight(args.bundle)
     config = json.loads(CONFIG.read_text())
-    edition_config(config, args.edition or config.get('edition', 'lite'), args.site_id or config.get('site_id', 'default'), args.infrastructure_file)
+    edition_config(config, args.edition or config.get('edition', 'lite'), args.site_id or config.get('site_id', 'default'), args.infrastructure_file, existing=True)
     # A read-only preflight does not establish or modify the installation baseline.
     floor = updates.read('installation.json', {'version': updates.current()})['version']
     if updates.version((args.bundle / 'VERSION').read_text().strip()) < updates.version(floor): raise ValueError('不能回退到安装基线之前的版本')

@@ -3,7 +3,7 @@
 
 **A next-generation enterprise solution for cross-border e-commerce teams.**
 
-A network resource console for cross-border commerce teams. Lite uses Go, SQLite and Vue 3 on one VPS. Pro adds PostgreSQL, Redis, durable background tasks and a controller with lightweight business sites, unified subscriptions and scoped exit allocations. See [edition selection and Pro setup](docs/EDITIONS.md).
+A network resource console for cross-border commerce teams. Lite defaults to a lightweight SQLite sub-site. Pro defaults to the master with PostgreSQL, Redis, durable background tasks, unified subscriptions and full control of sub-site permissions. Both editions share Go, Vue 3 and the proxy cores. See [edition selection and Pro setup](docs/EDITIONS.md).
 
 [中文](README.md) · [Installation](docs/INSTALL.md) · [User guide](docs/USER_GUIDE.md) · [Operations](docs/OPERATIONS.md)
 
@@ -44,7 +44,7 @@ The panel is LGPL-3.0-only licensed from 0.15.0, retaining the original fake-ui 
 
 ## Controller and business sites (0.18.0)
 
-Choose the `guangyue-panel-lite-…tar.gz` asset for a standalone SQLite deployment, or `guangyue-panel-pro-…tar.gz` for a controller or business site. The Pro controller uses PostgreSQL and Redis; business sites use SQLite and enroll with `--role business --enrollment-file /root/enrollment.json`. The controller distributes scoped member credentials and exit bindings, aggregates subscriptions, and reserves per-site quotas. Business sites pull over HTTPS and expire authorization after a 15-minute lease. Quality reports are shared by VLESS/HY2 using the same local exit; speed results remain independent. See the [complete business-site guide](docs/BUSINESS-SITES.md) for installation, quotas, recovery and offline limits.
+Choose `guangyue-panel-lite-…tar.gz` for a managed sub-site, or `guangyue-panel-pro-…tar.gz` for a master. The Pro master uses PostgreSQL and Redis. Lite sub-sites use SQLite and enroll with `--enrollment-file /root/enrollment.json`, downloaded from the master. Explicit `--role standalone` retains independent Lite management; upgrades preserve existing roles and data. Pro still supports sub-sites with `--role business`. The controller distributes scoped member credentials and exit bindings, aggregates subscriptions, and reserves per-site quotas. Business sites pull over HTTPS and expire authorization after a 15-minute lease. Quality reports are shared by VLESS/HY2 using the same local exit; speed results remain independent. See the [complete business-site guide](docs/BUSINESS-SITES.md) for installation, quotas, recovery and offline limits.
 
 ## Online updates
 

@@ -76,6 +76,9 @@ jobs:
           - os: ubuntu-24.04
             edition: pro
           - os: ubuntu-24.04
+            edition: business-lite
+            asset: lite
+          - os: ubuntu-24.04
             edition: business
             asset: pro
           - os: ubuntu-24.04

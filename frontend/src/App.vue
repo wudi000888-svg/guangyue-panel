@@ -183,7 +183,7 @@ onBeforeUnmount(() => { closeMobile(); desktop?.removeEventListener('change', on
         <HeaderBalance v-if="!selectedSite" :key="state.me.id" :user-id="state.me.id"/>
         <div class="top-actions">
  <button v-if="selectedSite" class="site-switch desktop-action" @click="switchSite('')">{{selectedSiteName}} · {{t('返回本站')}}</button>
- <span v-else class="edition-badge desktop-action">{{state.system.edition==='pro'?'PRO':'LITE'}}</span>
+ <span v-else class="edition-badge desktop-action">{{state.system.edition==='pro'?'PRO':'LITE'}} · {{t(state.system.role==='controller'||!state.system.role&&state.system.edition==='pro'?'主站':state.system.role==='business'?'子站':'独立站')}}</span>
           <ViewModeSwitcher v-if="isDesktop" class="desktop-action" v-model="viewMode"/>
           <LanguageSwitcher/>
           <button v-if="!simpleMode" class="icon inbox-bell" :title="t('站内信')" :aria-label="t('站内信')" @click="go('messages')"><Bell :size="18"/><span v-if="state.unread_messages" class="bell-count">{{state.unread_messages>99?'99+':state.unread_messages}}</span></button>

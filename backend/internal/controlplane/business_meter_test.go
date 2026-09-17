@@ -24,7 +24,7 @@ func TestBusinessWeightedQuotasSparseAcknowledgementAndReset(t *testing.T) {
 	site.DefaultNodes = []Node{n}
 	master.store.saveBusinessSite(site)
 	agent := testApp(t)
-	agent.cfg.Edition = "pro"
+	agent.cfg.Edition = "lite"
 	agent.cfg.Role = "business"
 	agent.cfg.SiteID = site.ID
 	agent.cfg.EnrollmentToken = token

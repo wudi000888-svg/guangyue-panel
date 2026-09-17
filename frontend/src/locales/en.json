@@ -2049,5 +2049,19 @@
   "VLESS 统计活跃代理会话，HY2 统计已认证 QUIC 连接；多路复用时不等于设备数或 TCP 流数。此页只统计当前站点核心，主控不汇总业务站连接；独立站点请切换站点查看。": "VLESS counts active proxy sessions; HY2 counts authenticated QUIC connections. With multiplexing, these are not device or TCP stream counts. This page covers the current site cores. The controller does not aggregate business site connections; switch sites to view independent sites.",
   "连接中断，尚未确认节点保存结果。请恢复网络后重试，勿重复新建节点。": "Connection interrupted. The node save has not been confirmed. Restore your connection and retry; do not create another node.",
   "节点保存标识无效": "Invalid node save request ID",
-  "该保存请求已用于其他节点配置，请刷新列表后重试": "This save request was already used for a different node configuration. Refresh the list before retrying."
+  "该保存请求已用于其他节点配置，请刷新列表后重试": "This save request was already used for a different node configuration. Refresh the list before retrying.",
+  "主站": "Master site",
+  "子站": "Sub-site",
+  "独立站": "Independent site",
+  "主站与子站": "Master and sub-sites",
+  "添加子站": "Add sub-site",
+  "删除子站": "Delete sub-site",
+  "尚未添加子站": "No sub-sites yet",
+  "子站配置": "Sub-site settings",
+  "Pro 主站统一管理 Lite / Pro 子站的成员权限、配额、节点和出口": "The Pro master centrally manages member permissions, quotas, nodes and exits for Lite / Pro sub-sites.",
+  "请下载注册文件和 Lite 安装包，在新 VPS 上安装。Lite 默认作为子站，由本主站统一授权；注册文件请妥善保管。": "Download the enrollment file and Lite package for a new VPS. Lite defaults to a sub-site authorized by this master. Keep the enrollment file private.",
+  "Lite 安装参数：--enrollment-file /root/enrollment.json。Pro 子站另加 --role business。完整步骤见安装包 docs/BUSINESS-SITES.md。": "Lite installation: --enrollment-file /root/enrollment.json. Pro sub-sites also need --role business. See docs/BUSINESS-SITES.md in the package.",
+  "子站主动连接主站，成员、协议权限、到期时间、配额和节点权限组均由主站下发。子站不开放独立管理入口。": "Sub-sites connect to the master, which controls membership, protocol permissions, expiration, quotas and node groups. Sub-sites have no independent administration endpoint.",
+  "下载 Lite 子站安装包": "Download Lite sub-site package",
+  "成员的协议、到期时间与全局权限在成员管理中设置；此处控制该成员能否使用本站以及本站额度。": "Set protocol access, expiration and global permissions in Members. Here you control access to this sub-site and its quota."
 }

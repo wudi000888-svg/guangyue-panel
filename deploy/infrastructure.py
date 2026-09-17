@@ -31,13 +31,22 @@ def read_profile(path):
         raise ValueError('profile requires PostgreSQL DSN and Redis URL')
     return {key:value[key] for key in ('database','redis_url')}
 
-def edition_config(config, edition, site, profile=None, role=None, enrollment=None):
+def edition_config(config, edition, site, profile=None, role=None, enrollment=None, *, existing=False):
     result=dict(config)
+    if edition not in ('lite','pro'):
+        raise ValueError('edition must be lite or pro')
     if not re.fullmatch(r'[a-z][a-z0-9_]{0,39}',site):
         raise ValueError('site ID must be a lowercase identifier, at most 40 characters')
-    role=role or (config.get('role') if config.get('edition',edition)==edition else None) or ('controller' if edition=='pro' else 'standalone')
-    if role not in ('standalone','controller','business') or (edition=='lite' and role!='standalone') or (edition=='pro' and role=='standalone'):
-        raise ValueError('Lite uses standalone; Pro uses controller or business')
+    old_edition=config.get('edition','lite')
+    old_role=config.get('role') or ('controller' if old_edition=='pro' else 'standalone')
+    if existing and old_role=='business' and (edition!=old_edition or site!=config.get('site_id','default') or role not in (None,'business') or enrollment):
+        raise ValueError('an existing sub-site must retain its edition, role, site ID and controller enrollment')
+    if old_edition=='pro' and edition=='lite':
+        raise ValueError('automatic Pro to Lite downgrade is refused; use portable backup recovery')
+    retained=(old_role if existing else config.get('role')) if old_edition==edition else None
+    role=role or retained or ('controller' if edition=='pro' else 'business')
+    if role not in ('standalone','controller','business') or (edition=='lite' and role=='controller') or (edition=='pro' and role=='standalone'):
+        raise ValueError('Lite supports business or standalone; Pro supports controller or business')
     if role=='business':
         if profile: raise ValueError('business sites use local SQLite and do not need infrastructure')
         if enrollment:
@@ -54,14 +63,12 @@ def edition_config(config, edition, site, profile=None, role=None, enrollment=No
                 raise ValueError('invalid enrollment token')
             result.update(data)
         if not result.get('controller_url') or not (result.get('enrollment_token') or result.get('business_token')):
-            raise ValueError('business site requires --enrollment-file')
+            raise ValueError('Lite defaults to a sub-site: provide --enrollment-file from the Pro master; use --role standalone only for an independent Lite installation' if edition=='lite' else 'business site requires --enrollment-file')
         result.update(database={'driver':'sqlite'},redis_url='')
     elif edition=='pro':
         if profile: result.update(read_profile(profile))
         if result.get('database',{}).get('driver')!='postgres' or not result.get('redis_url'):
             raise ValueError('Pro requires --infrastructure-file; provision services first')
-    elif config.get('edition')=='pro':
-        raise ValueError('automatic Pro to Lite downgrade is refused; use portable backup recovery')
     else:
         result.update(database={'driver':'sqlite'},redis_url='')
     result.update(edition=edition,site_id=site,role=role)
