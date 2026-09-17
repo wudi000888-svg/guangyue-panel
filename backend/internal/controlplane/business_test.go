@@ -46,6 +46,11 @@ func businessTokenRequest(t *testing.T, a *App, path, token string, in any) *htt
 	return w
 }
 func TestBusinessLifecycle(t *testing.T) {
+	for _, edition := range []string{"lite", "pro"} {
+		t.Run(edition, func(t *testing.T) { testBusinessLifecycle(t, edition) })
+	}
+}
+func testBusinessLifecycle(t *testing.T, edition string) {
 	master := testApp(t)
 	master.cfg.Edition = "pro"
 	master.cfg.Role = "controller"
@@ -62,7 +67,7 @@ func TestBusinessLifecycle(t *testing.T) {
 	}
 	master.store.saveBusinessSite(site)
 	agent := testApp(t)
-	agent.cfg.Edition = "pro"
+	agent.cfg.Edition = edition
 	agent.cfg.Role = "business"
 	agent.cfg.SiteID = site.ID
 	agent.cfg.EnrollmentToken = token
@@ -71,9 +76,16 @@ func TestBusinessLifecycle(t *testing.T) {
 	server := httptest.NewServer(master.routes())
 	defer server.Close()
 	agent.cfg.ControllerURL = server.URL
+	if err := agent.cfg.validateEdition(); err != nil {
+		t.Fatal(err)
+	}
 	ctx := context.Background()
 	if err := agent.syncBusinessAgent(ctx, server.Client()); err != nil {
 		t.Fatal(err)
+	}
+	registered, err := master.store.businessSite(site.ID)
+	if err != nil || registered.Info == nil || registered.Info.Edition != edition {
+		t.Fatal("sub-site edition was not reported")
 	}
 	members, _ := agent.store.records()
 	if len(members) != 1 || members[0].ID != user.ID {

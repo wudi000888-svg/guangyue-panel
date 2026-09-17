@@ -17,7 +17,7 @@ import (
 	"path/filepath"
 )
 
-const version = "0.22.1"
+const version = "0.23.0"
 
 type Config struct {
 	HY2Optimized    bool                `json:"hy2_optimized,omitempty"`
@@ -186,8 +186,8 @@ func (c Config) validateEdition() error {
 		return errors.New("Lite requires SQLite")
 	}
 	if c.businessAgent() {
-		if c.edition() != "pro" || d.Driver != "sqlite" || c.RedisURL != "" || c.ControllerURL == "" || c.EnrollmentToken == "" && c.BusinessToken == "" {
-			return errors.New("business role requires Pro, SQLite and controller enrollment configuration")
+		if d.Driver != "sqlite" || c.RedisURL != "" || c.ControllerURL == "" || c.EnrollmentToken == "" && c.BusinessToken == "" {
+			return errors.New("business role requires SQLite and controller enrollment configuration, without Redis")
 		}
 		return validateControllerURL(c.ControllerURL, c.Dev)
 	}

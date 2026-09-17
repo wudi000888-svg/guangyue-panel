@@ -269,7 +269,7 @@ def main():
     p.add_argument('--cert', required=True, type=Path)
     p.add_argument('--key', required=True, type=Path)
     p.add_argument('--edition',choices=['lite','pro'])
-    p.add_argument('--role',choices=['standalone','controller','business'])
+    p.add_argument('--role',choices=['standalone','controller','business'],help='defaults: Lite=business (managed sub-site), Pro=controller (master); standalone retains independent Lite management')
     p.add_argument('--enrollment-file',type=Path)
     p.add_argument('--site-id')
     p.add_argument('--infrastructure-file',type=Path)

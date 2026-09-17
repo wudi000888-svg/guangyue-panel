@@ -24,6 +24,7 @@ func TestPostgresBehaviors(t *testing.T) {
 		{"commerce_cancellation", TestCommerceCancellationIsolationAndExpiry},
 		{"commerce_support", TestSupportTicketImagesAndOwnership},
 		{"business_lifecycle", TestBusinessLifecycle},
+		{"subsite_permissions", TestMasterControlsLiteSubsitePermissions},
 		{"weighted_business", TestBusinessWeightedQuotasSparseAcknowledgementAndReset},
 		{"business_membership_deletion", TestBusinessExitDeletionCleansGroupsAndRestoresOnFailure},
 		{"entitlements", TestEntitlementSnapshotsRenewResetAndAccess},

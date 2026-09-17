@@ -86,6 +86,7 @@ export type State = {
   system: {
     node_save_receipts?: boolean;
     edition?: 'lite' | 'pro';
+    role?: 'standalone' | 'controller' | 'business';
     site_id?: string;
     database?: string;
     cache?: string;

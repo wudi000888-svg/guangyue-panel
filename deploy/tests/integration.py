@@ -13,7 +13,7 @@ from pathlib import Path
 
 if os.geteuid() != 0 or os.environ.get('GITHUB_ACTIONS') != 'true':
     raise SystemExit('This integration harness is restricted to disposable GitHub Actions runners.')
-if os.environ.get('GY_INTEGRATION_EDITION')=='business':
+if os.environ.get('GY_INTEGRATION_EDITION') in ('business','business-lite'):
     os.execv(sys.executable,[sys.executable,str(Path(__file__).with_name('business_integration.py')),*sys.argv[1:]])
 if os.environ.get('GY_INTEGRATION_EDITION','').startswith('updater-'):
     os.environ['GY_INTEGRATION_EDITION']=os.environ['GY_INTEGRATION_EDITION'].removeprefix('updater-')
@@ -59,6 +59,7 @@ try:
     if edition=='pro':
         run(sys.executable,str(bundle/'deploy/infrastructure.py'),'--apply')
         command+=['--edition','pro','--site-id','ci_pro','--infrastructure-file',str(infrastructure.PROFILE)]
+    if edition=='lite': command+=['--role','standalone']
     run(*command)
     assert not install.CONFIG.exists(), 'preflight wrote production config'
     run(*command, '--apply')

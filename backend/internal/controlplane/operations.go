@@ -26,7 +26,7 @@ func (a *App) operations(w http.ResponseWriter, r *http.Request, actor Record) {
 	a.mu.Lock()
 	var mem runtime.MemStats
 	runtime.ReadMemStats(&mem)
-	system := object{"version": version, "edition": a.cfg.edition(), "site_id": a.cfg.siteID(), "database": a.store.db.Driver(), "cache": a.cache.Mode(), "cache_degraded": a.cache.Degraded(), "status": a.status, "error": "", "traffic_error": "", "applied_at": a.appliedAt, "heap": mem.HeapAlloc, "uptime": int64(time.Since(a.started).Seconds())}
+	system := object{"version": version, "edition": a.cfg.edition(), "role": a.cfg.deploymentRole(), "site_id": a.cfg.siteID(), "database": a.store.db.Driver(), "cache": a.cache.Mode(), "cache_degraded": a.cache.Degraded(), "status": a.status, "error": "", "traffic_error": "", "applied_at": a.appliedAt, "heap": mem.HeapAlloc, "uptime": int64(time.Since(a.started).Seconds())}
 	if actor.Role == "owner" {
 		system["error"] = a.syncError
 		system["traffic_error"] = a.trafficError

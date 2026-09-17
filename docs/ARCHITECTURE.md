@@ -1,6 +1,6 @@
 # 架构与边界
 
-广月面板使用 Go 控制面、Vue 3 前端和独立代理核心。Lite 采用 SQLite；Pro 采用 PostgreSQL + Redis，以独立站点为管理、数据和核心配置边界。[版本指南](EDITIONS.md)包含容量、安装、故障行为和群站语义。
+广月面板使用 Go 控制面、Vue 3 前端和独立代理核心。Lite 默认作为 SQLite 子站；Pro 默认作为 PostgreSQL + Redis 主站，以独立站点为管理、数据和核心配置边界。[版本指南](EDITIONS.md)包含容量、安装、故障行为和群站语义。
 
 Pro 群站采用[主控站＋业务站](BUSINESS-SITES.md)：主控管理用户、订阅、额度和出口；轻量业务站用本地 SQLite，主动 HTTPS 拉取配置并回传累计流量、报告。每站独立私钥与授权租约；旧独立面板接入保留为兼容入口。
 

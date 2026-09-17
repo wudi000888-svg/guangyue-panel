@@ -6,11 +6,11 @@
 
 **新一代跨境电商企业级解决方案**
 
-面向跨境电商团队的网络资源控制台，提供 Lite 单机版与 Pro 群站版：统一管理成员、节点、私有出口与独立公共代理池。
+面向跨境电商团队的网络资源控制台，提供 Lite 子站版与 Pro 主站版：统一管理成员、节点、私有出口与独立公共代理池。
 
 [English](README_EN.md) · [安装指南](docs/INSTALL.md) · [使用手册](docs/USER_GUIDE.md) · [Nginx 共存](docs/NGINX.md) · [运维与备份](docs/OPERATIONS.md)
 
-![version](https://img.shields.io/badge/version-0.22.1-2563eb)
+![version](https://img.shields.io/badge/version-0.23.0-2563eb)
 ![license](https://img.shields.io/badge/panel_license-LGPL--3.0-16a34a)
 ![platform](https://img.shields.io/badge/server-Linux_amd64-475569)
 
@@ -39,7 +39,7 @@
 | 订阅体验 | Raw / Base64 / Mihomo，节点链接一键复制、二维码、成员可见质量报告 |
 | IP 质量 | 多源地理位置、ASN、代理风险信号、公开页面可达性；保留来源、时间、未知和冲突 |
 | DNS / IPv6 | 每节点 DNS 出口策略，安全 DoH 与 IPv6 允许/阻断选项 |
-| 任务与群站 | 持久化任务队列、取消与重启恢复、配置版本；Pro 主控＋业务站、统一订阅、出口分配、站点额度与远程检测 |
+| 任务与群站 | 持久化任务队列、取消与重启恢复、配置版本；Pro 主站＋Lite/Pro 子站、统一订阅、出口分配、站点额度与远程检测 |
 | 工作台 | 简易/专业模式、中文/English、主题、站内信、品牌与系统设置 |
 | 运行模式 | 常规 / 无日志切换，与简易/专业界面模式独立 |
 | 部署 | Nginx TCP 443 SNI 分流与 HY2 UDP 443；非特权服务、状态备份、升级回滚 |
@@ -49,7 +49,7 @@
 
 ## 下载版本
 
-在 [Releases](https://github.com/wudi000888-svg/guangyue-panel/releases/latest) 的 Assets 选择 `guangyue-panel-lite-…tar.gz`（单机）或 `guangyue-panel-pro-…tar.gz`（主控／业务站），并校验 `SHA256SUMS`。Pro 业务站安装无需 PostgreSQL 或 Redis。
+在 [Releases](https://github.com/wudi000888-svg/guangyue-panel/releases/latest) 的 Assets 选择 `guangyue-panel-lite-…tar.gz`（默认子站）或 `guangyue-panel-pro-…tar.gz`（默认主站），并校验 `SHA256SUMS`。Lite 子站使用主站下载的注册文件安装，无需 PostgreSQL 或 Redis；成员权限、配额、节点与出口由主站统一下发。独立 Lite 安装需显式指定 `--role standalone`，已有部署升级保留原角色。
 
 已有部署可按[在线更新与版本回退说明](docs/UPDATES.md)启用左上角版本管理。回退保留当前数据，不能低于安装基线；不兼容当前数据库的旧版本会被阻止。
 

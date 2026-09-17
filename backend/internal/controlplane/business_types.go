@@ -17,6 +17,7 @@ const businessLeaseSeconds = 900
 const businessMaxSites = 64
 
 type BusinessInfo struct {
+	Edition       string `json:"edition,omitempty"`
 	SiteID        string `json:"site_id"`
 	Version       string `json:"version"`
 	Protocol      int    `json:"protocol"`

@@ -294,7 +294,7 @@ func (a *App) state(w http.ResponseWriter, r *http.Request, actor Record) {
 	}
 	var mem runtime.MemStats
 	runtime.ReadMemStats(&mem)
-	system := object{"version": version, "edition": a.cfg.edition(), "site_id": a.cfg.siteID(), "database": a.store.db.Driver(), "cache": a.cache.Mode(), "cache_degraded": a.cache.Degraded(), "uptime": int64(time.Since(a.started).Seconds()), "heap": mem.HeapAlloc, "status": a.status, "error": a.syncError, "traffic_error": a.trafficError, "applied_at": a.appliedAt, "panel_host": a.cfg.PublicURL, "vless_host": a.cfg.VLESSHost, "hy2_host": a.cfg.HY2Host, "cert_expires": certExpiry(a.cfg.Cert)}
+	system := object{"version": version, "edition": a.cfg.edition(), "role": a.cfg.deploymentRole(), "site_id": a.cfg.siteID(), "database": a.store.db.Driver(), "cache": a.cache.Mode(), "cache_degraded": a.cache.Degraded(), "uptime": int64(time.Since(a.started).Seconds()), "heap": mem.HeapAlloc, "status": a.status, "error": a.syncError, "traffic_error": a.trafficError, "applied_at": a.appliedAt, "panel_host": a.cfg.PublicURL, "vless_host": a.cfg.VLESSHost, "hy2_host": a.cfg.HY2Host, "cert_expires": certExpiry(a.cfg.Cert)}
 	if actor.Role != "owner" {
 		system["error"] = ""
 		system["traffic_error"] = ""

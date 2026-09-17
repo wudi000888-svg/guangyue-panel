@@ -22,6 +22,15 @@ func decodeBusiness(w http.ResponseWriter, r *http.Request, v any) bool {
 	}
 	return true
 }
+
+// Edition is display metadata, never an authority or identity claim.
+func businessEdition(r *http.Request) string {
+	v := r.Header.Get("X-Guangyue-Edition")
+	if v == "lite" || v == "pro" {
+		return v
+	}
+	return ""
+}
 func (a *App) businessAPI(w http.ResponseWriter, r *http.Request, actor Record) {
 	if !a.cfg.controller() || actor.Role != "owner" {
 		failure(w, 403, "需要 Pro 主控站管理员权限")
@@ -274,6 +283,7 @@ func (a *App) businessEnroll(w http.ResponseWriter, r *http.Request) {
 	if !decodeBusiness(w, r, &info) {
 		return
 	}
+	info.Edition = businessEdition(r)
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	var id string
@@ -366,6 +376,9 @@ func (a *App) businessSync(w http.ResponseWriter, r *http.Request) {
 		if in.Protocol == 2 {
 			v.Info.Protocol = 2
 		}
+	}
+	if edition := businessEdition(r); edition != "" {
+		v.Info.Edition = edition
 	}
 	v.PendingToken = ""
 	v.LastSeen = time.Now().Unix()
