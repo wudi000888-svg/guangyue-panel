@@ -9,6 +9,8 @@ import { useSubscription } from "./useSubscription";
 import { useApi, ApiError, downloadBlob, invalidateSession, onSessionExpired, isCancelled, setRemoteSite, getRemoteSite, requestGeneration } from "../lib/api";
 import { runQueued } from "../lib/tasks";
 import { latestRequest, serialPoll } from "../lib/requests";
+import { NodeSaveUncertain, saveNodeRecovering, upsertSavedNode } from "../lib/nodeSave";
+import { operationID } from "../lib/commerce";
 import { storeToRefs } from "pinia";
 import { usePreferencesStore } from "../stores/preferences";
 import { t, locale, applyDefaultLocale } from "../i18n";
@@ -28,6 +30,8 @@ async function switchSite(id:string,name="") {
  go("overview");
 }
 const stateRequest = latestRequest();
+let needsNodeRefresh = false;
+let nodeSaveRequestID = "";
 const state = ref<State | null>(null),
   ready = ref(false),
   busy = ref(false),
@@ -459,19 +463,23 @@ async function refresh(silent = false) {
   const request = stateRequest.start();
   try {
     const result = await api<State>("/state", "GET", undefined, { signal: request.signal });
-    if (!stateRequest.isCurrent(request)) return;
+    if (!stateRequest.isCurrent(request)) return false;
     state.value = result;
+    needsNodeRefresh = false;
     site.value = result.site;
     applyDefaultLocale(site.value.default_locale);
     if (page.value === "ips" && privateTab.value !== "sources") await loadPrivateSources();
     if (stateRequest.isCurrent(request) && !subUser.value && state.value) subUser.value = state.value.me.id;
+    return true;
   } catch (e) {
     if (!isCancelled(e) && !silent && state.value) error.value = (e as Error).message;
+    return false;
   } finally {
     if (stateRequest.isCurrent(request)) ready.value = true;
   }
 }
 function clearSession() {
+ needsNodeRefresh=false;nodeSaveRequestID="";
  busy.value=false;speedRunning.value="";qualityRunning.value="";
  setRemoteSite("");selectedSite.value="";selectedSiteName.value="";
   stateRequest.cancel();
@@ -650,6 +658,7 @@ async function confirmed() {
 function editNode(n?: Node, protocol = "vless") {
  void loadEntitlements();
   if (n?.managed_by) { go('public'); return; }
+  nodeSaveRequestID = operationID();
   Object.assign(
     nodeForm,
     n
@@ -847,18 +856,28 @@ async function saveNode() {
     if (nodeForm.protocol === "vless" && realitySNI && (realitySNI.length > 63 || !/^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(realitySNI)))
       throw new Error(t("SNI 请输入最多 63 字符的域名，不含协议、端口、路径或 IP 地址。"));
     const sniChanged = nodeForm.protocol === "vless" && realitySNI !== (state.value?.nodes.find(n => n.id === nodeForm.id)?.reality_sni || "");
-    await api("/nodes", "POST", {
+    const saved = await saveNodeRecovering(api, {
+      save_request_id: nodeForm.id ? operationID() : nodeSaveRequestID || (nodeSaveRequestID = operationID()),
  policy_version:1, rate_milli:nodeForm.rate_milli??1000,group_ids:nodeForm.group_ids??[],
       id: nodeForm.id,
       protocol: nodeForm.protocol,
       enabled: editingDefaultDirect.value ? true : nodeForm.enabled,
       exit_id: editingDefaultDirect.value ? "" : nodeForm.exit_id,
       ...(nodeForm.protocol === "vless" ? { reality_sni: realitySNI } : {}),
-      dns: {...nodeForm.dns},
+      dns: nodeForm.dns ? {...nodeForm.dns} : undefined,
+    }, undefined, state.value?.system.node_save_receipts === true).catch(error => {
+      if (error instanceof NodeSaveUncertain) needsNodeRefresh = true;
+      throw error;
     });
+    // The write already succeeded. Keep its authoritative result even when
+    // applying the core briefly disconnects the following list request.
+    stateRequest.cancel();
+    if (state.value) state.value = {...state.value, nodes: upsertSavedNode(state.value.nodes, saved)};
+    error.value = "";
     modal.value = "";
-    await refresh();
+    needsNodeRefresh = true;
     toast(sniChanged ? t("节点已应用，请更新客户端订阅以使用新的 SNI。") : t("节点已应用，出口名称已更新"));
+    await refresh(true);
   });
 }
 function deleteNode(n: Node) {
@@ -936,7 +955,7 @@ const actionName = (s: string) =>
 let lastFullRefresh=0;
 const poll = serialPoll(async () => {
  if(!state.value||busy.value||document.hidden)return;
- if(Date.now()-lastFullRefresh>60000){await refresh(true);lastFullRefresh=Date.now();return;}
+ if(needsNodeRefresh||Date.now()-lastFullRefresh>60000){if(await refresh(true))lastFullRefresh=Date.now();return;}
  const value=await api<{system:Partial<State['system']>;me:User;site:SiteSettings;runtime:State['runtime'];unread_messages:number}>('/operations');
  if(!state.value)return;
  state.value={...state.value,me:value.me,site:value.site,runtime:value.runtime,unread_messages:value.unread_messages,system:{...state.value.system,...value.system}};

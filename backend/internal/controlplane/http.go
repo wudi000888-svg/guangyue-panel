@@ -300,6 +300,7 @@ func (a *App) state(w http.ResponseWriter, r *http.Request, actor Record) {
 		system["traffic_error"] = ""
 	}
 	if actor.Role == "owner" {
+		system["node_save_receipts"] = true
 		system["reality_sni"] = a.cfg.RealitySNI
 		system["hy2_old_connections"] = a.oldHYConnections
 		system["services"] = []object{{"name": "Xray", "active": a.cfg.Dev || corePID("guangyue-xray.service") > 0}, {"name": "Hysteria2", "active": a.cfg.Dev || corePID("guangyue-hy2.service") > 0}, {"name": "Nginx", "active": a.cfg.Dev || corePID("nginx.service") > 0}}
@@ -894,14 +895,29 @@ func (a *App) saveNode(w http.ResponseWriter, r *http.Request, actor Record) {
 	if !decode(w, r, &n) {
 		return
 	}
+	if n.SaveRequestID != "" && !validNodeSaveRequestID(n.SaveRequestID) {
+		failure(w, 400, "节点保存标识无效")
+		return
+	}
+	// These creation receipts are server-owned and survive subsequent edits.
+	n.CreateRequestID, n.CreateRequestHash = "", ""
+	requestHash := digest(strconv.FormatInt(actor.ID, 10) + ":" + string(jsonBytes(n)))
 	// Protection is server-owned. Reject forbidden changes before DNS/TLS work,
 	// then check again against the current row after acquiring the write lock.
 	n.DefaultDirect = false
 	a.mu.Lock()
 	snapshot, snapshotErr := a.store.nodes()
+	currentOwner, ownerErr := a.store.record(actor.ID)
 	a.mu.Unlock()
+	if ownerErr != nil || !currentOwner.Enabled || currentOwner.Role != "owner" {
+		failure(w, 403, "管理员权限已变更，请重新登录")
+		return
+	}
 	if snapshotErr != nil {
 		failure(w, 500, "读取节点失败")
+		return
+	}
+	if replayNodeCreate(w, snapshot, n, requestHash) {
 		return
 	}
 	for _, previous := range snapshot {
@@ -963,6 +979,10 @@ func (a *App) saveNode(w http.ResponseWriter, r *http.Request, actor Record) {
 		failure(w, 500, "读取节点失败")
 		return
 	}
+	// Another request with this key may have finished during the network probes.
+	if replayNodeCreate(w, nodes, n, requestHash) {
+		return
+	}
 	var old *Node
 	for _, x := range nodes {
 		if x.ID == n.ID {
@@ -977,6 +997,7 @@ func (a *App) saveNode(w http.ResponseWriter, r *http.Request, actor Record) {
 				return
 			}
 			n.DefaultDirect = x.DefaultDirect
+			n.CreateRequestID, n.CreateRequestHash = x.CreateRequestID, x.CreateRequestHash
 			if n.Protocol != x.Protocol {
 				failure(w, 400, "节点协议不能变更")
 				return
@@ -996,6 +1017,9 @@ func (a *App) saveNode(w http.ResponseWriter, r *http.Request, actor Record) {
 			return
 		}
 		n.ID = n.Protocol + "-" + digest(randomToken(8))[:8]
+		if n.SaveRequestID != "" {
+			n.CreateRequestID, n.CreateRequestHash = n.SaveRequestID, requestHash
+		}
 	}
 	if n.ExitID == "" {
 		n.Upstream, n.UpstreamType, n.BridgePort, n.BridgePassword = nil, "", 0, ""
@@ -1152,10 +1176,7 @@ func (a *App) saveNode(w http.ResponseWriter, r *http.Request, actor Record) {
 			}
 		}
 	}
-	if err = a.store.savePoolNodes(savePools, shared); err != nil {
-		failure(w, 500, "保存节点失败")
-		return
-	}
+	var changedRecords []Record
 	if old == nil && n.Protocol == "vless" {
 		records, e := a.store.records()
 		if e != nil {
@@ -1164,11 +1185,13 @@ func (a *App) saveNode(w http.ResponseWriter, r *http.Request, actor Record) {
 		}
 		for _, record := range records {
 			record.Credentials.VLESS[n.ID] = uuid()
-			if err = a.store.save(&record); err != nil {
-				failure(w, 500, "分配凭据失败")
-				return
-			}
+			changedRecords = append(changedRecords, record)
 		}
+	}
+	// A receipt must never describe a partially committed VLESS node.
+	if err = a.store.saveInfrastructure(savePools, shared, changedRecords, nil, nil); err != nil {
+		failure(w, 500, "保存节点失败")
+		return
 	}
 	a.status = "pending"
 	if err = a.reconcile(); err != nil {

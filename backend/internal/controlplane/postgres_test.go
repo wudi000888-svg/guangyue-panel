@@ -44,6 +44,9 @@ func TestPostgresBehaviors(t *testing.T) {
 		{"message_isolation", TestMessageRecipientIsolationAndReadState},
 		{"default_nodes", TestDefaultDirectAPIRejectsDeletionDisableAndRebinding},
 		{"multiple_hy2", TestMultipleHY2NodesDefaultDirectAndIndependentCredentials},
+		{"node_save_receipts", TestNodeSaveReceiptReplay},
+		{"node_save_rollback", TestNodeSaveReceiptRollbackAndValidation},
+		{"node_save_concurrent", TestConcurrentNodeCreationUsesOneReceipt},
 		{"stale_subscription", TestPartialAndInvalidSourceResponseDoesNotPrune},
 	} {
 		t.Run(v.name, v.run)

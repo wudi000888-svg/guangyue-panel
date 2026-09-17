@@ -131,6 +131,7 @@ func (s *Store) saveInfrastructure(pools []IPResource, nodes []Node, records []R
 }
 
 func resourceFromNode(n Node) IPResource {
+	n.SaveRequestID, n.CreateRequestID, n.CreateRequestHash = "", "", ""
 	n.DefaultDirect = false
 	n.DNS = nil
 	n.RealitySNI, n.RealityIP = "", ""

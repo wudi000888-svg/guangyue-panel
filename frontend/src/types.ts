@@ -35,6 +35,8 @@ export type SpeedResult = {
   error?: string;
 };
 export type Node = {
+  save_request_id?: string;
+  create_request_id?: string;
  policy_version?:number;rate_milli?:number;rate_revision?:string;group_ids?:string[];
 	default_direct?: boolean;
 	reality_sni?: string;
@@ -82,6 +84,7 @@ export type State = {
   ip_pool: IPResource[];
   totals: { upload: number; download: number; active: number };
   system: {
+    node_save_receipts?: boolean;
     edition?: 'lite' | 'pro';
     site_id?: string;
     database?: string;
