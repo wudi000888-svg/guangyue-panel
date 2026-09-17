@@ -119,7 +119,8 @@ try:
     run(*command);assert not install.CONFIG.exists()
     run(*command,'--apply');install.health()
     actual=json.loads(install.CONFIG.read_text());assert actual['edition']==edition and actual['role']=='business' and actual['database']['driver']=='sqlite' and not actual['redis_url']
-    assert not (install.STATE/'initial-owner.json').exists()
+    # Managed children keep a local owner for independent login and recovery.
+    assert (install.STATE/'initial-owner.json').exists()
     assert 'MemoryMax=160M' in Path('/etc/systemd/system/guangyue.service').read_text()
     def synchronized():
         sites,_=api('/api/business-sites',cookie=cookie);site=sites['sites'][0]
