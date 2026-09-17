@@ -97,8 +97,8 @@ func testBusinessLifecycle(t *testing.T, edition string) {
 			t.Fatal("controller secret sent to agent")
 		}
 	}
-	if w := req(t, agent, Record{}, "GET", "/api/state", nil); w.Code != 404 {
-		t.Fatalf("agent exposed management %d", w.Code)
+	if w := req(t, agent, Record{}, "GET", "/api/state", nil); w.Code != 401 {
+		t.Fatalf("agent should require local authentication %d", w.Code)
 	}
 	if err := agent.syncBusinessAgent(ctx, server.Client()); err != nil {
 		t.Fatal(err)

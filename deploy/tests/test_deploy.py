@@ -189,9 +189,7 @@ class BusinessDeploymentTests(unittest.TestCase):
             with self.assertRaises(ValueError):infrastructure.edition_config({},'pro','site_east',role='business',enrollment=path)
 
     def test_new_defaults_and_legacy_upgrade(self):
-        with self.assertRaisesRegex(ValueError,'Lite defaults to a sub-site'):
-            infrastructure.edition_config({},'lite','edge')
-        independent=infrastructure.edition_config({},'lite','edge',role='standalone')
+        independent=infrastructure.edition_config({},'lite','edge')
         self.assertEqual(independent['role'],'standalone')
         for legacy in ({'state_dir':'/synthetic/state'},{'edition':'lite'},{'edition':'lite','role':'standalone'}):
             updated=infrastructure.edition_config(legacy,'lite','default',existing=True)

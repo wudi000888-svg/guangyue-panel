@@ -6,11 +6,11 @@
 
 **新一代跨境电商企业级解决方案**
 
-面向跨境电商团队的网络资源控制台，提供 Lite 子站版与 Pro 主站版：统一管理成员、节点、私有出口与独立公共代理池。
+面向跨境电商团队的网络资源控制台，提供 Lite 独立站/子站版与 Pro 主站版：统一管理成员、节点、私有出口与独立公共代理池。
 
 [English](README_EN.md) · [安装指南](docs/INSTALL.md) · [使用手册](docs/USER_GUIDE.md) · [Nginx 共存](docs/NGINX.md) · [运维与备份](docs/OPERATIONS.md)
 
-![version](https://img.shields.io/badge/version-0.23.0-2563eb)
+![version](https://img.shields.io/badge/version-0.23.1-2563eb)
 ![license](https://img.shields.io/badge/panel_license-LGPL--3.0-16a34a)
 ![platform](https://img.shields.io/badge/server-Linux_amd64-475569)
 
@@ -49,7 +49,7 @@
 
 ## 下载版本
 
-在 [Releases](https://github.com/wudi000888-svg/guangyue-panel/releases/latest) 的 Assets 选择 `guangyue-panel-lite-…tar.gz`（默认子站）或 `guangyue-panel-pro-…tar.gz`（默认主站），并校验 `SHA256SUMS`。Lite 子站使用主站下载的注册文件安装，无需 PostgreSQL 或 Redis；成员权限、配额、节点与出口由主站统一下发。独立 Lite 安装需显式指定 `--role standalone`，已有部署升级保留原角色。
+在 [Releases](https://github.com/wudi000888-svg/guangyue-panel/releases/latest) 的 Assets 选择 `guangyue-panel-lite-…tar.gz`（默认独立站）或 `guangyue-panel-pro-…tar.gz`（默认主站），并校验 `SHA256SUMS`。新装独立站不需要注册文件；登录后可在“配对令牌”页面生成令牌，再由 Pro 主站粘贴令牌直接接管。Lite 只能生成和撤销令牌，不能接管其他站点。使用主站提供的 `--enrollment-file` 时，Lite/Pro 才作为托管子站运行；子站仍保留本地登录、节点和订阅能力。已有部署升级保留原角色。
 
 已有部署可按[在线更新与版本回退说明](docs/UPDATES.md)启用左上角版本管理。回退保留当前数据，不能低于安装基线；不兼容当前数据库的旧版本会被阻止。
 

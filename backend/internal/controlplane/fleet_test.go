@@ -109,3 +109,32 @@ func TestFleetReadonlyGatewayAndLocalAuthorization(t *testing.T) {
 		t.Fatal("disabled owner token accepted")
 	}
 }
+
+func TestLitePairingTokenAndProTakeover(t *testing.T) {
+	lite := testApp(t)
+	lite.cfg.Edition, lite.cfg.SiteID = "lite", "child"
+	liteOwner := testUser(t, lite, "lite-owner", "owner")
+	server := httptest.NewServer(lite.routes())
+	defer server.Close()
+
+	// Lite can issue a pairing token, but the scope is always management so a
+	// Pro master can take over the site after the token is pasted.
+	token := fleetToken(t, lite, liteOwner, "read")
+	pro := testApp(t)
+	pro.cfg.Edition, pro.cfg.Role, pro.cfg.SiteID = "pro", "controller", "master"
+	proOwner := testUser(t, pro, "pro-owner", "owner")
+	w := req(t, pro, proOwner, "POST", "/api/fleet/peers", object{"name": "Lite child", "url": server.URL, "token": token})
+	if w.Code != 201 {
+		t.Fatalf("Pro could not take over Lite with pairing token: %d %s", w.Code, w.Body.String())
+	}
+	var peer FleetPeer
+	if err := json.Unmarshal(w.Body.Bytes(), &peer); err != nil || peer.Scope != "manage" || peer.SiteID != "child" {
+		t.Fatalf("unexpected paired site: %+v", peer)
+	}
+	if w = req(t, lite, liteOwner, "POST", "/api/fleet/peers", object{"name": "blocked", "url": server.URL, "token": token}); w.Code != 403 {
+		t.Fatalf("Lite created a peer: %d", w.Code)
+	}
+	if w = req(t, lite, liteOwner, "GET", "/api/fleet", nil); w.Code != 200 || strings.Contains(w.Body.String(), peer.ID) {
+		t.Fatalf("Lite exposed controller peer directory: %d %s", w.Code, w.Body.String())
+	}
+}

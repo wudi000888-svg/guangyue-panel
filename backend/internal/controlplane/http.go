@@ -71,10 +71,8 @@ func (a *App) routes() http.Handler {
 		files.ServeHTTP(w, r)
 	})
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if a.cfg.businessAgent() && r.URL.Path != "/api/health" {
-			failure(w, 404, "此业务站由主控管理")
-			return
-		}
+		// A managed child keeps its normal local panel.  The controller supplies
+		// policy when reachable, while the child remains usable during an outage.
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("X-Frame-Options", "DENY")

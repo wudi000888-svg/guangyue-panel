@@ -1,6 +1,6 @@
 # 发布准备与仓库管理
 
-项目名称：广月面板 / Guangyue Panel。仓库 slug：`guangyue-panel`。双版本发布：`0.23.0`。项目定位：新一代跨境电商企业级解决方案，提供 Lite 子站版和 Pro 主站管理版。
+项目名称：广月面板 / Guangyue Panel。仓库 slug：`guangyue-panel`。双版本发布：`0.23.1`。项目定位：新一代跨境电商企业级解决方案，提供 Lite 独立/子站版和 Pro 主站管理版。
 
 ## 公开发布策略
 
@@ -10,7 +10,7 @@
 
 ## 发布产物
 
-- `guangyue-panel-lite-<version>-linux-amd64.tar.gz`：默认 SQLite 子站，使用主站注册文件；独立部署需 `--role standalone`。
+- `guangyue-panel-lite-<version>-linux-amd64.tar.gz`：默认 SQLite 独立站；无需注册文件，登录后可生成配对令牌，也可使用 `--enrollment-file` 作为托管子站。
 - `guangyue-panel-pro-<version>-linux-amd64.tar.gz`：默认主控安装，支持 `--role business` 安装轻量业务站。
 - 两包均包含面板、前端、自定义 HY2 与 Xray、安装/升级脚本、文档及受校验的 `EDITION` 标记。
 - `SHA256SUMS`：外层压缩包与 SBOM 校验；压缩包内还有逐文件校验。

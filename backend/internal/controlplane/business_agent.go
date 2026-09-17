@@ -145,6 +145,12 @@ func (a *App) syncBusinessAgent(ctx context.Context, client *http.Client) error 
 	}
 	report := BusinessHeartbeat{Protocol: 2, UsageBaseline: map[int64]BusinessUsage{}, Version: version, SiteID: a.cfg.siteID(), Applied: state.Applied, Usage: map[int64]BusinessUsage{}, Error: state.Error}
 	for _, u := range users {
+		// A managed child keeps a local owner for independent administration. It
+		// is deliberately outside the master's member directory and must never be
+		// reported as managed traffic or policy state.
+		if u.Role != "user" {
+			continue
+		}
 		report.Usage[u.ID] = businessUsageOf(u.User)
 		if u.Meter == nil {
 			report.UsageBaseline[u.ID] = BusinessUsage{Upload: u.Upload, Download: u.Download}
@@ -420,6 +426,14 @@ func (a *App) applyBusinessSnapshot(ctx context.Context, snapshot BusinessSnapsh
 		}
 		records = append(records, r)
 	}
+	// The local owner is intentionally outside the master's user directory. It
+	// survives policy replacement so a child can be administered independently.
+	for _, old := range oldUsers {
+		if old.Role == "owner" && old.ID < 0 {
+			records = append(records, old)
+			usersSeen[old.ID] = true
+		}
+	}
 	for _, old := range oldUsers {
 		if !usersSeen[old.ID] {
 			old.Enabled = false
@@ -558,7 +572,13 @@ func (a *App) replaceBusinessState(records []Record, nodes []Node, pools []IPRes
 		if e != nil {
 			return e
 		}
-		_, err = tx.Exec("INSERT INTO users(id,username,doc,credentials,password,token_hash) VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET username=excluded.username,doc=excluded.doc,credentials=excluded.credentials,password=excluded.password,token_hash=excluded.token_hash", r.ID, r.Username, b, c, []byte("!"), digest(r.Credentials.Token))
+		password := []byte("!")
+		if r.Role == "owner" && r.ID < 0 {
+			// The local child owner remains a real local login after every policy
+			// replacement. Managed member passwords are intentionally never copied.
+			password = r.Password
+		}
+		_, err = tx.Exec("INSERT INTO users(id,username,doc,credentials,password,token_hash) VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET username=excluded.username,doc=excluded.doc,credentials=excluded.credentials,password=excluded.password,token_hash=excluded.token_hash", r.ID, r.Username, b, c, password, digest(r.Credentials.Token))
 		if err != nil {
 			return err
 		}

@@ -70,7 +70,7 @@ func req(t *testing.T, a *App, user Record, method, path string, body any) *http
 	r := httptest.NewRequest(method, path, bytes.NewReader(b))
 	r.Header.Set("Content-Type", "application/json")
 	r.Header.Set("X-Requested-With", "guangyue")
-	if user.ID > 0 {
+	if user.ID != 0 {
 		token := randomToken(32)
 		_, err := a.store.db.Exec("INSERT INTO sessions VALUES(?,?,?)", digest(token), user.ID, time.Now().Add(time.Hour).Unix())
 		if err != nil {

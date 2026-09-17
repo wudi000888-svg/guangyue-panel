@@ -44,7 +44,10 @@ def edition_config(config, edition, site, profile=None, role=None, enrollment=No
     if old_edition=='pro' and edition=='lite':
         raise ValueError('automatic Pro to Lite downgrade is refused; use portable backup recovery')
     retained=(old_role if existing else config.get('role')) if old_edition==edition else None
-    role=role or retained or ('controller' if edition=='pro' else 'business')
+    # A fresh installation is always usable without a controller.  Supplying an
+    # enrollment file opts into managed child mode; otherwise Lite remains an
+    # independent SQLite site and Pro remains the master controller.
+    role=role or retained or ('business' if enrollment else ('controller' if edition=='pro' else 'standalone'))
     if role not in ('standalone','controller','business') or (edition=='lite' and role=='controller') or (edition=='pro' and role=='standalone'):
         raise ValueError('Lite supports business or standalone; Pro supports controller or business')
     if role=='business':
@@ -63,7 +66,7 @@ def edition_config(config, edition, site, profile=None, role=None, enrollment=No
                 raise ValueError('invalid enrollment token')
             result.update(data)
         if not result.get('controller_url') or not (result.get('enrollment_token') or result.get('business_token')):
-            raise ValueError('Lite defaults to a sub-site: provide --enrollment-file from the Pro master; use --role standalone only for an independent Lite installation' if edition=='lite' else 'business site requires --enrollment-file')
+            raise ValueError('business site requires --enrollment-file')
         result.update(database={'driver':'sqlite'},redis_url='')
     elif edition=='pro':
         if profile: result.update(read_profile(profile))
