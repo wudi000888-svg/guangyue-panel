@@ -47,6 +47,15 @@ def wait_for(check,seconds=100):
             if result:return result
         except (OSError,ValueError):pass
         time.sleep(1)
+    # Surface the controller's sanitized state in the Actions annotation so a
+    # failed disposable install remains diagnosable without exposing tokens.
+    try:
+        snapshot,_=api('/api/business-sites',cookie=cookie)
+        site=snapshot.get('sites',[{}])[0]
+        details={key:site.get(key) for key in ('id','applied','desired','error','last_seen','lease_until')}
+        print('::error title=business synchronization timeout::'+json.dumps(details,ensure_ascii=False),flush=True)
+    except Exception:
+        pass
     raise RuntimeError('timed out waiting for business-site state')
 
 def recv(sock,size):
