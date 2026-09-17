@@ -17,7 +17,7 @@ import (
 	"path/filepath"
 )
 
-const version = "0.22.0"
+const version = "0.22.1"
 
 type Config struct {
 	HY2Optimized    bool                `json:"hy2_optimized,omitempty"`
@@ -298,9 +298,14 @@ type Node struct {
 	CountryCode    string       `json:"country_code"`
 	CheckedAt      int64        `json:"checked_at"`
 	ProbeError     string       `json:"probe_error"`
+
+	SaveRequestID     string `json:"save_request_id,omitempty"`
+	CreateRequestID   string `json:"create_request_id,omitempty"`
+	CreateRequestHash string `json:"create_request_hash,omitempty"`
 }
 
 func (n Node) public() Node {
+	n.CreateRequestHash = ""
 	n.RealityIP = ""
 	n.HasPassword = n.Password != "" || n.Upstream != nil
 	n.Upstream = nil

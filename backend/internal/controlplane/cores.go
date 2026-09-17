@@ -215,6 +215,7 @@ func (a *App) verifyHYCore() error {
 // Only fields that affect routing belong in runtime identity. Quality scans,
 // labels, ownership and default-node protection must not restart live cores.
 func runtimeNode(n Node) Node {
+	n.SaveRequestID, n.CreateRequestID, n.CreateRequestHash = "", "", ""
 	n.PolicyVersion = 0
 	n.RateMilli = 0
 	n.RateRevision = ""
