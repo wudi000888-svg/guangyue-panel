@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"strings"
 	"time"
 
@@ -225,6 +226,26 @@ func businessRecord(r Record, site string, nodes []Node) Record {
 	}
 	return r
 }
+
+// A child keeps a local owner named "owner". If the controller assigns a
+// same-named member to that child, SQLite's username uniqueness constraint
+// would otherwise reject the whole policy transaction. The member ID remains
+// authoritative; this stable local alias is only for the child panel login
+// directory and can never collide with another assigned member.
+func businessManagedUsername(name string, id int64, used map[string]bool) string {
+	suffix := "-m" + strconv.FormatInt(id, 10)
+	alias := name
+	if len(alias)+len(suffix) > 32 {
+		alias = alias[:32-len(suffix)]
+	}
+	alias += suffix
+	if len(alias) >= 3 && usernamePattern.MatchString(alias) && !used[alias] {
+		return alias
+	}
+	fallback := "m" + strconv.FormatInt(id, 10) + "-" + digest(name)[:8]
+	return fallback
+}
+
 func businessConfig(info BusinessInfo) Config {
 	return Config{VLESSHost: info.VLESSHost, HY2Host: info.HY2Host, RealityPublic: info.RealityPublic, RealitySNI: info.RealitySNI, RealityTarget: info.RealitySNI + ":443", ShortID: info.ShortID}
 }

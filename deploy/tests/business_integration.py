@@ -47,6 +47,20 @@ def wait_for(check,seconds=100):
             if result:return result
         except (OSError,ValueError):pass
         time.sleep(1)
+    # Surface the controller's sanitized state in the Actions annotation so a
+    # failed disposable install remains diagnosable without exposing tokens.
+    try:
+        snapshot,_=api('/api/business-sites',cookie=cookie)
+        site=snapshot.get('sites',[{}])[0]
+        details={key:site.get(key) for key in ('id','applied','desired','error','last_seen','lease_until')}
+        print('::error title=business synchronization timeout::'+json.dumps(details,ensure_ascii=False),flush=True)
+    except Exception:
+        pass
+    try:
+        logs=subprocess.run(['journalctl','-u','guangyue.service','-n','24','--no-pager'],capture_output=True,text=True).stdout
+        print('::error title=business child logs::'+logs[-6000:].replace('\n','\\n'),flush=True)
+    except Exception:
+        pass
     raise RuntimeError('timed out waiting for business-site state')
 
 def recv(sock,size):
@@ -119,7 +133,8 @@ try:
     run(*command);assert not install.CONFIG.exists()
     run(*command,'--apply');install.health()
     actual=json.loads(install.CONFIG.read_text());assert actual['edition']==edition and actual['role']=='business' and actual['database']['driver']=='sqlite' and not actual['redis_url']
-    assert not (install.STATE/'initial-owner.json').exists()
+    # Managed children keep a local owner for independent login and recovery.
+    assert (install.STATE/'initial-owner.json').exists()
     assert 'MemoryMax=160M' in Path('/etc/systemd/system/guangyue.service').read_text()
     def synchronized():
         sites,_=api('/api/business-sites',cookie=cookie);site=sites['sites'][0]

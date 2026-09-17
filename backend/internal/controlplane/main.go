@@ -139,10 +139,8 @@ func Run() {
 		}
 		return
 	}
-	if !cfg.businessAgent() {
-		if err = store.bootstrap(cfg.StateDir); err != nil {
-			log.Fatal(err)
-		}
+	if err = store.bootstrap(cfg.StateDir); err != nil {
+		log.Fatal(err)
 	}
 	if err = store.migratePublicSubscriptions(); err != nil {
 		log.Fatal(err)

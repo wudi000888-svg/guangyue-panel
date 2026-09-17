@@ -64,6 +64,12 @@ func TestMasterControlsLiteSubsitePermissions(t *testing.T) {
 		agent.cfg.Edition, agent.cfg.Role, agent.cfg.SiteID = "lite", "business", id
 		agent.cfg.ControllerURL, agent.cfg.EnrollmentToken = server.URL, token
 		agent.cfg.RealityPublic, agent.cfg.ShortID = randomToken(32), "aabbccddaabbccdd"
+		// A managed child always has a local owner so it can be used while the
+		// controller is offline and can be paired later by a Pro master.
+		agent.store.business = true
+		if err := agent.store.bootstrap(agent.cfg.StateDir); err != nil {
+			t.Fatal(err)
+		}
 		agents = append(agents, agent)
 	}
 	sync := func() {
@@ -78,17 +84,25 @@ func TestMasterControlsLiteSubsitePermissions(t *testing.T) {
 	}
 	sync()
 	for _, agent := range agents {
-		// Even a stale local owner session cannot bypass the managed-site boundary.
-		local := testUser(t, agent, "local-owner", "owner")
-		for _, path := range []string{"/api/state", "/api/users", "/api/nodes", "/api/business-sites", "/api/fleet", "/api/fleet-gateway", "/api/login", "/api/updates", "/sub/token", "/"} {
-			for _, method := range []string{"GET", "POST", "PUT", "DELETE"} {
-				if w := req(t, agent, local, method, path, object{}); w.Code != 404 {
-					t.Fatalf("sub-site exposed %s %s: %d", method, path, w.Code)
-				}
+		// Child administrators retain local visibility and management. Only the
+		// controller-only fleet APIs remain unavailable on Lite.
+		local, err := agent.store.record(-1)
+		if err != nil || local.Role != "owner" {
+			t.Fatal("managed child lost local owner")
+		}
+		if w := req(t, agent, local, "GET", "/api/state", nil); w.Code != 200 {
+			t.Fatalf("local state unavailable: %d %s", w.Code, w.Body.String())
+		}
+		for _, path := range []string{"/api/state", "/api/operations", "/api/fleet"} {
+			if w := req(t, agent, local, "GET", path, nil); w.Code != 200 {
+				t.Fatalf("local child endpoint unavailable %s: %d", path, w.Code)
 			}
 		}
-		if _, err := agent.store.db.Exec("DELETE FROM users WHERE id=?", local.ID); err != nil {
-			t.Fatal(err)
+		if w := req(t, agent, local, "POST", "/api/fleet/peers", object{}); w.Code != 403 {
+			t.Fatalf("Lite child gained peer takeover: %d", w.Code)
+		}
+		if w := req(t, agent, local, "GET", "/api/business-sites", nil); w.Code != 403 {
+			t.Fatalf("child exposed controller site directory: %d", w.Code)
 		}
 	}
 	// Global protocol and expiration settings reach every assigned sub-site.
@@ -99,7 +113,7 @@ func TestMasterControlsLiteSubsitePermissions(t *testing.T) {
 	}
 	sync()
 	for _, agent := range agents {
-		members := mustCoreRecords(t, agent)
+		members := managedRecords(t, agent)
 		if len(members) != 1 || members[0].VLESS || !members[0].HY2 || members[0].Expires != expires || members[0].Role != "user" {
 			t.Fatal("master protocol, expiry or role policy not enforced")
 		}
@@ -117,7 +131,7 @@ func TestMasterControlsLiteSubsitePermissions(t *testing.T) {
 	}
 	sync()
 	for i, agent := range agents {
-		members := mustCoreRecords(t, agent)
+		members := managedRecords(t, agent)
 		nodes, _ := agent.store.nodes()
 		for _, n := range nodes {
 			if nodeGroupAllowed(members[0], n) != (i == 1) {
@@ -148,10 +162,22 @@ func TestMasterControlsLiteSubsitePermissions(t *testing.T) {
 	}
 	sync()
 	for _, agent := range agents {
-		for _, u := range mustCoreRecords(t, agent) {
+		for _, u := range managedRecords(t, agent) {
 			if u.Active() {
 				t.Fatal("disabled member retained sub-site authorization")
 			}
 		}
 	}
+}
+
+func managedRecords(t *testing.T, a *App) []Record {
+	t.Helper()
+	all := mustCoreRecords(t, a)
+	users := make([]Record, 0, len(all))
+	for _, r := range all {
+		if r.Role == "user" {
+			users = append(users, r)
+		}
+	}
+	return users
 }

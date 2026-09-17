@@ -19,6 +19,7 @@ import (
 type Store struct {
 	commerceErr error
 	edition     string
+	business    bool
 	db          *persistence.DB
 	vault       *Vault
 	stateDir    string
@@ -58,7 +59,7 @@ func openUninitializedStore(cfg Config) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &Store{db: db, vault: v, stateDir: cfg.StateDir, edition: cfg.edition()}
+	s := &Store{db: db, vault: v, stateDir: cfg.StateDir, edition: cfg.edition(), business: cfg.businessAgent()}
 	if err = s.initRuntimeSettings(); err != nil {
 		db.Close()
 		return nil, err
@@ -119,6 +120,18 @@ func (s *Store) save(r *Record) error {
 	if r.ID == 0 {
 		return s.db.QueryRow("INSERT INTO users(username,doc,credentials,password,token_hash) VALUES(?,?,?,?,?) RETURNING id", r.Username, b, c, r.Password, digest(r.Credentials.Token)).Scan(&r.ID)
 	}
+	if r.ID < 0 {
+		var result sql.Result
+		result, err = s.db.Exec("UPDATE users SET username=?,doc=?,credentials=?,password=?,token_hash=? WHERE id=?", r.Username, b, c, r.Password, digest(r.Credentials.Token), r.ID)
+		if err != nil {
+			return err
+		}
+		if changed, e := result.RowsAffected(); e == nil && changed > 0 {
+			return nil
+		}
+		_, err = s.db.Exec("INSERT INTO users(id,username,doc,credentials,password,token_hash) VALUES(?,?,?,?,?,?)", r.ID, r.Username, b, c, r.Password, digest(r.Credentials.Token))
+		return err
+	}
 	_, err = s.db.Exec("UPDATE users SET username=?,doc=?,credentials=?,password=?,token_hash=? WHERE id=?", r.Username, b, c, r.Password, digest(r.Credentials.Token), r.ID)
 	return err
 }
@@ -178,6 +191,9 @@ func (s *Store) bootstrap(dir string) error {
 		return err
 	}
 	if count > 0 {
+		if s.business {
+			return s.ensureLocalOwner(dir)
+		}
 		return nil
 	}
 	n := Node{ID: "vless-main", Name: "待检测 · VLESS", Protocol: "vless", Enabled: true, Exit: "direct"}
@@ -193,6 +209,11 @@ func (s *Store) bootstrap(dir string) error {
 		return err
 	}
 	r := Record{User: User{Username: "owner", Role: "owner", Enabled: true, VLESS: true, HY2: true, Created: time.Now().Unix()}, Password: hash, Credentials: Credentials{HY2: randomToken(24), Token: randomToken(32), VLESS: map[string]string{n.ID: uuid()}}}
+	if s.business {
+		// Keep a stable, non-controller ID outside the positive IDs issued by the
+		// master. This lets policy replacement preserve the local administrator.
+		r.ID = -1
+	}
 	if err = writeJSON(filepath.Join(dir, "initial-owner.json"), map[string]string{"username": "owner", "password": pass}); err != nil {
 		return err
 	}
@@ -201,6 +222,46 @@ func (s *Store) bootstrap(dir string) error {
 	}
 	s.audit("system", "initialize", "personal edition")
 	return nil
+}
+
+func (s *Store) ensureLocalOwner(dir string) error {
+	var count int
+	if err := s.db.QueryRow("SELECT COUNT(*) FROM users WHERE json_extract(doc, '$.role')='owner'").Scan(&count); err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+	pass := randomToken(18)
+	hash, err := bcrypt.GenerateFromPassword([]byte(pass), 12)
+	if err != nil {
+		return err
+	}
+	nodes, err := s.nodes()
+	if err != nil {
+		return err
+	}
+	creds := Credentials{HY2: randomToken(24), Token: randomToken(32), VLESS: map[string]string{}}
+	for _, n := range nodes {
+		if n.Protocol == "vless" {
+			creds.VLESS[n.ID] = uuid()
+		}
+	}
+	r := Record{User: User{Username: "owner", Role: "owner", Enabled: true, VLESS: true, HY2: true, Created: time.Now().Unix()}, Password: hash, Credentials: creds}
+	r.ID = -1
+	if err = writeJSON(filepath.Join(dir, "initial-owner.json"), map[string]string{"username": "owner", "password": pass}); err != nil {
+		return err
+	}
+	b, err := json.Marshal(r.User)
+	if err != nil {
+		return err
+	}
+	c, err := s.vault.seal(r.Credentials)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec("INSERT INTO users(id,username,doc,credentials,password,token_hash) VALUES(?,?,?,?,?,?)", r.ID, r.Username, b, c, r.Password, digest(r.Credentials.Token))
+	return err
 }
 
 type Counter struct {

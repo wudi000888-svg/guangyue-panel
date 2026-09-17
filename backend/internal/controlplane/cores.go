@@ -467,6 +467,11 @@ func (a *App) collect() error {
 			live.generation[1], live.traffic[1] = generation, true
 			for id, s := range result {
 				uid, _ := strconv.ParseInt(strings.TrimPrefix(strings.SplitN(id, ".", 2)[0], "u"), 10, 64)
+				// Negative IDs are reserved for a child site's local owner. Their
+				// traffic stays local and must not enter managed accounting.
+				if uid <= 0 {
+					continue
+				}
 				// HY2 Tx/Rx is measured at the server-to-target side: Tx is upload.
 				counters = append(counters, Counter{Key: "hy:" + id + ":upload", Generation: generation, UserID: uid, NodeID: nodeFromHY(id), Protocol: "hy2", Direction: "up", Value: s.TX}, Counter{Key: "hy:" + id + ":download", Generation: generation, UserID: uid, NodeID: nodeFromHY(id), Protocol: "hy2", Direction: "down", Value: s.RX})
 			}

@@ -64,7 +64,9 @@ func (a *App) fleetGateway(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if a.cfg.edition() != "pro" || r.Method != "POST" {
+	// Pairing tokens are served by both editions.  Lite cannot act as a fleet
+	// controller, but a Pro master may use its token to manage this site.
+	if r.Method != "POST" {
 		failure(w, 404, "接口不存在")
 		return
 	}
@@ -156,16 +158,25 @@ func (a *App) relaySiteAPI(w http.ResponseWriter, r *http.Request, actor Record,
 	_, _ = w.Write(out.Body)
 }
 func (a *App) fleetAPI(w http.ResponseWriter, r *http.Request, actor Record) {
-	if a.cfg.edition() != "pro" {
-		failure(w, 403, "群站功能需要 Pro 版")
-		return
-	}
 	path := strings.TrimPrefix(r.URL.Path, "/api/fleet")
-	if path == "" && r.Method == "GET" {
-		peers, err := a.store.fleetPeers()
-		if err != nil {
-			failure(w, 500, "读取站点失败")
+	// Lite exposes only its local pairing-token lifecycle.  Site takeover and
+	// peer administration remain Pro-master capabilities.
+	if a.cfg.edition() != "pro" {
+		allowed := path == "" && r.Method == "GET" || path == "/tokens" && r.Method == "POST" || strings.HasPrefix(path, "/tokens/") && r.Method == "DELETE"
+		if !allowed {
+			failure(w, 403, "Lite 仅支持生成和撤销配对令牌，站点接管需要 Pro 主站")
 			return
+		}
+	}
+	if path == "" && r.Method == "GET" {
+		peers := []FleetPeer{}
+		if a.cfg.edition() == "pro" {
+			var err error
+			peers, err = a.store.fleetPeers()
+			if err != nil {
+				failure(w, 500, "读取站点失败")
+				return
+			}
 		}
 		tokens := []object{}
 		rows, err := a.store.db.Query("SELECT id,name,scope,created,expires,last_used FROM fleet_tokens ORDER BY created DESC")
@@ -200,6 +211,9 @@ func (a *App) fleetAPI(w http.ResponseWriter, r *http.Request, actor Record) {
 		}
 		if !decode(w, r, &in) {
 			return
+		}
+		if a.cfg.edition() == "lite" {
+			in.Scope = "manage"
 		}
 		if strings.TrimSpace(in.Name) == "" || utf8.RuneCountInString(in.Name) > 64 || (in.Scope != "read" && in.Scope != "manage") || in.Days < 1 || in.Days > 365 {
 			failure(w, 400, "请填写令牌名称、权限和 1 至 365 天有效期")
