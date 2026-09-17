@@ -184,6 +184,24 @@ func mustCoreRecords(t *testing.T, a *App) []Record {
 	}
 	return v
 }
+
+func TestBusinessCoreRecordsExcludeLocalOwner(t *testing.T) {
+	a := testApp(t)
+	owner := testUser(t, a, "owner", "owner")
+	member := testUser(t, a, "alice", "user")
+	if _, err := a.store.db.Exec("UPDATE users SET id=-1 WHERE id=?", owner.ID); err != nil {
+		t.Fatal(err)
+	}
+	a.cfg.Role = "business"
+	if err := a.store.saveBusinessAgent(businessAgentState{LeaseUntil: time.Now().Add(time.Minute).Unix()}); err != nil {
+		t.Fatal(err)
+	}
+	records := mustCoreRecords(t, a)
+	if len(records) != 1 || records[0].ID != member.ID {
+		t.Fatalf("business core included unmanaged records: %+v", records)
+	}
+}
+
 func TestBusinessAllocationsAndCounterRollback(t *testing.T) {
 	a := testApp(t)
 	a.cfg.Edition = "pro"

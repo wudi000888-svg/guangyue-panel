@@ -101,12 +101,22 @@ func (a *App) coreRecords() ([]Record, error) {
 	}
 	if a.cfg.businessAgent() {
 		expires := a.businessLeaseDeadline()
+		managed := make([]Record, 0, len(records))
 		for i := range records {
+			// A managed child keeps a local owner for independent panel access,
+			// but that account is outside the controller's membership policy. Do
+			// not put it in the proxy core's managed authorization set; otherwise
+			// local credentials can make the child configuration diverge from the
+			// snapshot acknowledged by the controller.
+			if records[i].Role != "user" {
+				continue
+			}
 			if expires <= time.Now().Unix() {
 				records[i].Enabled = false
 			}
+			managed = append(managed, records[i])
 		}
-		return records, nil
+		return managed, nil
 	}
 	if !a.cfg.controller() {
 		return records, nil
