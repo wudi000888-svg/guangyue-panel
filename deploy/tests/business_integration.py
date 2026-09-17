@@ -56,6 +56,11 @@ def wait_for(check,seconds=100):
         print('::error title=business synchronization timeout::'+json.dumps(details,ensure_ascii=False),flush=True)
     except Exception:
         pass
+    try:
+        logs=subprocess.run(['journalctl','-u','guangyue.service','-n','24','--no-pager'],capture_output=True,text=True).stdout
+        print('::error title=business child logs::'+logs[-6000:].replace('\n','\\n'),flush=True)
+    except Exception:
+        pass
     raise RuntimeError('timed out waiting for business-site state')
 
 def recv(sock,size):
