@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -204,6 +205,7 @@ func (a *App) businessAgentLoop(ctx context.Context) {
 		err := a.syncBusinessAgent(request, client)
 		cancel()
 		if err != nil {
+			log.Printf("business synchronization failed: %v", err)
 			a.mu.Lock()
 			state, e := a.store.businessAgentState()
 			if e == nil {
