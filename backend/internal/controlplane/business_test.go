@@ -202,6 +202,45 @@ func TestBusinessCoreRecordsExcludeLocalOwner(t *testing.T) {
 	}
 }
 
+func TestBusinessSnapshotAliasesOwnerNameCollision(t *testing.T) {
+	a := testApp(t)
+	local := testUser(t, a, "owner", "owner")
+	if _, err := a.store.db.Exec("UPDATE users SET id=-1 WHERE id=?", local.ID); err != nil {
+		t.Fatal(err)
+	}
+	a.cfg.Role = "business"
+	a.cfg.SiteID = "edge"
+	if err := a.store.saveBusinessAgent(businessAgentState{LeaseUntil: time.Now().Add(time.Minute).Unix()}); err != nil {
+		t.Fatal(err)
+	}
+	nodes := businessDefaultNodes()
+	for i := range nodes {
+		nodes[i] = normalizeNodePolicy(nodes[i])
+	}
+	account := BusinessAccount{User: User{ID: 7, Username: "owner", Role: "user", Enabled: true, VLESS: true, HY2: true}, Credentials: Credentials{HY2: randomToken(43), Token: randomToken(32), VLESS: map[string]string{"vless-main": uuid()}}}
+	snapshot := BusinessSnapshot{SiteID: "edge", IssuedAt: time.Now().Unix(), LeaseSeconds: businessLeaseSeconds, Nodes: nodes, Users: []BusinessAccount{account}, RuntimeMode: runtimeNormal}
+	snapshot.Revision = businessSnapshotRevision(snapshot)
+	if err := a.applyBusinessSnapshot(context.Background(), snapshot); err != nil {
+		t.Fatal(err)
+	}
+	records, err := a.store.records()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var gotLocal, gotMember *Record
+	for i := range records {
+		switch records[i].ID {
+		case -1:
+			gotLocal = &records[i]
+		case 7:
+			gotMember = &records[i]
+		}
+	}
+	if gotLocal == nil || gotLocal.Username != "owner" || gotMember == nil || gotMember.Username != "owner-m7" {
+		t.Fatalf("owner collision was not isolated: local=%+v member=%+v", gotLocal, gotMember)
+	}
+}
+
 func TestBusinessAllocationsAndCounterRollback(t *testing.T) {
 	a := testApp(t)
 	a.cfg.Edition = "pro"

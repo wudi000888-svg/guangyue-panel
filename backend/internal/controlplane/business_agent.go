@@ -382,10 +382,22 @@ func (a *App) applyBusinessSnapshot(ctx context.Context, snapshot BusinessSnapsh
 	records := []Record{}
 	usersSeen := map[int64]bool{}
 	names := map[string]bool{}
+	localNames := map[string]bool{}
+	for _, old := range oldUsers {
+		if old.Role == "owner" && old.ID < 0 {
+			localNames[old.Username] = true
+		}
+	}
 	for _, account := range snapshot.Users {
 		u := account.User
-		if u.ID <= 0 || usersSeen[u.ID] || names[u.Username] || !usernamePattern.MatchString(u.Username) || u.Role != "user" || u.Quota < 0 || u.Quota > 1<<60 || len(account.Credentials.HY2) != 43 {
+		if u.ID <= 0 || usersSeen[u.ID] || !usernamePattern.MatchString(u.Username) || u.Role != "user" || u.Quota < 0 || u.Quota > 1<<60 || len(account.Credentials.HY2) != 43 {
 			return errors.New("invalid business account")
+		}
+		if localNames[u.Username] {
+			u.Username = businessManagedUsername(u.Username, u.ID, names)
+		}
+		if names[u.Username] {
+			return errors.New("duplicate business account username")
 		}
 		usersSeen[u.ID] = true
 		names[u.Username] = true
