@@ -94,6 +94,11 @@ func (a *App) coreRecords() ([]Record, error) {
 	if err != nil {
 		return nil, err
 	}
+	if a.store.meta("site_paused") == "true" {
+		for i := range records {
+			records[i].Enabled = false
+		}
+	}
 	if !a.cfg.businessAgent() {
 		if err = a.store.resolveAccess(records); err != nil {
 			return nil, err

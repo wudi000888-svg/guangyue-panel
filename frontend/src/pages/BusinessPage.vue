@@ -1,70 +1,88 @@
 <script setup lang="ts">
-import { computed, toRaw, onMounted, onUnmounted, reactive, ref } from 'vue';
-import { Plus, RefreshCw, Server, Settings2, Download, Copy, Trash2, X } from 'lucide-vue-next';
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
+import { Plus, RefreshCw, Server, Trash2, X, Users, RadioTower, Activity, Power, Settings2 } from 'lucide-vue-next';
 import { useApi, isCancelled } from '../lib/api';
 import { serialPoll } from '../lib/requests';
 import { usePanelContext } from '../composables/panelContext';
 import TablePageLayout from '../components/TablePageLayout.vue';
-import QualityTags from '../QualityTags.vue';
-import SpeedMetric from '../SpeedMetric.vue';
-import NodeGroupPicker from '../components/NodeGroupPicker.vue';
-import type { Node } from '../types';
+import ManagedSitePolicy from '../components/ManagedSitePolicy.vue';
+import { siteState, type ManagedSite } from '../lib/sites';
 import { t } from '../i18n';
-type Grant={user_id:number;quota:number};
-type Template={policy_version?:number;rate_milli?:number;group_ids?:string[];rate_revision?:string;id:string;name:string;exit_id:string;protocol:string;enabled:boolean;reality_sni?:string;dns?:{mode:string;doh?:string;ipv6?:string}};
-type Site={id:string;name:string;group:string;enabled:boolean;exclusive:boolean;revision:string;last_seen:number;applied:string;desired:string;lease_until:number;error:string;info?:{edition?:'lite'|'pro';version:string;vless_host:string;hy2_host:string};default_nodes?:Template[];nodes:Template[];grants:Grant[];reports?:Node[];commands?:{node_id:string;kind:string;state:string}[];usage?:Record<string,{metered?:boolean;quota_upload?:number;quota_download?:number;upload:number;download:number}>};
-type Connection={site_id:string;controller_url:string;connect_token:string;expires:number};
-const api=useApi('/business-sites');const {nodeGroups,loadEntitlements,state,refresh,bytes}=usePanelContext();
-const sites=ref<Site[]>([]),error=ref(''),busy=ref(false),loaded=ref(false),editing=ref<Site|null>(null),creating=ref(false),removing=ref<Site|null>(null),connection=ref<Connection|null>(null);
-const createForm=reactive({id:'',name:'',group:''});const members=ref<Record<number,{selected:boolean;gib:number}>>({});
-const commandState:Record<string,string>={queued:'排队中',running:'检测中…',succeeded:'已完成',failed:'失败',cancelled:'已取消'};
-const allUsers=computed(()=>state.value?.users||[]);const pools=computed(()=>(state.value?.ip_pool||[]).filter(p=>p.enabled));
-const online=computed(()=>sites.value.filter(s=>s.last_seen>Date.now()/1000-90).length);
-const siteStatus=(s:Site)=>!s.info?'等待连接':s.error?'配置异常':!s.enabled?'已停用':s.lease_until<=Date.now()/1000?'授权已过期':s.last_seen<Date.now()/1000-90?'连接中断':s.applied!==s.desired?'等待同步':'已同步';
-async function load(){try{const out=await api<{sites:Site[]}>();sites.value=out.sites.map(s=>({...s,nodes:s.nodes||[],grants:s.grants||[]}));loaded.value=true;error.value='';}catch(e){if(!isCancelled(e))error.value=(e as Error).message;}}
-function edit(site:Site){void loadEntitlements();editing.value=structuredClone(toRaw(site));if(!editing.value.default_nodes?.length)editing.value.default_nodes=['vless','hy2'].map(protocol=>({id:protocol+'-main',name:protocol.toUpperCase(),exit_id:'',protocol,enabled:true,policy_version:1,rate_milli:1000,group_ids:['legacy-private']}));editing.value.nodes=editing.value.nodes.map(n=>({...n,policy_version:1,rate_milli:n.policy_version?n.rate_milli:1000,group_ids:n.policy_version?n.group_ids:[pools.value.find(p=>p.id===n.exit_id)?.pool_group==='public'?'legacy-public':'legacy-private']}));members.value={};for(const user of allUsers.value){const g=site.grants.find(g=>g.user_id===user.id);members.value[user.id]={selected:!!g,gib:g?g.quota/1073741824:0};}error.value='';}
-function close(){if(busy.value)return;editing.value=null;creating.value=false;removing.value=null;connection.value=null;error.value='';}
-async function create(){busy.value=true;try{const out=await api<{connection:Connection}>('','POST',createForm);connection.value=out.connection;await load();}catch(e){if(!isCancelled(e))error.value=(e as Error).message;}finally{busy.value=false;}}
-async function copyConnectionToken(){if(!connection.value)return;try{await navigator.clipboard.writeText(connection.value.connect_token);}catch{error.value=t('剪贴板不可用，请选择内容复制');}}
-function addNode(){if(!editing.value||!pools.value.length)return;editing.value.nodes.push({id:'node_'+crypto.randomUUID().slice(0,8),name:'',protocol:'vless',policy_version:1,rate_milli:1000,group_ids:[],exit_id:pools.value[0].id,enabled:true,dns:{mode:'secure',doh:'https://1.1.1.1/dns-query',ipv6:'block'}});}
-async function save(){const s=editing.value;if(!s)return;busy.value=true;error.value='';try{const grants=Object.entries(members.value).filter(([,v])=>v.selected).map(([id,v])=>({user_id:Number(id),quota:Math.round(v.gib*1073741824)}));await api('/'+s.id,'PUT',{name:s.name,group:s.group,enabled:s.enabled,exclusive:s.exclusive,revision:s.revision,default_nodes:s.default_nodes,nodes:s.nodes,grants});editing.value=null;await load();await refresh();}catch(e){if(!isCancelled(e))error.value=(e as Error).message;}finally{busy.value=false;}}
-async function remove(){if(!removing.value)return;busy.value=true;try{await api('/'+removing.value.id,'DELETE',{});removing.value=null;await load();}catch(e){if(!isCancelled(e))error.value=(e as Error).message;}finally{busy.value=false;}}
-async function detect(n:Node,kind:string){if(!editing.value)return;busy.value=true;error.value='';try{await api('/'+editing.value.id+'/tasks','POST',{kind,node_id:n.id});await load();editing.value.commands=sites.value.find(s=>s.id===editing.value?.id)?.commands;}catch(e){if(!isCancelled(e))error.value=(e as Error).message;}finally{busy.value=false;}}
-// Schedule after each request completes so a slow business-site response cannot
-// overlap the next refresh. Hidden tabs also stop polling until they are shown.
-const poll=serialPoll(async()=>{if(document.hidden||busy.value||editing.value||creating.value||removing.value)return;await load()},()=>15000);
-onMounted(()=>{void load();poll.start();});onUnmounted(()=>{poll.stop();connection.value=null;});
+const api=useApi('/business-sites');
+const {state,selectedSite,switchSite,go,bytes}=usePanelContext();
+const sites=ref<ManagedSite[]>([]),error=ref(''),loaded=ref(false),refreshing=ref(false),busy=ref(false),adding=ref(false);
+const removing=ref<ManagedSite|null>(null),editing=ref<ManagedSite|null>(null),controlling=ref<ManagedSite|null>(null);
+const form=reactive({token:'',url:'',name:''});
+const jobs=reactive<Record<string,boolean>>({});
+const needsAddress=computed(()=>form.token.trim().startsWith('gyp_'));
+const online=computed(()=>sites.value.filter(s=>s.last_seen>Date.now()/1000-90&&!s.error).length);
+const direct=computed(()=>sites.value.filter(s=>s.connection));
+const changing=computed(()=>busy.value||adding.value||!!removing.value||!!editing.value||!!controlling.value);
+let disposed=false,directoryRevision=0;
+function replace(site:ManagedSite){const i=sites.value.findIndex(s=>s.id===site.id);if(i>=0)sites.value[i]=site;}
+async function probe(site:ManagedSite){
+ if(jobs[site.id])return;jobs[site.id]=true;const revision=directoryRevision;
+ try{const updated=await api<ManagedSite>('/'+site.id+'/probe','POST',{});if(revision===directoryRevision)replace(updated);}
+ catch(e){if(!isCancelled(e)&&!disposed&&revision===directoryRevision){const current=sites.value.find(s=>s.id===site.id);if(current)current.error=(e as Error).message;}}
+ finally{delete jobs[site.id];}
+}
+async function load(probeAll=false){
+ if(refreshing.value)return;refreshing.value=true;const revision=directoryRevision;
+ try{const out=await api<{sites:ManagedSite[]}>();if(revision!==directoryRevision)return;sites.value=out.sites;loaded.value=true;error.value='';
+  if(probeAll){const queue=[...direct.value];await Promise.all(Array.from({length:Math.min(4,queue.length)},async()=>{while(queue.length&&!disposed){const site=queue.shift();if(site)await probe(site);}}));}
+ }catch(e){if(!isCancelled(e))error.value=(e as Error).message;}finally{refreshing.value=false;}
+}
+function close(){if(busy.value)return;adding.value=false;removing.value=null;controlling.value=null;form.token='';error.value='';}
+async function connect(){directoryRevision++;busy.value=true;error.value='';try{
+ const site=await api<ManagedSite>('/import','POST',form);form.token='';form.url='';form.name='';adding.value=false;
+ sites.value=sites.value.filter(s=>s.id!==site.id);sites.value.push(site);await probe(site);
+}catch(e){if(!isCancelled(e))error.value=(e as Error).message;}finally{busy.value=false;}}
+async function remove(){if(!removing.value)return;directoryRevision++;busy.value=true;error.value='';try{
+ const id=removing.value.id;await api('/'+id,'DELETE',{});sites.value=sites.value.filter(s=>s.id!==id);removing.value=null;
+}catch(e){if(!isCancelled(e))error.value=(e as Error).message;}finally{busy.value=false;}}
+async function control(){if(!controlling.value)return;directoryRevision++;busy.value=true;error.value='';try{
+ const s=controlling.value;replace(await api<ManagedSite>('/'+s.id+'/control','POST',{paused:!s.connection?.status?.paused}));controlling.value=null;
+}catch(e){if(!isCancelled(e))error.value=(e as Error).message;}finally{busy.value=false;}}
+async function manage(site:ManagedSite,page:string){await switchSite(site.id,site.name);if(selectedSite.value===site.id)go(page);}
+const poll=serialPoll(async()=>{if(!document.hidden&&!changing.value)await load(true);},()=>15000);
+onMounted(()=>{void load(true);poll.start();});
+onUnmounted(()=>{disposed=true;poll.stop();form.token='';});
 </script>
 <template>
-<div class="business-page">
- <div class="business-summary"><div><Server :size="20"/><span>{{t('主站')}}</span><strong>{{state?.system.site_id}}</strong></div><div><span>{{t('子站')}}</span><strong>{{loaded?sites.length:"—"}} <small>/ 64</small></strong></div><div><span>{{t('在线站点')}}</span><strong>{{loaded?online:"—"}}</strong></div><div><span>{{t('授权有效期')}}</span><strong>15 <small>{{t('分钟')}}</small></strong></div></div>
- <TablePageLayout :title="t('主站与子站')" :description="t('Pro 主站统一管理 Lite / Pro 子站的成员权限、配额、节点和出口')">
-  <template #actions><button @click="load" :disabled="busy"><RefreshCw :size="15"/>{{t('刷新')}}</button><button class="primary" @click="creating=true;connection=null;error='' "><Plus :size="16"/>{{t('添加子站')}}</button></template>
-  <template #notice><p class="pool-intro">{{t('子站主动连接主站，成员、协议权限、到期时间、配额和节点权限组均由主站下发；子站保留本地 owner、登录、节点和订阅能力。')}}</p><p class="pool-intro">{{t('历史独立接入站点会在首次打开此页时自动转换为托管子站，原站点登录和数据保持不变。')}}</p><p v-if="error&&!editing&&!creating&&!removing" class="error" role="alert">{{t(error)}}</p></template>
-  <table class="adaptive-table"><thead><tr><th>{{t('站点名称')}}</th><th>{{t('连接状态')}}</th><th>{{t('节点与成员')}}</th><th>{{t('最近同步')}}</th><th>{{t('操作')}}</th></tr></thead><tbody>
-   <tr v-for="s in sites" :key="s.id"><td :data-label="t('站点名称')"><strong>{{s.name}}</strong><small>{{s.group||'—'}} · {{s.id}}</small></td><td :data-label="t('连接状态')"><span :class="['badge',siteStatus(s)==='已同步'?'success':'neutral']">{{t(siteStatus(s))}}</span><small v-if="s.info">{{s.info.edition?.toUpperCase() || t('子站')}} · v{{s.info.version}}</small></td><td :data-label="t('节点与成员')">{{s.nodes.length+2}} {{t('节点')}} · {{s.grants.length}} {{t('成员')}}<small>{{t(s.exclusive?'独占出口':'共享出口')}}</small></td><td :data-label="t('最近同步')">{{s.last_seen?new Date(s.last_seen*1000).toLocaleString():'—'}}</td><td :data-label="t('操作')"><div class="row-actions"><button @click="edit(s)"><Settings2 :size="14"/>{{t('配置')}}</button><button class="icon" :aria-label="t('删除子站')+' '+s.name" @click="removing=s;error='' "><Trash2 :size="15"/></button></div></td></tr>
-   <tr v-if="!sites.length"><td colspan="5" class="empty">{{t(loaded?'尚未添加子站':'加载中…')}}</td></tr>
-  </tbody></table>
- </TablePageLayout>
- <Teleport to="body"><div v-if="creating||editing||removing" class="message-overlay" @click.self="close">
-  <form v-if="creating" class="compose-card" role="dialog" aria-modal="true" :aria-label="t('添加子站')" @submit.prevent="create"><header><h2>{{t('添加子站')}}</h2><button type="button" class="icon" :disabled="busy" @click="close" :aria-label="t('关闭')"><X/></button></header><p v-if="error" class="error" role="alert">{{t(error)}}</p>
-   <template v-if="!connection"><label>{{t('站点名称')}}<input v-model="createForm.name" maxlength="64" required/></label><label>{{t('站点标识')}}<input v-model="createForm.id" pattern="[a-z][a-z0-9_]{0,39}" placeholder="site_tokyo" required/></label><label>{{t('分组')}}<input v-model="createForm.group" maxlength="40"/></label><p class="field-help">{{t('创建后生成一次性连接令牌。令牌只显示一次，首次连接成功后自动失效。')}}</p><footer><button type="button" :disabled="busy" @click="close">{{t('取消')}}</button><button class="primary" :disabled="busy">{{t('生成连接令牌')}}</button></footer></template>
-   <template v-else><p>{{t('目标 VPS 无需注册文件。安装完成后使用主站地址、站点标识和连接令牌完成绑定；子站仍保留本地 owner 和独立运行能力。')}}</p><label>{{t('连接令牌')}}<input :value="connection.connect_token" readonly type="text" autocomplete="off"/></label><button type="button" class="primary" @click="copyConnectionToken"><Copy :size="16"/>{{t('复制连接令牌')}}</button><pre class="connect-command">sudo python3 deploy/install.py --bundle "$PWD" --role business --site-id {{connection.site_id}} --controller-url {{connection.controller_url}} --connect-token '&lt;粘贴连接令牌&gt;'</pre><a v-if="state?.system.version" :href="'https://github.com/wudi000888-svg/guangyue-panel/releases/download/v'+state.system.version+'/guangyue-panel-lite-'+state.system.version+'-linux-amd64.tar.gz'" target="_blank" rel="noopener noreferrer"><Download :size="16"/>{{t('下载 Lite 子站安装包')}}</a><p class="field-help">{{t('连接令牌有效期为 24 小时，成功绑定后失效；不要把令牌提交到 shell 历史、日志或工单。')}}</p><footer><button type="button" :disabled="busy" @click="close">{{t('完成')}}</button></footer></template>
-  </form>
-  <form v-else-if="editing" class="compose-card business-editor" role="dialog" aria-modal="true" :aria-label="t('子站配置')" @submit.prevent="save"><header><h2>{{t('子站配置')}} · {{editing.id}}</h2><button type="button" class="icon" :disabled="busy" @click="close" :aria-label="t('关闭')"><X/></button></header><p v-if="error" class="error" role="alert">{{t(error)}}</p>
-   <div class="field-pair"><label>{{t('站点名称')}}<input v-model="editing.name" maxlength="64" required/></label><label>{{t('分组')}}<input v-model="editing.group" maxlength="40"/></label></div>
-   <div class="row-actions"><label class="check-label"><input v-model="editing.enabled" type="checkbox"/>{{t('启用站点')}}</label><label class="check-label"><input v-model="editing.exclusive" type="checkbox"/>{{t('独占出口')}}</label></div>
-   <section><h3>{{t('成员与额度')}}</h3><p class="field-help">{{t('成员的协议、到期时间与全局权限在成员管理中设置；此处控制该成员能否使用本站以及本站额度。')}}</p><p class="field-help">{{t('额度为本站累计配额用量上限，单位 GiB，已包含节点倍率。0 仅适用于无限配额成员，剩余额度从主控预留。')}}</p><div class="business-members"><div v-for="u in allUsers.filter(user=>members[user.id])" :key="u.id"><label class="check-label"><input v-model="members[u.id].selected" type="checkbox"/>{{u.username}}</label><input v-model.number="members[u.id].gib" :disabled="!members[u.id].selected" type="number" min="0" step="any" :aria-label="u.username+' GiB'"/><small>{{t('已使用')}} {{bytes(editing.usage?.[u.id]?.metered?(editing.usage?.[u.id]?.quota_upload||0)+(editing.usage?.[u.id]?.quota_download||0):(editing.usage?.[u.id]?.upload||0)+(editing.usage?.[u.id]?.download||0))}}</small></div></div></section>
-   <section><h3>{{t('默认节点权限与倍率')}}</h3><p class="field-help">{{t('默认直连始终保留，只有所选节点组内的用户能使用。')}}</p><div v-for="n in editing.default_nodes" :key="n.id" class="business-node"><strong>{{n.protocol.toUpperCase()}}</strong><label>{{t('节点倍率')}}<input :value="(n.rate_milli??1000)/1000" @input="n.rate_milli=Math.round(Number(($event.target as HTMLInputElement).value)*1000);n.policy_version=1" type="number" min="0" max="100" step="0.01" required/></label><NodeGroupPicker v-model="n.group_ids" :groups="nodeGroups" scope="private"/></div></section>
-   <section><div class="section-heading"><h3>{{t('附加节点与出口')}}</h3><button type="button" @click="addNode" :disabled="!pools.length||editing.nodes.length>=14"><Plus :size="14"/>{{t('新增节点')}}</button></div><p class="field-help">{{t('默认 VLESS / HY2 直连始终保留，不占用 IP 池。公共出口产生的节点仅出现在公共订阅。')}}</p>
-   <div v-for="(n,i) in editing.nodes" :key="n.id" class="business-node"><div class="node-fields"><label>{{t('协议')}}<select v-model="n.protocol"><option value="vless">VLESS</option><option value="hy2">HY2</option></select></label><label>{{t('出口')}}<select v-model="n.exit_id" required><option v-if="!pools.some(p=>p.id===n.exit_id)" :value="n.exit_id">{{t('出口已删除')}}</option><option v-for="p in pools" :key="p.id" :value="p.id">{{p.pool_group==='public'?t('公共'):t('私有')}} · {{p.label||p.name}} · {{p.probe_ip||p.host}}</option></select></label><button class="icon" type="button" :aria-label="t('移除节点')" @click="editing.nodes.splice(i,1)"><Trash2 :size="15"/></button></div><div class="field-pair"><label v-if="n.protocol==='vless'">SNI<input v-model="n.reality_sni" :placeholder="t('使用业务站默认 SNI')"/></label><label>{{t('出口 DNS 防护')}}<select :value="n.dns?.mode||'system'" @change="n.dns=($event.target as HTMLSelectElement).value==='secure'?{mode:'secure',doh:'https://1.1.1.1/dns-query',ipv6:'block'}:{mode:'system'}"><option value="secure">{{t('开启 IPv4 防护并阻止 IPv6')}}</option><option value="system">{{t('常规模式')}}</option></select></label></div><div v-if="n.dns?.mode==='secure'" class="field-pair"><label>DoH<input v-model="n.dns.doh" type="url" required/></label><label>IPv6<select v-model="n.dns.ipv6"><option value="block">{{t('阻止 IPv6')}}</option><option value="allow">{{t('允许 IPv6 经出口')}}</option></select></label></div><label>{{t('节点倍率')}}<input :value="(n.rate_milli??1000)/1000" @input="n.rate_milli=Math.round(Number(($event.target as HTMLInputElement).value)*1000);n.policy_version=1" type="number" min="0" max="100" step="0.01" required/></label><NodeGroupPicker v-model="n.group_ids" :groups="nodeGroups" :scope="pools.find(p=>p.id===n.exit_id)?.pool_group==='public'?'public':'private'"/><label class="check-label"><input type="checkbox" v-model="n.enabled"/>{{t('启用节点')}}</label></div></section>
-   <section v-if="editing.reports?.length"><h3>{{t('节点质量报告')}}</h3><div v-for="n in editing.reports" :key="n.id" class="business-report"><span>{{t(n.name)}} · {{n.protocol.toUpperCase()}}</span><QualityTags :value="n.quality" :name="n.name" read-only/><SpeedMetric :result="n.speed"/><div class="row-actions"><button type="button" :disabled="busy" @click="detect(n,'quality')">{{t('检测质量')}}</button><button type="button" :disabled="busy" @click="detect(n,'speed')">{{t('测速')}}</button><small v-for="cmd in editing.commands?.filter(c=>c.node_id===n.id)" :key="cmd.kind">{{t(cmd.kind==='speed'?'测速':'质量检测')}} · {{t(commandState[cmd.state]||'状态未知')}}</small></div></div></section>
-   <p class="field-help">{{t('变更在业务站下一次同步后生效；断连最多保留 15 分钟授权。删除站点前请停用并取消全部成员，等待确认撤销。')}}</p><footer><button type="button" :disabled="busy" @click="close">{{t('取消')}}</button><button class="primary" :disabled="busy">{{t('保存配置')}}</button></footer>
-  </form>
-  <section v-else-if="removing" class="compose-card" role="alertdialog" aria-modal="true"><h2>{{t('删除子站')}} · {{removing.name}}</h2><p>{{t('站点必须已停用、清空成员并确认撤销后才能删除。业务服务器上的软件和证书保留。')}}</p><p v-if="error" class="error" role="alert">{{t(error)}}</p><footer><button @click="close" :disabled="busy">{{t('取消')}}</button><button class="danger-button" @click="remove" :disabled="busy">{{t('确认删除')}}</button></footer></section>
- </div></Teleport>
-</div>
+ <div class="subsite-page">
+  <div class="site-summary"><div><Server :size="20"/><span>{{t('主站')}}</span><strong>{{state?.system.site_id}}</strong></div><div><span>{{t('子站')}}</span><strong>{{loaded?sites.length:'—'}} <small>/ 64</small></strong></div><div><span>{{t('在线站点')}}</span><strong>{{loaded?online:'—'}}</strong></div></div>
+  <TablePageLayout :title="t('子站管理与调度')" :description="t('复制子站令牌，在 Pro 中粘贴即可连接；无需创建分组或注册文件。')">
+   <template #actions><button :disabled="refreshing||busy" @click="load(true)"><RefreshCw :size="15"/>{{t('刷新')}}</button><button class="primary" :disabled="busy" @click="adding=true;error='' "><Plus :size="16"/>{{t('导入子站令牌')}}</button></template>
+   <template #notice><p class="pool-intro">{{t('连接后可直接管理子站用户、节点、权限和流量。子站管理员仍可本地登录、独立运营，并随时撤销令牌。')}}</p><p v-if="error&&!adding&&!removing&&!controlling" class="error" role="alert">{{t(error)}}</p></template>
+   <table class="adaptive-table"><thead><tr><th>{{t('子站')}}</th><th>{{t('连接状态')}}</th><th>{{t('用户与节点')}}</th><th>{{t('实时流量')}}</th><th>{{t('调度操作')}}</th></tr></thead><tbody>
+    <tr v-for="s in sites" :key="s.id">
+     <td :data-label="t('子站')"><strong>{{s.name}}</strong><small>{{s.connection?.url||s.info?.vless_host||s.id}}</small><small v-if="s.connection?.status">{{s.connection.status.edition.toUpperCase()}} · v{{s.connection.status.version}}</small></td>
+     <td :data-label="t('连接状态')"><span :class="['badge',(s.error||s.connection?.status?.service_error)?'danger':s.last_seen>Date.now()/1000-90?'success':'neutral']">{{t(jobs[s.id]?'检测中…':siteState(s))}}</span><small v-if="s.error" class="site-error">{{t(s.error)}}</small><small v-if="s.connection?.status?.service_error" class="site-error">{{t(s.connection.status.service_error)}}</small><small>{{s.last_seen?new Date(s.last_seen*1000).toLocaleTimeString():'—'}}</small></td>
+     <td :data-label="t('用户与节点')"><template v-if="s.connection?.status?.control">{{s.connection.status.users}} {{t('成员')}} · {{s.connection.status.nodes}} {{t('节点')}}<small>{{t('在线用户')}} {{!s.error&&s.connection.status.sampled_at>Date.now()-15000?(s.connection.status.online_users??'—'):'—'}}</small></template><template v-else-if="!s.connection">{{s.grants.length}} {{t('成员')}} · {{s.nodes.length+2}} {{t('节点')}}</template><template v-else>—</template></td>
+     <td :data-label="t('实时流量')"><template v-if="s.connection?.status?.live && !s.error && s.connection.status.sampled_at>Date.now()-15000">↑ {{s.connection.status.live.upload_rate==null?'—':bytes(s.connection.status.live.upload_rate)+'/s'}}<br/>↓ {{s.connection.status.live.download_rate==null?'—':bytes(s.connection.status.live.download_rate)+'/s'}}</template><template v-else>—</template><small v-if="s.connection?.status?.control">{{t('累计流量')}} {{bytes(s.connection.status.upload+s.connection.status.download)}}</small></td>
+     <td :data-label="t('调度操作')"><div class="row-actions" v-if="s.connection">
+      <button :disabled="busy||s.connection.scope!=='manage'" @click="manage(s,'users')"><Users :size="14"/>{{t('用户')}}</button><button :disabled="busy||s.connection.scope!=='manage'" @click="manage(s,'nodes')"><RadioTower :size="14"/>{{t('节点')}}</button><button :disabled="busy||s.connection.scope!=='manage'" @click="manage(s,'monitor')"><Activity :size="14"/>{{t('监控')}}</button>
+      <button v-if="s.connection.status?.control&&s.connection.scope==='manage'" :disabled="busy" @click="controlling=s;error='' "><Power :size="14"/>{{t(s.connection.status.paused?'恢复服务':'暂停服务')}}</button>
+     </div><div v-else class="row-actions"><button @click="editing=s"><Settings2 :size="14"/>{{t('权限调度')}}</button></div><button class="remove-site" :disabled="busy" @click="removing=s;error='' "><Trash2 :size="14"/>{{t('移除子站')}}</button></td>
+    </tr><tr v-if="!sites.length"><td colspan="5" class="empty">{{t(loaded?'在子站生成令牌，然后点击“导入子站令牌”建立连接。':'加载中…')}}</td></tr>
+   </tbody></table>
+  </TablePageLayout>
+  <ManagedSitePolicy v-if="editing" :site="editing" @close="editing=null" @saved="load()"/>
+  <Teleport to="body"><div v-if="adding||removing||controlling" class="message-overlay" @click.self="close">
+   <form v-if="adding" class="compose-card" role="dialog" aria-modal="true" :aria-label="t('导入子站令牌')" @submit.prevent="connect">
+    <header><h2>{{t('导入子站令牌')}}</h2><button type="button" class="icon" :disabled="busy" :aria-label="t('关闭')" @click="close"><X/></button></header>
+    <p>{{t('在子站的“配对令牌”页面生成管理令牌，复制完整内容粘贴到这里。')}}</p>
+    <label>{{t('子站令牌')}}<textarea v-model="form.token" rows="4" maxlength="8192" autocomplete="off" spellcheck="false" required/></label>
+    <label v-if="needsAddress">{{t('子站 HTTPS 地址')}}<input v-model="form.url" type="url" placeholder="https://child.example.com" required/></label>
+    <label>{{t('备注名称（选填）')}}<input v-model="form.name" maxlength="64"/></label>
+    <p class="field-help">{{t('新令牌自带地址，旧 gyp_ 令牌补填地址即可。重复导入同一站点会更新连接，不会新增重复记录。')}}</p>
+    <p v-if="error" class="error" role="alert">{{t(error)}}</p><footer><button type="button" :disabled="busy" @click="close">{{t('取消')}}</button><button class="primary" :disabled="busy">{{t(busy?'正在连接…':'连接子站')}}</button></footer>
+   </form>
+   <section v-else-if="removing" class="compose-card" role="alertdialog" aria-modal="true" :aria-label="t('移除子站')"><h2>{{t('移除子站')}} · {{removing.name}}</h2><p>{{t('移除后主站停止管理此站点，子站的软件、账号和数据保留。离线子站也可以移除，之后可重新导入令牌。')}}</p><p v-if="!removing.connection" class="field-help">{{t('旧版下发授权将自动撤销，未结算流量记录继续保留。')}}</p><p v-if="error" class="error" role="alert">{{t(error)}}</p><footer><button :disabled="busy" @click="close">{{t('取消')}}</button><button class="danger-button" :disabled="busy" @click="remove">{{t('确认移除')}}</button></footer></section>
+   <section v-else-if="controlling" class="compose-card" role="alertdialog" aria-modal="true" :aria-label="t('服务调度')"><h2>{{t(controlling.connection?.status?.paused?'恢复服务':'暂停服务')}} · {{controlling.name}}</h2><p>{{t('暂停会停止子站代理用户的访问；面板登录仍可用。恢复后按原有用户和节点权限提供服务。')}}</p><p v-if="error" class="error" role="alert">{{t(error)}}</p><footer><button :disabled="busy" @click="close">{{t('取消')}}</button><button class="primary" :disabled="busy" @click="control">{{t('确认')}}</button></footer></section>
+  </div></Teleport>
+ </div>
 </template>
 <style scoped>
-.business-page{display:flex;flex-direction:column;gap:24px}.business-tabs{display:flex;gap:24px;border-bottom:1px solid var(--border);padding-bottom:14px}.business-tabs a{font-size:13px;color:var(--muted)}.business-tabs .active{color:var(--accent-text);font-weight:600}.business-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}.business-summary>div{display:flex;flex-direction:column;gap:10px;border:1px solid var(--border);border-radius:12px;padding:20px;background:var(--surface)}.business-summary span,small{font-size:11px;color:var(--muted)}.business-summary strong{font-size:23px;font-weight:600}.business-page td small{display:block;margin-top:7px}.row-actions,.section-heading{display:flex;align-items:center;gap:12px}.section-heading{justify-content:space-between}.business-editor{width:min(820px,calc(100vw - 32px));max-height:90dvh;overflow:auto}.field-pair,.node-fields{display:grid;grid-template-columns:1fr 1fr;gap:14px}.node-fields{grid-template-columns:110px minmax(0,1fr) 30px;align-items:end}.business-editor section{border-top:1px solid var(--border);padding-top:16px}.business-editor h3{font-size:14px;margin:0 0 14px}.business-members{display:flex;flex-direction:column;gap:10px;max-height:250px;overflow:auto}.business-members>div{display:grid;grid-template-columns:1fr 110px 130px;align-items:center;gap:12px}.business-editor .check-label{display:flex;flex-direction:row;align-items:center;gap:8px;margin:0}.check-label input{width:16px;height:16px}.business-node{border:1px solid var(--border);border-radius:9px;padding:14px;display:flex;flex-direction:column;gap:12px;margin-top:12px}.business-report{font-size:12px;padding:12px 0;display:flex;flex-direction:column;gap:8px}.connect-command{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--surface-muted);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:11px}@media(max-width:700px){.business-summary{grid-template-columns:1fr 1fr}.business-members>div{grid-template-columns:1fr 90px}.business-members small{grid-column:1/-1}.field-pair{grid-template-columns:1fr}}
+.subsite-page{display:flex;flex-direction:column;gap:24px}.site-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.site-summary>div{display:flex;flex-direction:column;gap:10px;border:1px solid var(--border);border-radius:12px;padding:20px;background:var(--surface)}.site-summary span,small{font-size:12px;color:var(--muted)}.site-summary strong{font-size:23px;overflow-wrap:anywhere}.subsite-page td small{display:block;margin-top:7px;overflow-wrap:anywhere}.row-actions{display:flex;gap:6px;flex-wrap:wrap}.remove-site{margin-top:10px;color:var(--danger)}.site-error{max-width:240px}.compose-card textarea{width:100%;resize:vertical;font:inherit;overflow-wrap:anywhere}.compose-card{max-height:90dvh;overflow:auto}@media(max-width:700px){.site-summary{grid-template-columns:1fr}.row-actions{justify-content:flex-end}}
 </style>

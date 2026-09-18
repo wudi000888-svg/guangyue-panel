@@ -37,10 +37,19 @@ func (a *App) businessAPI(w http.ResponseWriter, r *http.Request, actor Record) 
 		return
 	}
 	path := strings.TrimPrefix(r.URL.Path, "/api/business-sites")
+	if path == "/import" && r.Method == "POST" {
+		a.importSubsite(w, r, actor)
+		return
+	}
+	if a.directSiteAPI(w, r, actor, path) {
+		return
+	}
 	if path == "" && r.Method == "GET" {
-		// Legacy Pro/Lite federation peers become ordinary business sites on the
-		// first visit. Offline or older peers stay in the compatibility table.
-		a.migrateLegacyPeers(r.Context(), actor)
+		// Import old directory entries locally; listing never restarts a child.
+		if err := a.migrateSiteDirectory(actor); err != nil {
+			failure(w, 500, "迁移子站目录失败")
+			return
+		}
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -50,9 +59,13 @@ func (a *App) businessAPI(w http.ResponseWriter, r *http.Request, actor Record) 
 			failure(w, 500, "读取业务站失败")
 			return
 		}
-		for i := range sites {
-			sites[i] = sites[i].public()
+		visible := []BusinessSite{}
+		for _, site := range sites {
+			if !site.Removed {
+				visible = append(visible, site.public())
+			}
 		}
+		sites = visible
 		jsonResponse(w, 200, object{"role": a.cfg.deploymentRole(), "site_id": a.cfg.siteID(), "sites": sites, "lease_seconds": businessLeaseSeconds})
 		return
 	}
@@ -147,6 +160,10 @@ func (a *App) businessAPI(w http.ResponseWriter, r *http.Request, actor Record) 
 			return
 		}
 		jsonResponse(w, 202, cmd)
+		return
+	}
+	if v.Removed && r.Method != "DELETE" {
+		failure(w, 404, "子站已移除")
 		return
 	}
 	if len(parts) == 1 && r.Method == "PUT" {
@@ -254,8 +271,18 @@ func (a *App) businessAPI(w http.ResponseWriter, r *http.Request, actor Record) 
 		return
 	}
 	if len(parts) == 1 && r.Method == "DELETE" {
-		if v.Enabled || len(v.Grants) > 0 || len(v.SentGrants) > 0 || v.Applied != v.Desired && v.Info != nil {
-			failure(w, 409, "请先停用站点并清空成员，等待业务站确认撤销后再删除")
+		if v.Info != nil {
+			// Hide immediately and revoke on the next pull. Keep accounting
+			// reservations until the last issued authorization is acknowledged.
+			v.Removed, v.Enabled, v.Grants = true, false, []BusinessGrant{}
+			v.Commands = nil
+			v.Revision = randomToken(12)
+			if err = a.store.saveBusinessSite(v); err != nil {
+				failure(w, 500, "删除业务站失败")
+				return
+			}
+			a.store.audit(actor.Username, "remove-business-site", v.ID)
+			jsonResponse(w, 200, object{"ok": true, "revocation_pending": true})
 			return
 		}
 		if _, err = a.store.db.Exec("DELETE FROM business_sites WHERE id=?", v.ID); err != nil {

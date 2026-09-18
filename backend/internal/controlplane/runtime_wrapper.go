@@ -79,14 +79,11 @@ func runRuntimeService(name string) int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	if name != "panel" {
-		var c struct {
-			Role string `json:"role"`
-		}
-		b, e := os.ReadFile("/etc/guangyue-personal.json")
-		if e != nil || json.Unmarshal(b, &c) != nil {
+		c, e := loadConfig("/etc/guangyue-personal.json")
+		if e != nil {
 			return 1
 		}
-		if c.Role == "business" {
+		if c.businessAgent() {
 			if !awaitBusinessLease(ctx, "/var/lib/guangyue") {
 				return 0
 			}
@@ -118,7 +115,7 @@ func validBusinessLeaseFile(dir string) bool {
 	return json.Unmarshal(b, &v) == nil && v.Deadline > time.Now().Unix()
 }
 func awaitBusinessLease(ctx context.Context, dir string) bool {
-	for !validBusinessLeaseFile(dir) {
+	for !validBusinessLeaseFile(dir) && !localManagementEnabled(dir, "") {
 		select {
 		case <-ctx.Done():
 			return false
@@ -135,6 +132,9 @@ func guardBusinessLease(ctx context.Context, dir string, cancel context.CancelFu
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			if localManagementEnabled(dir, "") {
+				return
+			}
 			if !validBusinessLeaseFile(dir) {
 				cancel()
 				return
