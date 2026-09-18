@@ -413,7 +413,7 @@ const allNavGroups = computed(() => [
   ...(!selectedSite.value?[{id:'commerce',label:t('账户与服务'),items:[{id:'wallet',label:t('账户余额'),icon:Wallet},{id:'shop',label:t('购买套餐'),icon:ShoppingBag},{id:'orders',label:t('订单管理'),icon:Receipt},{id:'tickets',label:t('工单中心'),icon:Ticket},...(owner.value?[{id:'redeem-codes',label:t('兑换码管理'),icon:Gift}]:[])]}]:[]),
   {id:'business',label:t('业务资源'),items:[...(owner.value?[{id:'ips',label:t('私有 IP 池'),icon:Database},{id:'nodes',label:t('普通节点'),icon:RadioTower}]:[]),{id:'subscription',label:t('普通订阅'),icon:QrCode}]},
   {id:'public',label:t('公共代理'),items:[...(owner.value?[{id:'public',label:t('公共 IP 池'),icon:Database},{id:'public-nodes',label:t('公共节点'),icon:Globe2}]:[]),{id:'public-subscription',label:t('公共订阅'),icon:QrCode}]},
-  ...(owner.value?[{id:'admin',label:t('系统管理'),items:[...(state.value?.system.edition==='pro'&&!getRemoteSite()?[{id:'fleet',label:t('群站管理'),icon:Globe2}]:[]),...(!getRemoteSite()?[{id:'pairing',label:t('配对令牌'),icon:KeyRound}]:[]),{id:'tasks',label:t('任务中心'),icon:Server},{id:'system',label:t('运维状态'),icon:Server},{id:'settings',label:t('系统设置'),icon:Settings2}]}]:[]),
+  ...(owner.value?[{id:'admin',label:t('系统管理'),items:[...(state.value?.system.edition==='pro'&&!getRemoteSite()?[{id:'fleet',label:t('群站管理'),icon:Globe2}]:[]),...(!getRemoteSite()&&state.value?.system.edition!=='pro'?[{id:'pairing',label:t('配对令牌'),icon:KeyRound}]:[]),{id:'tasks',label:t('任务中心'),icon:Server},{id:'system',label:t('运维状态'),icon:Server},{id:'settings',label:t('系统设置'),icon:Settings2}]}]:[]),
 ]);
 const navGroups = computed(() => {
   if (!simpleMode.value) return allNavGroups.value;

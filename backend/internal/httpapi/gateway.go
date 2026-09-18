@@ -42,6 +42,9 @@ func AllowedGateway(method, path, scope string) bool {
 	if scope != "manage" {
 		return scope == "read" && method == "GET" && (u.Path == "/api/operations" || u.Path == "/api/dashboard")
 	}
+	if method == "POST" && u.Path == "/api/adopt" {
+		return true
+	}
 	if method == "GET" && u.Path == "/api/monitor" {
 		return true
 	}

@@ -30,6 +30,8 @@ type App struct {
 	cfg              Config
 	store            *Store
 	mu               sync.Mutex
+	fleetMigrationMu sync.Mutex
+	restart          context.CancelFunc
 	realityProbeMu   sync.Mutex
 	heavyMu          sync.Mutex
 	importRunning    string
@@ -175,6 +177,7 @@ func Run() {
 	internal := &http.Server{Addr: cfg.InternalListen, Handler: internalMux, ReadHeaderTimeout: 2 * time.Second, ReadTimeout: 4 * time.Second, WriteTimeout: 8 * time.Second, IdleTimeout: 20 * time.Second, MaxHeaderBytes: 4 << 10}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	a.restart = stop
 	a.publicContext = ctx
 	defer a.stopPublic()
 	go func() {

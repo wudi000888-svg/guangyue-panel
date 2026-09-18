@@ -392,7 +392,7 @@ func (a *App) applyBusinessSnapshot(ctx context.Context, snapshot BusinessSnapsh
 	names := map[string]bool{}
 	localNames := map[string]bool{}
 	for _, old := range oldUsers {
-		if old.Role == "owner" && old.ID < 0 {
+		if old.Role == "owner" {
 			localNames[old.Username] = true
 		}
 	}
@@ -448,10 +448,10 @@ func (a *App) applyBusinessSnapshot(ctx context.Context, snapshot BusinessSnapsh
 		}
 		records = append(records, r)
 	}
-	// The local owner is intentionally outside the master's user directory. It
-	// survives policy replacement so a child can be administered independently.
+	// Local owners are intentionally outside the master's user directory. They
+	// survive policy replacement so an adopted site keeps its existing login.
 	for _, old := range oldUsers {
-		if old.Role == "owner" && old.ID < 0 {
+		if old.Role == "owner" {
 			records = append(records, old)
 			usersSeen[old.ID] = true
 		}
@@ -595,9 +595,10 @@ func (a *App) replaceBusinessState(records []Record, nodes []Node, pools []IPRes
 			return e
 		}
 		password := []byte("!")
-		if r.Role == "owner" && r.ID < 0 {
-			// The local child owner remains a real local login after every policy
-			// replacement. Managed member passwords are intentionally never copied.
+		if r.Role == "owner" {
+			// Local owners remain real logins after every policy replacement, including
+			// owners retained from a Pro site adopted in place. Managed member
+			// passwords are intentionally never copied.
 			password = r.Password
 		}
 		_, err = tx.Exec("INSERT INTO users(id,username,doc,credentials,password,token_hash) VALUES(?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET username=excluded.username,doc=excluded.doc,credentials=excluded.credentials,password=excluded.password,token_hash=excluded.token_hash", r.ID, r.Username, b, c, password, digest(r.Credentials.Token))
