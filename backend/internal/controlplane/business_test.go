@@ -21,6 +21,9 @@ func createBusinessTest(t *testing.T, a *App, owner Record, id string) (Business
 	}
 	var out struct {
 		Site       BusinessSite `json:"site"`
+		Connection struct {
+			Token string `json:"connect_token"`
+		} `json:"connection"`
 		Enrollment struct {
 			Token string `json:"enrollment_token"`
 		} `json:"enrollment"`
@@ -32,7 +35,11 @@ func createBusinessTest(t *testing.T, a *App, owner Record, id string) (Business
 	if err != nil {
 		t.Fatal(err)
 	}
-	return site, out.Enrollment.Token
+	if out.Connection.Token == "" {
+		// Keep the fixture useful for older response shapes during migration.
+		return site, out.Enrollment.Token
+	}
+	return site, out.Connection.Token
 }
 func businessTokenRequest(t *testing.T, a *App, path, token string, in any) *httptest.ResponseRecorder {
 	t.Helper()
@@ -70,7 +77,7 @@ func testBusinessLifecycle(t *testing.T, edition string) {
 	agent.cfg.Edition = edition
 	agent.cfg.Role = "business"
 	agent.cfg.SiteID = site.ID
-	agent.cfg.EnrollmentToken = token
+	agent.cfg.ConnectToken = token
 	agent.cfg.RealityPublic = randomToken(32)
 	agent.cfg.ShortID = "aabbccddaabbccdd"
 	server := httptest.NewServer(master.routes())
@@ -120,8 +127,8 @@ func testBusinessLifecycle(t *testing.T, edition string) {
 		t.Fatal("site ID substitution accepted")
 	}
 	info := BusinessInfo{SiteID: site.ID, Protocol: 1, Version: version, VLESSHost: agent.cfg.VLESSHost, HY2Host: agent.cfg.HY2Host, RealitySNI: agent.cfg.RealitySNI, RealityPublic: agent.cfg.RealityPublic, ShortID: agent.cfg.ShortID}
-	if w := businessTokenRequest(t, master, "/api/business/enroll", token, info); w.Code != 401 {
-		t.Fatal("enrollment token still usable")
+	if w := businessTokenRequest(t, master, "/api/business/connect", token, info); w.Code != 401 {
+		t.Fatal("connection token still usable")
 	}
 	if err = agent.store.account([]Counter{
 		{Key: "v-up", Generation: "1", UserID: user.ID, NodeID: "vless-main", Protocol: "vless", Direction: "up", Value: 100},

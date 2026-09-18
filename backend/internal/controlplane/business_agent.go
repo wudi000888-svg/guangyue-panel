@@ -108,12 +108,20 @@ func (a *App) syncBusinessAgent(ctx context.Context, client *http.Client) error 
 	if state.Token == "" {
 		token := a.cfg.BusinessToken
 		if token == "" {
+			bootstrap := a.cfg.ConnectToken
+			endpoint := "/api/business/connect"
+			if bootstrap == "" {
+				// Keep accepting pre-0.23.3 enrollment configurations while new
+				// installations use the token-only connection endpoint.
+				bootstrap = a.cfg.EnrollmentToken
+				endpoint = "/api/business/enroll"
+			}
 			var out struct {
 				SiteID string `json:"site_id"`
 				Token  string `json:"token"`
 			}
 			info := BusinessInfo{SiteID: a.cfg.siteID(), Version: version, Protocol: 2, VLESSHost: a.cfg.VLESSHost, HY2Host: a.cfg.HY2Host, RealityPublic: a.cfg.RealityPublic, RealitySNI: a.cfg.RealitySNI, ShortID: a.cfg.ShortID}
-			if err = a.businessRequest(ctx, client, "/api/business/enroll", a.cfg.EnrollmentToken, info, &out); err != nil {
+			if err = a.businessRequest(ctx, client, endpoint, bootstrap, info, &out); err != nil {
 				return err
 			}
 			if out.SiteID != a.cfg.siteID() || !strings.HasPrefix(out.Token, "gyb_") || len(out.Token) != 47 {

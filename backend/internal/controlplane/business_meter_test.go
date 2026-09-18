@@ -27,7 +27,7 @@ func TestBusinessWeightedQuotasSparseAcknowledgementAndReset(t *testing.T) {
 	agent.cfg.Edition = "lite"
 	agent.cfg.Role = "business"
 	agent.cfg.SiteID = site.ID
-	agent.cfg.EnrollmentToken = token
+	agent.cfg.ConnectToken = token
 	agent.cfg.RealityPublic = randomToken(32)
 	agent.cfg.ShortID = "aabbccddaabbccdd"
 	server := httptest.NewServer(master.routes())

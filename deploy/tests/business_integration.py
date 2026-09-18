@@ -124,12 +124,11 @@ try:
     from commerce_integration import purchase_plan
     purchase_plan(billing_call,billing_call,initial['password'],plan,me['me']['id'],bundle)
     created,_=api('/api/business-sites',{'id':'ci_edge','name':'CI edge','group':'Validation'},cookie=cookie)
-    enrollment=base/'enrollment.json';enrollment.write_text(json.dumps(created['enrollment']));enrollment.chmod(0o600)
+    connection=created['connection']
     policy={'name':'CI edge','group':'Validation','enabled':True,'exclusive':False,'revision':created['site']['revision'],'nodes':[],'grants':[{'user_id':me['me']['id'],'quota':0}]}
     api('/api/business-sites/ci_edge',policy,'PUT',cookie)
-    command=[sys.executable,str(bundle/'deploy/install.py'),'--bundle',str(bundle),'--enrollment-file',str(enrollment),'--panel-domain','panel.example.com','--node-domain','node.example.com','--cert',str(cert),'--key',str(key)]
+    command=[sys.executable,str(bundle/'deploy/install.py'),'--bundle',str(bundle),'--role','business','--site-id',connection['site_id'],'--controller-url',connection['controller_url'],'--connect-token',connection['connect_token'],'--panel-domain','panel.example.com','--node-domain','node.example.com','--cert',str(cert),'--key',str(key)]
     edition=(bundle/'EDITION').read_text().strip()
-    if edition=='pro': command+=['--role','business']
     run(*command);assert not install.CONFIG.exists()
     run(*command,'--apply');install.health()
     actual=json.loads(install.CONFIG.read_text());assert actual['edition']==edition and actual['role']=='business' and actual['database']['driver']=='sqlite' and not actual['redis_url']

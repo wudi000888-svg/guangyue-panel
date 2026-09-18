@@ -10,7 +10,7 @@
 
 [English](README_EN.md) · [安装指南](docs/INSTALL.md) · [使用手册](docs/USER_GUIDE.md) · [Nginx 共存](docs/NGINX.md) · [运维与备份](docs/OPERATIONS.md)
 
-![version](https://img.shields.io/badge/version-0.23.2-2563eb)
+![version](https://img.shields.io/badge/version-0.23.3-2563eb)
 ![license](https://img.shields.io/badge/panel_license-LGPL--3.0-16a34a)
 ![platform](https://img.shields.io/badge/server-Linux_amd64-475569)
 
@@ -49,7 +49,7 @@
 
 ## 下载版本
 
-在 [Releases](https://github.com/wudi000888-svg/guangyue-panel/releases/latest) 的 Assets 选择 `guangyue-panel-lite-…tar.gz`（默认独立站）或 `guangyue-panel-pro-…tar.gz`（默认主站），并校验 `SHA256SUMS`。新装独立站不需要注册文件；登录后可在“配对令牌”页面生成令牌，再由 Pro 主站粘贴令牌直接接管。Lite 只能生成和撤销令牌，不能接管其他站点。使用主站提供的 `--enrollment-file` 时，Lite/Pro 才作为托管子站运行；子站仍保留本地登录、节点和订阅能力。已有部署升级保留原角色。
+在 [Releases](https://github.com/wudi000888-svg/guangyue-panel/releases/latest) 的 Assets 选择 `guangyue-panel-lite-…tar.gz`（默认独立站）或 `guangyue-panel-pro-…tar.gz`（默认主站），并校验 `SHA256SUMS`。新装站点不需要注册文件；Pro 主站为托管子站生成一次性连接令牌，目标 VPS 安装后使用 `--controller-url`、`--site-id` 和 `--connect-token` 完成绑定。子站保留本地登录、节点、订阅和离线运行能力；旧 `--enrollment-file` 仅用于兼容迁移。已有部署升级保留原角色。
 
 已有部署可按[在线更新与版本回退说明](docs/UPDATES.md)启用左上角版本管理。回退保留当前数据，不能低于安装基线；不兼容当前数据库的旧版本会被阻止。
 

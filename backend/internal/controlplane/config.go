@@ -17,12 +17,13 @@ import (
 	"path/filepath"
 )
 
-const version = "0.23.2"
+const version = "0.23.3"
 
 type Config struct {
 	HY2Optimized    bool                `json:"hy2_optimized,omitempty"`
 	Role            string              `json:"role,omitempty"`
 	ControllerURL   string              `json:"controller_url,omitempty"`
+	ConnectToken    string              `json:"connect_token,omitempty"`
 	EnrollmentToken string              `json:"enrollment_token,omitempty"`
 	BusinessToken   string              `json:"business_token,omitempty"`
 	Edition         string              `json:"edition,omitempty"`
@@ -186,7 +187,7 @@ func (c Config) validateEdition() error {
 		return errors.New("Lite requires SQLite")
 	}
 	if c.businessAgent() {
-		if d.Driver != "sqlite" || c.RedisURL != "" || c.ControllerURL == "" || c.EnrollmentToken == "" && c.BusinessToken == "" {
+		if d.Driver != "sqlite" || c.RedisURL != "" || c.ControllerURL == "" || c.ConnectToken == "" && c.EnrollmentToken == "" && c.BusinessToken == "" {
 			return errors.New("business role requires SQLite and controller enrollment configuration, without Redis")
 		}
 		return validateControllerURL(c.ControllerURL, c.Dev)

@@ -11,7 +11,7 @@ import (
 func TestSubsiteConfiguration(t *testing.T) {
 	for _, edition := range []string{"lite", "pro"} {
 		t.Run(edition, func(t *testing.T) {
-			cfg := Config{Edition: edition, Role: "business", SiteID: "east", ControllerURL: "https://master.example.com", EnrollmentToken: "gye_" + randomToken(32)}
+			cfg := Config{Edition: edition, Role: "business", SiteID: "east", ControllerURL: "https://master.example.com", ConnectToken: "gye_" + randomToken(32)}
 			if err := cfg.validateEdition(); err != nil {
 				t.Fatal(err)
 			}
@@ -19,7 +19,7 @@ func TestSubsiteConfiguration(t *testing.T) {
 				t.Fatal("sub-site gained master capabilities or lost SQLite")
 			}
 			for _, mutate := range []func(*Config){
-				func(c *Config) { c.EnrollmentToken = "" },
+				func(c *Config) { c.ConnectToken = "" },
 				func(c *Config) { c.ControllerURL = "" },
 				func(c *Config) { c.ControllerURL = "http://master.example.com" },
 				func(c *Config) { c.RedisURL = "redis://localhost/0" },
@@ -62,7 +62,7 @@ func TestMasterControlsLiteSubsitePermissions(t *testing.T) {
 		}
 		agent := testApp(t)
 		agent.cfg.Edition, agent.cfg.Role, agent.cfg.SiteID = "lite", "business", id
-		agent.cfg.ControllerURL, agent.cfg.EnrollmentToken = server.URL, token
+		agent.cfg.ControllerURL, agent.cfg.ConnectToken = server.URL, token
 		agent.cfg.RealityPublic, agent.cfg.ShortID = randomToken(32), "aabbccddaabbccdd"
 		// A managed child always has a local owner so it can be used while the
 		// controller is offline and can be paired later by a Pro master.
