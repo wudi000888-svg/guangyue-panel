@@ -2076,6 +2076,7 @@
   "请下载注册文件和 Lite 安装包，在新 VPS 上安装托管子站；子站仍保留本地 owner 和独立运行能力。独立站无需注册文件，登录后可生成配对令牌。": "Managed children now connect with a one-time token and keep a local owner and independent operation. Legacy enrollment files remain supported for migration.",
   "Lite 托管安装参数：--enrollment-file /root/enrollment.json。Pro 子站另加 --role business。独立安装无需注册文件。": "Managed Lite installation: --enrollment-file /root/enrollment.json. Pro children also need --role business. Standalone installation needs no enrollment file.",
   "子站主动连接主站，成员、协议权限、到期时间、配额和节点权限组均由主站下发；子站保留本地 owner、登录、节点和订阅能力。": "Sub-sites connect to the master, which controls membership, protocol permissions, expiration, quotas and node groups. They retain a local owner, login, nodes and subscriptions.",
+  "历史独立接入站点会在首次打开此页时自动转换为托管子站，原站点登录和数据保持不变。": "Previously connected independent sites are converted to managed sub-sites the first time this page opens; their local login and data remain unchanged.",
   "下载 Lite 子站安装包": "Download Lite sub-site package",
   "成员的协议、到期时间与全局权限在成员管理中设置；此处控制该成员能否使用本站以及本站额度。": "Set protocol access, expiration and global permissions in Members. Here you control access to this sub-site and its quota."
 }

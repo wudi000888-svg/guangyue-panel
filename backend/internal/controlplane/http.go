@@ -225,6 +225,8 @@ func (a *App) dispatchAuthenticated(w http.ResponseWriter, r *http.Request, acto
 		a.userUsage(w, r, actor)
 	case r.Method == "GET" && r.URL.Path == "/api/node-quality":
 		a.memberNodeQuality(w, r, actor)
+	case r.Method == "POST" && r.URL.Path == "/api/adopt":
+		a.adoptBusiness(w, r, actor)
 	case r.Method == "POST" && r.URL.Path == "/api/logout":
 		cookie, _ := r.Cookie("gy_session")
 		_, _ = a.store.db.Exec("DELETE FROM sessions WHERE token_hash=?", digest(cookie.Value))

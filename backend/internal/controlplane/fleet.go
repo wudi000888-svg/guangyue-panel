@@ -2,15 +2,20 @@ package controlplane
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 	"unicode/utf8"
 
 	"github.com/wudi000888-svg/guangyue-panel/backend/internal/httpapi"
+	"github.com/wudi000888-svg/guangyue-panel/backend/internal/persistence"
 )
 
 type FleetPeer struct {
@@ -33,6 +38,18 @@ func (s *Store) fleetPeer(id string) (FleetPeer, error) {
 	return p, err
 }
 func (s *Store) fleetPeers() ([]FleetPeer, error) {
+	peers, err := s.fleetPeersWithToken()
+	if err != nil {
+		return nil, err
+	}
+	for i := range peers {
+		// The management API must never return the encrypted credential.
+		peers[i].Token = ""
+	}
+	return peers, nil
+}
+
+func (s *Store) fleetPeersWithToken() ([]FleetPeer, error) {
 	rows, err := s.db.Query("SELECT doc FROM fleet_peers ORDER BY id")
 	if err != nil {
 		return nil, err
@@ -48,7 +65,6 @@ func (s *Store) fleetPeers() ([]FleetPeer, error) {
 		if err = s.vault.open(b, &p); err != nil {
 			return nil, err
 		}
-		p.Token = ""
 		result = append(result, p)
 	}
 	return result, rows.Err()
@@ -114,6 +130,121 @@ func (a *App) fleetGateway(w http.ResponseWriter, r *http.Request) {
 	}
 	a.store.runtimeMu.RUnlock()
 	jsonResponse(w, 200, httpapi.GatewayResponse{SiteID: a.cfg.siteID(), Scope: scope, Status: buffer.Code, Body: json.RawMessage(buffer.Body.Bytes())})
+}
+
+// adoptBusiness stages a role conversion for a legacy independently managed
+// site. The panel process is intentionally unable to rewrite the root-owned
+// config file, so a state marker is consumed on the next supervised restart.
+func (a *App) adoptBusiness(w http.ResponseWriter, r *http.Request, actor Record) {
+	if r.Method != "POST" || actor.Role != "owner" || a.cfg.businessAgent() {
+		failure(w, 403, "只有独立站管理员可以转换为子站")
+		return
+	}
+	var in businessAdoption
+	if !decode(w, r, &in) {
+		return
+	}
+	in.SiteID = strings.TrimSpace(in.SiteID)
+	in.ControllerURL = strings.TrimSpace(in.ControllerURL)
+	if in.SiteID != a.cfg.siteID() || !validBusinessBootstrap(in.ConnectToken) || validateControllerURL(in.ControllerURL, a.cfg.Dev) != nil {
+		failure(w, 400, "子站转换信息无效")
+		return
+	}
+	if sites, err := a.store.businessSites(); err != nil {
+		failure(w, 500, "读取现有子站失败")
+		return
+	} else if len(sites) > 0 {
+		failure(w, 409, "已有主站业务配置，不能把主站转换为子站")
+		return
+	}
+	markerPath := filepath.Join(a.cfg.StateDir, businessAdoptionFile)
+	if raw, err := os.ReadFile(markerPath); err == nil {
+		var previous businessAdoption
+		if json.Unmarshal(raw, &previous) == nil && previous == in {
+			jsonResponse(w, 200, object{"ok": true, "role": "business", "restart_required": true})
+			return
+		}
+		failure(w, 409, "本站已有待处理的子站转换")
+		return
+	}
+	if err := writeJSON(markerPath, in); err != nil {
+		failure(w, 500, "保存子站转换信息失败")
+		return
+	}
+	a.store.audit(actor.Username, "business-adopt", in.SiteID)
+	jsonResponse(w, 200, object{"ok": true, "role": "business", "restart_required": true})
+	if a.restart != nil {
+		go func() {
+			time.Sleep(250 * time.Millisecond)
+			a.restart()
+		}()
+	}
+}
+
+func (a *App) adoptLegacyPeer(ctx context.Context, actor Record, peer FleetPeer) (BusinessSite, error) {
+	if !persistence.ValidSite(peer.SiteID) || peer.Token == "" {
+		return BusinessSite{}, errors.New("legacy site identity is invalid")
+	}
+	sites, err := a.store.businessSites()
+	if err != nil {
+		return BusinessSite{}, err
+	}
+	for _, site := range sites {
+		if site.ID == peer.SiteID {
+			return BusinessSite{}, errors.New("site is already managed")
+		}
+	}
+	connectToken := "gye_" + randomToken(32)
+	now := time.Now().Unix()
+	site := BusinessSite{ID: peer.SiteID, Name: peer.Name, Enabled: true, OwnerID: actor.ID, Created: now, EnrollmentExpires: now + 24*60*60, Revision: randomToken(12), Nodes: []Node{}, Grants: []BusinessGrant{}}
+	site.defaults()
+	b, err := a.store.vault.seal(site)
+	if err != nil {
+		return BusinessSite{}, err
+	}
+	if _, err = a.store.db.Exec("INSERT INTO business_sites(id,enroll_hash,doc) VALUES(?,?,?)", site.ID, digest(connectToken), b); err != nil {
+		return BusinessSite{}, err
+	}
+	rollback := true
+	defer func() {
+		if rollback {
+			_, _ = a.store.db.Exec("DELETE FROM business_sites WHERE id=?", site.ID)
+		}
+	}()
+	body, _ := json.Marshal(businessAdoption{SiteID: peer.SiteID, ControllerURL: a.cfg.PublicURL, ConnectToken: connectToken})
+	request := httpapi.GatewayRequest{Method: "POST", Path: "/api/adopt", Body: body}
+	transport := httpapi.NewGatewayTransport(a.cfg.Dev)
+	defer transport.CloseIdleConnections()
+	out, err := httpapi.CallGateway(ctx, transport, peer.URL, peer.Token, request)
+	if err != nil || out.Status != 200 {
+		return BusinessSite{}, errors.New("legacy site conversion failed")
+	}
+	if out.SiteID != peer.SiteID {
+		return BusinessSite{}, errors.New("legacy site identity changed")
+	}
+	if _, err = a.store.db.Exec("DELETE FROM fleet_peers WHERE id=?", peer.ID); err != nil {
+		return BusinessSite{}, err
+	}
+	rollback = false
+	a.store.audit(actor.Username, "fleet_peer_convert", peer.ID)
+	return site.public(), nil
+}
+
+func (a *App) migrateLegacyPeers(ctx context.Context, actor Record) {
+	if !a.cfg.controller() {
+		return
+	}
+	a.fleetMigrationMu.Lock()
+	defer a.fleetMigrationMu.Unlock()
+	peers, err := a.store.fleetPeersWithToken()
+	if err != nil {
+		return
+	}
+	for _, peer := range peers {
+		// An offline or pre-0.23.4 site remains in the compatibility table and
+		// will be retried on the next visit to the unified sub-site page.
+		_, _ = a.adoptLegacyPeer(ctx, actor, peer)
+	}
 }
 func (a *App) relaySiteAPI(w http.ResponseWriter, r *http.Request, actor Record, id string) {
 	if a.cfg.edition() != "pro" || actor.Role != "owner" {

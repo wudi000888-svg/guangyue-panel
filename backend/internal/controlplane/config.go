@@ -15,9 +15,18 @@ import (
 	"github.com/wudi000888-svg/guangyue-panel/backend/internal/persistence"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
-const version = "0.23.3"
+const version = "0.23.4"
+
+const businessAdoptionFile = "business-adoption.json"
+
+type businessAdoption struct {
+	SiteID        string `json:"site_id"`
+	ControllerURL string `json:"controller_url"`
+	ConnectToken  string `json:"connect_token"`
+}
 
 type Config struct {
 	HY2Optimized    bool                `json:"hy2_optimized,omitempty"`
@@ -26,6 +35,7 @@ type Config struct {
 	ConnectToken    string              `json:"connect_token,omitempty"`
 	EnrollmentToken string              `json:"enrollment_token,omitempty"`
 	BusinessToken   string              `json:"business_token,omitempty"`
+	BusinessAdopted bool                `json:"business_adopted,omitempty"`
 	Edition         string              `json:"edition,omitempty"`
 	SiteID          string              `json:"site_id,omitempty"`
 	Database        persistence.Options `json:"database,omitempty"`
@@ -127,10 +137,34 @@ func loadConfig(path string) (Config, error) {
 	if c.Mihomo == "" {
 		c.Mihomo = "/opt/guangyue-personal/bin/mihomo"
 	}
+	// A running panel cannot rewrite the root-owned config file.  Adoption is
+	// therefore staged in the state directory and applied by every process
+	// (including the managed proxy wrappers) on the next restart.
+	if c.Role != "business" {
+		var adoption businessAdoption
+		if raw, e := os.ReadFile(filepath.Join(c.StateDir, businessAdoptionFile)); e == nil && json.Unmarshal(raw, &adoption) == nil && adoption.SiteID == c.siteID() && validBusinessBootstrap(adoption.ConnectToken) && validateControllerURL(adoption.ControllerURL, c.Dev) == nil {
+			c.Role = "business"
+			c.ControllerURL = adoption.ControllerURL
+			c.ConnectToken = adoption.ConnectToken
+			c.BusinessAdopted = true
+		}
+	}
 	if err := c.validateEdition(); err != nil {
 		return c, err
 	}
 	return c, nil
+}
+
+func validBusinessBootstrap(token string) bool {
+	if len(token) != 47 || !strings.HasPrefix(token, "gye_") {
+		return false
+	}
+	for _, c := range token[4:] {
+		if !(c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '_' || c == '-') {
+			return false
+		}
+	}
+	return true
 }
 
 func (c Config) edition() string {
@@ -187,7 +221,8 @@ func (c Config) validateEdition() error {
 		return errors.New("Lite requires SQLite")
 	}
 	if c.businessAgent() {
-		if d.Driver != "sqlite" || c.RedisURL != "" || c.ControllerURL == "" || c.ConnectToken == "" && c.EnrollmentToken == "" && c.BusinessToken == "" {
+		adoptedPro := c.BusinessAdopted && c.edition() == "pro" && d.Driver == "postgres" && c.RedisURL != ""
+		if c.ControllerURL == "" || c.ConnectToken == "" && c.EnrollmentToken == "" && c.BusinessToken == "" || !adoptedPro && (d.Driver != "sqlite" || c.RedisURL != "") {
 			return errors.New("business role requires SQLite and controller enrollment configuration, without Redis")
 		}
 		return validateControllerURL(c.ControllerURL, c.Dev)

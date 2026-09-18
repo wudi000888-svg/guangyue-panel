@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -204,5 +206,53 @@ func TestLitePairingTokenAndProTakeover(t *testing.T) {
 	}
 	if w = req(t, lite, liteOwner, "GET", "/api/fleet", nil); w.Code != 200 || strings.Contains(w.Body.String(), peer.ID) {
 		t.Fatalf("Lite exposed controller peer directory: %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestLegacyPeerBecomesBusinessSiteOnUnifiedPage(t *testing.T) {
+	lite := testApp(t)
+	lite.cfg.Edition, lite.cfg.SiteID = "lite", "legacy_child"
+	liteOwner := testUser(t, lite, "legacy-owner", "owner")
+	server := httptest.NewServer(lite.routes())
+	defer server.Close()
+
+	pro := testApp(t)
+	pro.cfg.Edition, pro.cfg.Role, pro.cfg.SiteID = "pro", "controller", "master"
+	proOwner := testUser(t, pro, "master-owner", "owner")
+	token := fleetToken(t, lite, liteOwner, "manage")
+	if w := req(t, pro, proOwner, "POST", "/api/fleet/peers", object{"name": "Legacy child", "url": server.URL, "token": token}); w.Code != 201 {
+		t.Fatalf("legacy peer registration: %d %s", w.Code, w.Body.String())
+	}
+
+	var listing struct {
+		Sites []BusinessSite `json:"sites"`
+	}
+	if w := req(t, pro, proOwner, "GET", "/api/business-sites", nil); w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &listing) != nil {
+		t.Fatalf("unified business listing: %d %s", w.Code, w.Body.String())
+	}
+	if len(listing.Sites) != 1 || listing.Sites[0].ID != "legacy_child" {
+		t.Fatalf("legacy peer was not converted: %+v", listing.Sites)
+	}
+	var peers int
+	if err := pro.store.db.QueryRow("SELECT COUNT(*) FROM fleet_peers").Scan(&peers); err != nil || peers != 0 {
+		t.Fatalf("legacy peer remains after conversion: %d %v", peers, err)
+	}
+	marker, err := os.ReadFile(filepath.Join(lite.cfg.StateDir, businessAdoptionFile))
+	if err != nil || !strings.Contains(string(marker), "https://panel.test") {
+		t.Fatalf("adoption marker missing: %v %s", err, marker)
+	}
+}
+
+func TestIndependentSiteCanStageBusinessAdoption(t *testing.T) {
+	a := testApp(t)
+	a.cfg.Edition, a.cfg.Role, a.cfg.SiteID = "lite", "standalone", "standalone_site"
+	owner := testUser(t, a, "site-owner", "owner")
+	token := "gye_" + strings.Repeat("A", 43)
+	w := req(t, a, owner, "POST", "/api/adopt", businessAdoption{SiteID: a.cfg.SiteID, ControllerURL: "https://master.example.com", ConnectToken: token})
+	if w.Code != 200 {
+		t.Fatalf("stage adoption: %d %s", w.Code, w.Body.String())
+	}
+	if _, err := os.Stat(filepath.Join(a.cfg.StateDir, businessAdoptionFile)); err != nil {
+		t.Fatalf("adoption marker not written: %v", err)
 	}
 }

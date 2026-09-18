@@ -36,9 +36,14 @@ func (a *App) businessAPI(w http.ResponseWriter, r *http.Request, actor Record) 
 		failure(w, 403, "需要 Pro 主控站管理员权限")
 		return
 	}
+	path := strings.TrimPrefix(r.URL.Path, "/api/business-sites")
+	if path == "" && r.Method == "GET" {
+		// Legacy Pro/Lite federation peers become ordinary business sites on the
+		// first visit. Offline or older peers stay in the compatibility table.
+		a.migrateLegacyPeers(r.Context(), actor)
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	path := strings.TrimPrefix(r.URL.Path, "/api/business-sites")
 	if path == "" && r.Method == "GET" {
 		sites, err := a.store.businessSites()
 		if err != nil {
