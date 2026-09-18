@@ -1,6 +1,6 @@
 # 主站与子站（主控与业务站）
 
-从 0.23.1 起，Lite 新安装默认作为独立站（`standalone`），Pro 新安装默认作为主站（`controller`）。独立安装不需要注册文件；登录后可生成配对令牌。Lite 只能生成和撤销令牌，Pro 可粘贴令牌直接接管独立站。使用 `--enrollment-file` 才进入 `business` 托管子站模式；子站保留本地 owner、节点、订阅和独立运行能力。一个 Pro 主站最多管理 64 个 Lite / Pro 子站。用户在主控登录、领取统一订阅；业务站负责所在 VPS 的 VLESS Reality、HY2、出口连接和检测。主控可以同时提供本机节点，因此已有单机 Pro 升级后仍保留原节点与订阅。
+从 0.23.1 起，Lite 新安装默认作为独立站（`standalone`），Pro 新安装默认作为主站（`controller`）。独立安装不需要注册文件；登录后可生成配对令牌。令牌有效期可选 1～365 天或永久有效，永久令牌不会自动过期，应仅在可信场景使用。Lite 只能生成和撤销令牌，Pro 可粘贴令牌直接接管独立站。使用 `--enrollment-file` 才进入 `business` 托管子站模式；子站保留本地 owner、节点、订阅和独立运行能力。一个 Pro 主站最多管理 64 个 Lite / Pro 子站。用户在主控登录、领取统一订阅；业务站负责所在 VPS 的 VLESS Reality、HY2、出口连接和检测。主控可以同时提供本机节点，因此已有单机 Pro 升级后仍保留原节点与订阅。
 
 ```mermaid
 flowchart TB
@@ -19,8 +19,8 @@ flowchart TB
 
 | Release asset | 用途 | 默认行为 |
 | --- | --- | --- |
-| `guangyue-panel-lite-0.23.1-linux-amd64.tar.gz` | 低资源独立站或托管子站 | Lite / SQLite / 默认 `standalone`；提供 `--enrollment-file` 时为 `business` |
-| `guangyue-panel-pro-0.23.1-linux-amd64.tar.gz` | 主站或托管 Pro 子站 | 默认 `controller`；传 `--role business` 并提供注册文件安装子站 |
+| `guangyue-panel-lite-0.23.2-linux-amd64.tar.gz` | 低资源独立站或托管子站 | Lite / SQLite / 默认 `standalone`；提供 `--enrollment-file` 时为 `business` |
+| `guangyue-panel-pro-0.23.2-linux-amd64.tar.gz` | 主站或托管 Pro 子站 | 默认 `controller`；传 `--role business` 并提供注册文件安装子站 |
 
 两个包共享核心业务代码，各自带有受校验的 `EDITION` 标记。安装器读取标记决定默认版本；`--edition` 可显式选择。独立 Lite 默认 `standalone`，无需注册文件；`--enrollment-file` 自动进入 `business`。升级默认沿用当前版本、角色与站点身份；普通升级不能变更子站版本类型、角色、站点 ID 或主站关系，也不会把旧用户自动合并到主站。主控建议 2 核 2 GiB 起步；业务站建议 1 核 1 GiB，控制面沿用 Lite 的 48 MiB Go 内存目标与 160 MiB systemd 上限，不安装 PostgreSQL/Redis。总内存仍包含 Nginx、代理核心和操作系统。
 

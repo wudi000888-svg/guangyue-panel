@@ -1466,6 +1466,8 @@
   "只读查看": "Read-only monitoring",
   "站点管理": "Site management",
   "有效天数": "Valid for (days)",
+  "永久有效": "Never expires",
+  "永久令牌不会自动过期，请仅在可信场景使用。": "Permanent tokens never expire automatically. Use them only in trusted environments.",
   "接入令牌绑定当前管理员。禁用管理员或撤销令牌后，远程访问立即失效。": "Tokens are bound to the current administrator. Disabling that account or revoking the token immediately blocks remote access.",
   "令牌只显示一次，请复制到需要接入本站的 Pro 面板。": "This token is shown once. Copy it to the Pro panel that will connect to this site.",
   "接入令牌": "Access token",

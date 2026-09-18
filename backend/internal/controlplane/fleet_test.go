@@ -10,19 +10,87 @@ import (
 )
 
 func fleetToken(t *testing.T, a *App, owner Record, scope string) string {
+	_, token, _ := fleetTokenWithOptions(t, a, owner, scope, false)
+	return token
+}
+func fleetTokenWithOptions(t *testing.T, a *App, owner Record, scope string, forever bool) (string, string, int64) {
 	t.Helper()
-	w := req(t, a, owner, "POST", "/api/fleet/tokens", object{"name": "fixture federation", "scope": scope, "days": 1})
+	days := 1
+	if forever {
+		days = 0
+	}
+	w := req(t, a, owner, "POST", "/api/fleet/tokens", object{"name": "fixture federation", "scope": scope, "days": days, "forever": forever})
 	if w.Code != 201 {
 		t.Fatal("token creation", w.Code)
 	}
 	var data struct {
-		Token string `json:"token"`
+		ID      string `json:"id"`
+		Token   string `json:"token"`
+		Expires int64  `json:"expires"`
 	}
 	if json.Unmarshal(w.Body.Bytes(), &data) != nil || data.Token == "" {
 		t.Fatal("missing credential")
 	}
-	return data.Token
+	return data.ID, data.Token, data.Expires
 }
+
+func TestFleetPermanentToken(t *testing.T) {
+	a := testApp(t)
+	a.cfg.Edition = "pro"
+	owner := testUser(t, a, "permanent-owner", "owner")
+	id, token, expires := fleetTokenWithOptions(t, a, owner, "manage", true)
+	if id == "" || expires != 0 {
+		t.Fatalf("permanent token expiry: id=%q expires=%d", id, expires)
+	}
+
+	var listing struct {
+		Tokens []struct {
+			ID      string `json:"id"`
+			Expires int64  `json:"expires"`
+		} `json:"tokens"`
+	}
+	w := req(t, a, owner, "GET", "/api/fleet", nil)
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &listing) != nil {
+		t.Fatalf("permanent token listing: %d %s", w.Code, w.Body.String())
+	}
+	found := false
+	for _, item := range listing.Tokens {
+		if item.ID == id {
+			found = true
+			if item.Expires != 0 {
+				t.Fatalf("permanent token changed in listing: %d", item.Expires)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("permanent token missing from listing")
+	}
+
+	b, _ := json.Marshal(object{"method": "GET", "path": "/api/operations", "body": object{}})
+	r := httptest.NewRequest("POST", "/api/fleet-gateway", strings.NewReader(string(b)))
+	r.Header.Set("Authorization", "Bearer "+token)
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("X-Requested-With", "guangyue")
+	w = httptest.NewRecorder()
+	a.routes().ServeHTTP(w, r)
+	if w.Code != 200 {
+		t.Fatalf("permanent token gateway: %d %s", w.Code, w.Body.String())
+	}
+
+	if w = req(t, a, owner, "DELETE", "/api/fleet/tokens/"+id, nil); w.Code != 200 {
+		t.Fatalf("permanent token revoke: %d %s", w.Code, w.Body.String())
+	}
+	r = httptest.NewRequest("POST", "/api/fleet-gateway", strings.NewReader(string(b)))
+	r.Header.Set("Authorization", "Bearer "+token)
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("X-Requested-With", "guangyue")
+	w = httptest.NewRecorder()
+	a.routes().ServeHTTP(w, r)
+	if w.Code != 401 {
+		t.Fatalf("revoked permanent token accepted: %d %s", w.Code, w.Body.String())
+	}
+}
+
 func TestFleetRegistrationForwardingIsolationAndRevocation(t *testing.T) {
 	local, remote := testApp(t), testApp(t)
 	local.cfg.Edition, remote.cfg.Edition = "pro", "pro"

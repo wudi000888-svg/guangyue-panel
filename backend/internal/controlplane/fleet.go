@@ -78,7 +78,7 @@ func (a *App) fleetGateway(w http.ResponseWriter, r *http.Request) {
 	var actorID, expires int64
 	var scope, id string
 	err := a.store.db.QueryRow("SELECT id,actor_id,scope,expires FROM fleet_tokens WHERE token_hash=?", digest(token)).Scan(&id, &actorID, &scope, &expires)
-	if err != nil || expires <= time.Now().Unix() {
+	if err != nil || expires != 0 && expires <= time.Now().Unix() {
 		failure(w, 401, "站点凭据已失效")
 		return
 	}
@@ -205,9 +205,10 @@ func (a *App) fleetAPI(w http.ResponseWriter, r *http.Request, actor Record) {
 	}
 	if path == "/tokens" && r.Method == "POST" {
 		var in struct {
-			Name  string `json:"name"`
-			Scope string `json:"scope"`
-			Days  int    `json:"days"`
+			Name    string `json:"name"`
+			Scope   string `json:"scope"`
+			Days    int    `json:"days"`
+			Forever bool   `json:"forever"`
 		}
 		if !decode(w, r, &in) {
 			return
@@ -215,8 +216,8 @@ func (a *App) fleetAPI(w http.ResponseWriter, r *http.Request, actor Record) {
 		if a.cfg.edition() == "lite" {
 			in.Scope = "manage"
 		}
-		if strings.TrimSpace(in.Name) == "" || utf8.RuneCountInString(in.Name) > 64 || (in.Scope != "read" && in.Scope != "manage") || in.Days < 1 || in.Days > 365 {
-			failure(w, 400, "请填写令牌名称、权限和 1 至 365 天有效期")
+		if strings.TrimSpace(in.Name) == "" || utf8.RuneCountInString(in.Name) > 64 || (in.Scope != "read" && in.Scope != "manage") || (!in.Forever && (in.Days < 1 || in.Days > 365)) {
+			failure(w, 400, "请填写令牌名称、权限和 1 至 365 天有效期，或选择永久有效")
 			return
 		}
 		a.mu.Lock()
@@ -228,7 +229,10 @@ func (a *App) fleetAPI(w http.ResponseWriter, r *http.Request, actor Record) {
 		}
 		id, token := randomToken(12), "gyp_"+randomToken(32)
 		now := time.Now().Unix()
-		expires := now + int64(in.Days)*86400
+		expires := int64(0)
+		if !in.Forever {
+			expires = now + int64(in.Days)*86400
+		}
 		_, err := a.store.db.Exec("INSERT INTO fleet_tokens(id,token_hash,name,actor_id,scope,created,expires) VALUES(?,?,?,?,?,?,?)", id, digest(token), in.Name, actor.ID, in.Scope, now, expires)
 		if err != nil {
 			failure(w, 500, "创建接入令牌失败")
