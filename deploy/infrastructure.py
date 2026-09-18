@@ -31,7 +31,7 @@ def read_profile(path):
         raise ValueError('profile requires PostgreSQL DSN and Redis URL')
     return {key:value[key] for key in ('database','redis_url')}
 
-def edition_config(config, edition, site, profile=None, role=None, enrollment=None, *, existing=False):
+def edition_config(config, edition, site, profile=None, role=None, enrollment=None, *, controller_url=None, connect_token=None, existing=False):
     result=dict(config)
     if edition not in ('lite','pro'):
         raise ValueError('edition must be lite or pro')
@@ -44,15 +44,26 @@ def edition_config(config, edition, site, profile=None, role=None, enrollment=No
     if old_edition=='pro' and edition=='lite':
         raise ValueError('automatic Pro to Lite downgrade is refused; use portable backup recovery')
     retained=(old_role if existing else config.get('role')) if old_edition==edition else None
-    # A fresh installation is always usable without a controller.  Supplying an
-    # enrollment file opts into managed child mode; otherwise Lite remains an
-    # independent SQLite site and Pro remains the master controller.
-    role=role or retained or ('business' if enrollment else ('controller' if edition=='pro' else 'standalone'))
+    # A fresh installation is always usable without a controller. Supplying a
+    # connection token opts into managed child mode; the enrollment file remains
+    # a compatibility input for existing deployments.
+    role=role or retained or ('business' if enrollment or connect_token else ('controller' if edition=='pro' else 'standalone'))
     if role not in ('standalone','controller','business') or (edition=='lite' and role=='controller') or (edition=='pro' and role=='standalone'):
         raise ValueError('Lite supports business or standalone; Pro supports controller or business')
     if role=='business':
         if profile: raise ValueError('business sites use local SQLite and do not need infrastructure')
-        if enrollment:
+        if enrollment and connect_token:
+            raise ValueError('use either --connect-token or --enrollment-file, not both')
+        if connect_token:
+            if not controller_url:
+                raise ValueError('managed site requires --controller-url with --connect-token')
+            u=urlparse(controller_url)
+            if u.scheme!='https' or not u.hostname or u.username or u.password or u.query or u.fragment or u.path not in ('','/'):
+                raise ValueError('controller URL must be an HTTPS origin')
+            if not re.fullmatch(r'gye_[A-Za-z0-9_-]{43}',connect_token):
+                raise ValueError('invalid connection token')
+            result.update(controller_url=controller_url,connect_token=connect_token)
+        elif enrollment:
             path=Path(enrollment)
             if path.is_symlink() or not path.is_file() or path.stat().st_mode & 0o077:
                 raise ValueError('enrollment file must be a private regular file (mode 600)')
@@ -65,8 +76,8 @@ def edition_config(config, edition, site, profile=None, role=None, enrollment=No
             if not re.fullmatch(r'gye_[A-Za-z0-9_-]{43}',data['enrollment_token']):
                 raise ValueError('invalid enrollment token')
             result.update(data)
-        if not result.get('controller_url') or not (result.get('enrollment_token') or result.get('business_token')):
-            raise ValueError('business site requires --enrollment-file')
+        if not result.get('controller_url') or not (result.get('connect_token') or result.get('enrollment_token') or result.get('business_token')):
+            raise ValueError('business site requires --controller-url and --connect-token')
         result.update(database={'driver':'sqlite'},redis_url='')
     elif edition=='pro':
         if profile: result.update(read_profile(profile))

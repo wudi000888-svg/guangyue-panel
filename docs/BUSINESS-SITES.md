@@ -1,6 +1,6 @@
 # 主站与子站（主控与业务站）
 
-从 0.23.1 起，Lite 新安装默认作为独立站（`standalone`），Pro 新安装默认作为主站（`controller`）。独立安装不需要注册文件；登录后可生成配对令牌。令牌有效期可选 1～365 天或永久有效，永久令牌不会自动过期，应仅在可信场景使用。Lite 只能生成和撤销令牌，Pro 可粘贴令牌直接接管独立站。使用 `--enrollment-file` 才进入 `business` 托管子站模式；子站保留本地 owner、节点、订阅和独立运行能力。一个 Pro 主站最多管理 64 个 Lite / Pro 子站。用户在主控登录、领取统一订阅；业务站负责所在 VPS 的 VLESS Reality、HY2、出口连接和检测。主控可以同时提供本机节点，因此已有单机 Pro 升级后仍保留原节点与订阅。
+从 0.23.3 起，所有新安装都不需要注册文件。Pro 主站为每个托管子站生成一次性连接令牌，目标 Lite/Pro 安装完成后使用主站地址、站点 ID 和令牌完成绑定。主站统一管理成员、权限、配额、节点和出口；子站保留本地 owner、节点、订阅和断网时的独立运行能力。旧 `--enrollment-file` 仅用于兼容迁移。一个 Pro 主站最多管理 64 个 Lite / Pro 子站。用户在主控登录、领取统一订阅；业务站负责所在 VPS 的 VLESS Reality、HY2、出口连接和检测。主控可以同时提供本机节点，因此已有单机 Pro 升级后仍保留原节点与订阅。
 
 ```mermaid
 flowchart TB
@@ -19,10 +19,10 @@ flowchart TB
 
 | Release asset | 用途 | 默认行为 |
 | --- | --- | --- |
-| `guangyue-panel-lite-0.23.2-linux-amd64.tar.gz` | 低资源独立站或托管子站 | Lite / SQLite / 默认 `standalone`；提供 `--enrollment-file` 时为 `business` |
-| `guangyue-panel-pro-0.23.2-linux-amd64.tar.gz` | 主站或托管 Pro 子站 | 默认 `controller`；传 `--role business` 并提供注册文件安装子站 |
+| `guangyue-panel-lite-0.23.3-linux-amd64.tar.gz` | 低资源独立站或托管子站 | Lite / SQLite / 默认 `standalone`；提供 `--connect-token` 时为 `business` |
+| `guangyue-panel-pro-0.23.3-linux-amd64.tar.gz` | 主站或托管 Pro 子站 | 默认 `controller`；传 `--role business` 和连接令牌安装子站 |
 
-两个包共享核心业务代码，各自带有受校验的 `EDITION` 标记。安装器读取标记决定默认版本；`--edition` 可显式选择。独立 Lite 默认 `standalone`，无需注册文件；`--enrollment-file` 自动进入 `business`。升级默认沿用当前版本、角色与站点身份；普通升级不能变更子站版本类型、角色、站点 ID 或主站关系，也不会把旧用户自动合并到主站。主控建议 2 核 2 GiB 起步；业务站建议 1 核 1 GiB，控制面沿用 Lite 的 48 MiB Go 内存目标与 160 MiB systemd 上限，不安装 PostgreSQL/Redis。总内存仍包含 Nginx、代理核心和操作系统。
+两个包共享核心业务代码，各自带有受校验的 `EDITION` 标记。安装器读取标记决定默认版本；`--edition` 可显式选择。独立 Lite 默认 `standalone`，无需注册文件；`--connect-token` 自动进入 `business`。升级默认沿用当前版本、角色与站点身份；普通升级不能变更子站版本类型、角色、站点 ID 或主站关系，也不会把旧用户自动合并到主站。主控建议 2 核 2 GiB 起步；业务站建议 1 核 1 GiB，控制面沿用 Lite 的 48 MiB Go 内存目标与 160 MiB systemd 上限，不安装 PostgreSQL/Redis。总内存仍包含 Nginx、代理核心和操作系统。
 
 ## 安装主控
 
@@ -39,26 +39,27 @@ sudo python3 deploy/install.py --bundle "$PWD" --role controller --site-id contr
 
 已有 Pro 升级至 0.16.0 后自动作为主控，保留本机业务。主控管理上限为 64 个业务站，每站 2 个受保护默认直连节点、最多 14 个附加节点。现有主控用户上限仍为 100。不要为两台机器重复使用同一站点 ID 或复制状态、Reality 私钥。
 
-## 注册业务站
+## 令牌连接业务站
 
-1. 主控 → **群站管理 → 子站 → 添加子站**。填写唯一标识、名称、分组，下载注册 JSON。
-2. 将注册文件通过可信通道保存到目标 VPS `/root/enrollment.json`，执行 `chmod 600 /root/enrollment.json`。文件不是命令脚本，不通过 URL 或 shell 参数传递令牌。
-3. 目标 VPS 下载 **Lite** 包（也可在主站注册文件弹窗直接下载）。按安装指南准备域名、证书、Nginx 和固定核心；无需运行基础设施安装器。最低只需一个域名同时用于节点与健康入口，推荐分开。
-4. 执行以下只读预检查，通过后加 `--apply` 安装：
+1. 主控 → **群站管理 → 子站 → 添加子站**。填写唯一标识、名称、分组，生成一次性连接令牌。
+2. 目标 VPS 下载 **Lite** 或 **Pro** 包。按安装指南准备域名、证书、Nginx 和固定核心；业务站无需运行 PostgreSQL/Redis 基础设施安装器。
+3. 执行以下只读预检查，通过后在同一命令末尾加 `--apply` 安装：
 
 ```bash
 sudo python3 deploy/install.py --bundle "$PWD" \
-  --enrollment-file /root/enrollment.json \
+  --role business --site-id site_tokyo \
+  --controller-url https://panel.example.com \
+  --connect-token '主站生成的一次性连接令牌' \
   --panel-domain agent.example.com --node-domain edge.example.com \
   --cert /etc/letsencrypt/live/agent.example.com/fullchain.pem \
   --key /etc/letsencrypt/live/agent.example.com/privkey.pem
 ```
 
-Lite 独立安装时省略 `--role` 即可完成，无需注册文件；安装完成后登录面板生成配对令牌。需要托管时提供 `--enrollment-file`（Lite 自动使用 `business`，Pro 需加 `--role business`）。
+Lite 独立安装时省略 `--role` 即可完成，无需连接令牌；需要托管时传入 `--connect-token`（Lite 自动使用 `business`，Pro 需加 `--role business`）。令牌只显示一次，成功连接后自动失效；不要把令牌提交到 shell 历史、日志或工单。
 
-站点 ID 自动从注册文件读取。注册需要主控的有效 HTTPS 证书和公网地址，不支持自签证书、跳过校验或重定向。业务站主动访问主控 TCP 443；无需从主控连接业务站管理端口。代理入口仍需要 TCP/UDP 443，与每站 Nginx 兼容。
+连接令牌需要主控的有效 HTTPS 证书和公网地址，不支持自签证书、跳过校验或重定向。业务站主动访问主控 TCP 443；无需从主控连接业务站管理端口。代理入口仍需要 TCP/UDP 443，与每站 Nginx 兼容。
 
-注册文件有效期 24 小时。主控固定首次上报的域名、站点 ID、Reality 公钥与 Short ID；首次同步后注册凭据失效，业务长期令牌加密保存在本站状态。业务站配置内原注册令牌随后已不可再次使用；安装源文件可删除。托管子站会生成本地 owner，保留登录、节点、订阅和本地运维能力；主站同步成员与策略，断网时在有效租约内继续运行。
+连接令牌有效期 24 小时。主控固定首次上报的域名、站点 ID、Reality 公钥与 Short ID；首次同步后连接凭据失效，业务长期令牌加密保存在本站状态。托管子站会生成本地 owner，保留登录、节点、订阅和本地运维能力；主站同步成员与策略，断网时在有效租约内继续运行。
 
 未注册且令牌过期，可在主控停用该记录、清空成员、删除后重新创建。已注册机器损坏应恢复原机器配套配置、密钥及最新状态，不要通过修改站点身份绕过计量水位；无法恢复时保留旧站点额度，停用旧机器后新建站点。当前不提供自动转移离线未结算额度的强制按钮。
 
@@ -107,7 +108,7 @@ sudo python3 deploy/upgrade.py --bundle "$PWD"
 # 检查通过后加 --apply。
 ```
 
-Lite 子站健康状态应为 `edition=lite`、`role=business`，兼容 Pro 子站则为 `edition=pro`、`role=business` 和注册的 `site_id`。健康接口证明进程运行，主控“已同步”证明配置已确认；最后仍需真实客户端分别验证 VLESS 和 HY2 的 TCP/UDP。保留升级恢复目录，不把注册文件、数据库、订阅 URI、二维码或密钥上传到 GitHub。
+Lite 子站健康状态应为 `edition=lite`、`role=business`，兼容 Pro 子站则为 `edition=pro`、`role=business` 和连接的 `site_id`。健康接口证明进程运行，主控“已同步”证明配置已确认；最后仍需真实客户端分别验证 VLESS 和 HY2 的 TCP/UDP。保留升级恢复目录，不把连接令牌、数据库、订阅 URI、二维码或密钥上传到 GitHub。
 
 原 0.15 的联邦管理位于 **独立面板接入**，用于仍拥有独立用户库和订阅的旧站点；它与本节业务站模式分别管理，不会自动合并旧用户。
 

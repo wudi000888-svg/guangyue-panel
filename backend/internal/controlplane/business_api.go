@@ -83,7 +83,10 @@ func (a *App) businessAPI(w http.ResponseWriter, r *http.Request, actor Record) 
 			return
 		}
 		a.store.audit(actor.Username, "create-business-site", v.ID)
-		jsonResponse(w, 201, object{"site": v.public(), "enrollment": object{"site_id": v.ID, "controller_url": a.cfg.PublicURL, "enrollment_token": token}, "expires": v.EnrollmentExpires})
+		connection := object{"site_id": v.ID, "controller_url": a.cfg.PublicURL, "connect_token": token, "expires": v.EnrollmentExpires}
+		// Keep the old enrollment object for one migration release. New clients
+		// use the token-only connection object and never need a file.
+		jsonResponse(w, 201, object{"site": v.public(), "connection": connection, "enrollment": object{"site_id": v.ID, "controller_url": a.cfg.PublicURL, "enrollment_token": token}, "expires": v.EnrollmentExpires})
 		return
 	}
 	parts := strings.Split(strings.TrimPrefix(path, "/"), "/")

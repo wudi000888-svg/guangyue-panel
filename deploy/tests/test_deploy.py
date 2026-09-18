@@ -163,6 +163,17 @@ class InfrastructureBundleTests(unittest.TestCase):
             self.assertFalse((root/'__pycache__').exists())
 
 class BusinessDeploymentTests(unittest.TestCase):
+    def test_business_role_accepts_token_without_registration_file(self):
+        config=infrastructure.edition_config({},'lite','site_tokyo',role='business',controller_url='https://control.example.com',connect_token='gye_'+'A'*43)
+        self.assertEqual(config['database'],{'driver':'sqlite'})
+        self.assertEqual(config['controller_url'],'https://control.example.com')
+        self.assertEqual(config['connect_token'],'gye_'+'A'*43)
+        self.assertNotIn('enrollment_token',config)
+        with self.assertRaisesRegex(ValueError,'controller URL'):
+            infrastructure.edition_config({},'lite','site_tokyo',role='business',controller_url='http://control.example.com',connect_token='gye_'+'A'*43)
+        with self.assertRaisesRegex(ValueError,'connection token'):
+            infrastructure.edition_config({},'lite','site_tokyo',role='business',controller_url='https://control.example.com',connect_token='bad')
+
     def test_business_role_uses_sqlite_without_infrastructure(self):
         with tempfile.TemporaryDirectory() as temp:
             path=Path(temp)/'enrollment.json'

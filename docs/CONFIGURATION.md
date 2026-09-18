@@ -5,8 +5,9 @@
 | 字段 | 默认/意义 | 注意 |
 | --- | --- | --- |
 | `edition` | `lite` / `pro` | Pro 主控必须配置 PostgreSQL 与 Redis；业务站使用 SQLite |
-| `role` | 新安装 Lite: `standalone` / Pro: `controller`；提供 `--enrollment-file` 时为 `business` | 独立站无需注册文件；升级保留原角色，子站保留本地 owner 与独立运行能力 |
+| `role` | 新安装 Lite: `standalone` / Pro: `controller`；提供 `--connect-token` 时为 `business` | 新子站不需要注册文件；升级保留原角色，子站保留本地 owner 与独立运行能力 |
 | `controller_url` | 业务站主控 HTTPS 根地址 | 公网、可信证书、禁止重定向 |
+| `connect_token` | 新托管子站首次连接使用的一次性令牌 | 首次成功同步后失效；只存于受保护配置并交换为长期业务凭据 |
 | `enrollment_token` | 仅托管子站安装注册文件写入 | 首次同步后失效，长期令牌在本地加密状态中；独立站可在面板生成配对令牌 |
 | `site_id` | `default` | 小写字母开头、字母数字下划线、最多 40 字符；生产启用后不可直接修改 |
 | `database.driver` | Lite/业务站: `sqlite` / 主控: `postgres` | 禁止用 Lite 连接 PostgreSQL |
