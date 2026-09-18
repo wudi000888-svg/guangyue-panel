@@ -18,7 +18,7 @@ import (
 	"strings"
 )
 
-const version = "0.23.4"
+const version = "0.24.0"
 
 const businessAdoptionFile = "business-adoption.json"
 
@@ -35,6 +35,7 @@ type Config struct {
 	ConnectToken    string              `json:"connect_token,omitempty"`
 	EnrollmentToken string              `json:"enrollment_token,omitempty"`
 	BusinessToken   string              `json:"business_token,omitempty"`
+	LocalManagement bool                `json:"local_management,omitempty"`
 	BusinessAdopted bool                `json:"business_adopted,omitempty"`
 	Edition         string              `json:"edition,omitempty"`
 	SiteID          string              `json:"site_id,omitempty"`
@@ -152,7 +153,18 @@ func loadConfig(path string) (Config, error) {
 	if err := c.validateEdition(); err != nil {
 		return c, err
 	}
+	// A child explicitly switched to token management keeps its database and
+	// data, but no longer accepts replacing snapshots or needs a master lease.
+	c.LocalManagement = c.LocalManagement || localManagementEnabled(c.StateDir, c.siteID())
 	return c, nil
+}
+
+func localManagementEnabled(dir, siteID string) bool {
+	var local struct {
+		SiteID string `json:"site_id"`
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, "site-local.json"))
+	return err == nil && json.Unmarshal(raw, &local) == nil && local.SiteID != "" && (siteID == "" || local.SiteID == siteID)
 }
 
 func validBusinessBootstrap(token string) bool {
@@ -173,8 +185,8 @@ func (c Config) edition() string {
 	}
 	return "lite"
 }
-func (c Config) businessAgent() bool { return c.Role == "business" }
-func (c Config) controller() bool    { return c.edition() == "pro" && !c.businessAgent() }
+func (c Config) businessAgent() bool { return c.Role == "business" && !c.LocalManagement }
+func (c Config) controller() bool    { return c.edition() == "pro" && c.Role != "business" }
 func (c Config) deploymentRole() string {
 	if c.businessAgent() {
 		return "business"
@@ -201,7 +213,7 @@ func (c Config) DatabaseOptions() persistence.Options {
 	o := c.Database
 	o.SiteID = c.siteID()
 	if o.Driver == "" {
-		if c.edition() == "pro" && !c.businessAgent() {
+		if c.edition() == "pro" && (c.Role != "business" || c.BusinessAdopted) {
 			o.Driver = "postgres"
 		} else {
 			o.Driver = "sqlite"
@@ -220,8 +232,8 @@ func (c Config) validateEdition() error {
 	if c.edition() == "lite" && d.Driver != "sqlite" {
 		return errors.New("Lite requires SQLite")
 	}
-	if c.businessAgent() {
-		adoptedPro := c.BusinessAdopted && c.edition() == "pro" && d.Driver == "postgres" && c.RedisURL != ""
+	if c.Role == "business" {
+		adoptedPro := c.BusinessAdopted && c.edition() == "pro" && d.Driver == "postgres" && d.DSN != "" && c.RedisURL != ""
 		if c.ControllerURL == "" || c.ConnectToken == "" && c.EnrollmentToken == "" && c.BusinessToken == "" || !adoptedPro && (d.Driver != "sqlite" || c.RedisURL != "") {
 			return errors.New("business role requires SQLite and controller enrollment configuration, without Redis")
 		}

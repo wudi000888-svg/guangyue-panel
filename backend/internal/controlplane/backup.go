@@ -61,7 +61,9 @@ func (a *App) backupSnapshot(dir string) error {
 	if err = atomicWrite(filepath.Join(dir, "master.key"), key, 0600); err != nil {
 		return err
 	}
-	return writeJSON(filepath.Join(dir, "config.json"), a.cfg)
+	cfg := a.cfg
+	cfg.LocalManagement = cfg.LocalManagement || localManagementEnabled(cfg.StateDir, cfg.siteID())
+	return writeJSON(filepath.Join(dir, "config.json"), cfg)
 }
 
 func writeBackup(dst io.Writer, dir string) (err error) {

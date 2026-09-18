@@ -10,7 +10,7 @@
 
 [English](README_EN.md) · [安装指南](docs/INSTALL.md) · [使用手册](docs/USER_GUIDE.md) · [Nginx 共存](docs/NGINX.md) · [运维与备份](docs/OPERATIONS.md)
 
-![version](https://img.shields.io/badge/version-0.23.4-2563eb)
+![version](https://img.shields.io/badge/version-0.24.0-2563eb)
 ![license](https://img.shields.io/badge/panel_license-LGPL--3.0-16a34a)
 ![platform](https://img.shields.io/badge/server-Linux_amd64-475569)
 
@@ -49,7 +49,7 @@
 
 ## 下载版本
 
-在 [Releases](https://github.com/wudi000888-svg/guangyue-panel/releases/latest) 的 Assets 选择 `guangyue-panel-lite-…tar.gz`（默认独立站）或 `guangyue-panel-pro-…tar.gz`（默认主站），并校验 `SHA256SUMS`。新装站点不需要注册文件；Pro 主站为托管子站生成一次性连接令牌，目标 VPS 安装后使用 `--controller-url`、`--site-id` 和 `--connect-token` 完成绑定。Pro 的历史独立接入站点会在首次打开群站管理时自动转换为子站，保留原登录、数据和代理核心；旧 `--enrollment-file` 仅用于兼容迁移。
+在 [Releases](https://github.com/wudi000888-svg/guangyue-panel/releases/latest) 的 Assets 选择 Lite（默认独立站）或 Pro（默认主站）安装包，并校验 `SHA256SUMS`。安装不需要注册文件。子站在“配对令牌”生成令牌，Pro 在“群站管理”粘贴导入，即可管理用户、节点、权限、流量与服务启停；不需要分组或预建站点。历史独立接入自动进入同一子站列表，保留本地管理员和独立运行能力。详见[子站管理](docs/BUSINESS-SITES.md)。
 
 已有部署可按[在线更新与版本回退说明](docs/UPDATES.md)启用左上角版本管理。回退保留当前数据，不能低于安装基线；不兼容当前数据库的旧版本会被阻止。
 
@@ -78,7 +78,7 @@ sudo python3 deploy/install.py --bundle "$PWD" \
 | 文档 | 适用场景 |
 | --- | --- |
 | [版本选择与 Pro 部署](docs/EDITIONS.md) | Lite/Pro 对比、基础设施、迁移与群站接入 |
-| [主控＋业务站](docs/BUSINESS-SITES.md) | 注册业务站、统一订阅、成员额度、出口分配与离线边界 |
+| [主控＋业务站](docs/BUSINESS-SITES.md) | 导入子站令牌、远程管理、启停调度、在线与流量 |
 | [安装指南](docs/INSTALL.md) | DNS、证书、依赖、版本包、首次登录、卸载 |
 | [使用手册](docs/USER_GUIDE.md) | 从创建用户到导入出口、发放订阅与排错 |
 | [Nginx 共存](docs/NGINX.md) | 与现有 HTTPS 网站共用 TCP 443，保留自定义 SNI |

@@ -2,9 +2,7 @@ package controlplane
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
-	"errors"
 	"io"
 	"net/http"
 	"net/url"
@@ -15,17 +13,17 @@ import (
 	"unicode/utf8"
 
 	"github.com/wudi000888-svg/guangyue-panel/backend/internal/httpapi"
-	"github.com/wudi000888-svg/guangyue-panel/backend/internal/persistence"
 )
 
 type FleetPeer struct {
-	ID      string `json:"id"`
-	Scope   string `json:"scope"`
-	Name    string `json:"name"`
-	URL     string `json:"url"`
-	SiteID  string `json:"site_id"`
-	Token   string `json:"token,omitempty"`
-	Created int64  `json:"created"`
+	InstanceID string `json:"instance_id,omitempty"`
+	ID         string `json:"id"`
+	Scope      string `json:"scope"`
+	Name       string `json:"name"`
+	URL        string `json:"url"`
+	SiteID     string `json:"site_id"`
+	Token      string `json:"token,omitempty"`
+	Created    int64  `json:"created"`
 }
 
 func (s *Store) fleetPeer(id string) (FleetPeer, error) {
@@ -129,7 +127,12 @@ func (a *App) fleetGateway(w http.ResponseWriter, r *http.Request) {
 		_, _ = a.store.db.Exec("UPDATE fleet_tokens SET last_used=? WHERE id=?", time.Now().Unix(), id)
 	}
 	a.store.runtimeMu.RUnlock()
-	jsonResponse(w, 200, httpapi.GatewayResponse{SiteID: a.cfg.siteID(), Scope: scope, Status: buffer.Code, Body: json.RawMessage(buffer.Body.Bytes())})
+	instanceID, identityErr := a.store.siteInstanceID()
+	if identityErr != nil {
+		failure(w, 500, "读取本站身份失败")
+		return
+	}
+	jsonResponse(w, 200, httpapi.GatewayResponse{InstanceID: instanceID, SiteID: a.cfg.siteID(), Scope: scope, Status: buffer.Code, Body: json.RawMessage(buffer.Body.Bytes())})
 }
 
 // adoptBusiness stages a role conversion for a legacy independently managed
@@ -181,73 +184,8 @@ func (a *App) adoptBusiness(w http.ResponseWriter, r *http.Request, actor Record
 	}
 }
 
-func (a *App) adoptLegacyPeer(ctx context.Context, actor Record, peer FleetPeer) (BusinessSite, error) {
-	if !persistence.ValidSite(peer.SiteID) || peer.Token == "" {
-		return BusinessSite{}, errors.New("legacy site identity is invalid")
-	}
-	sites, err := a.store.businessSites()
-	if err != nil {
-		return BusinessSite{}, err
-	}
-	for _, site := range sites {
-		if site.ID == peer.SiteID {
-			return BusinessSite{}, errors.New("site is already managed")
-		}
-	}
-	connectToken := "gye_" + randomToken(32)
-	now := time.Now().Unix()
-	site := BusinessSite{ID: peer.SiteID, Name: peer.Name, Enabled: true, OwnerID: actor.ID, Created: now, EnrollmentExpires: now + 24*60*60, Revision: randomToken(12), Nodes: []Node{}, Grants: []BusinessGrant{}}
-	site.defaults()
-	b, err := a.store.vault.seal(site)
-	if err != nil {
-		return BusinessSite{}, err
-	}
-	if _, err = a.store.db.Exec("INSERT INTO business_sites(id,enroll_hash,doc) VALUES(?,?,?)", site.ID, digest(connectToken), b); err != nil {
-		return BusinessSite{}, err
-	}
-	rollback := true
-	defer func() {
-		if rollback {
-			_, _ = a.store.db.Exec("DELETE FROM business_sites WHERE id=?", site.ID)
-		}
-	}()
-	body, _ := json.Marshal(businessAdoption{SiteID: peer.SiteID, ControllerURL: a.cfg.PublicURL, ConnectToken: connectToken})
-	request := httpapi.GatewayRequest{Method: "POST", Path: "/api/adopt", Body: body}
-	transport := httpapi.NewGatewayTransport(a.cfg.Dev)
-	defer transport.CloseIdleConnections()
-	out, err := httpapi.CallGateway(ctx, transport, peer.URL, peer.Token, request)
-	if err != nil || out.Status != 200 {
-		return BusinessSite{}, errors.New("legacy site conversion failed")
-	}
-	if out.SiteID != peer.SiteID {
-		return BusinessSite{}, errors.New("legacy site identity changed")
-	}
-	if _, err = a.store.db.Exec("DELETE FROM fleet_peers WHERE id=?", peer.ID); err != nil {
-		return BusinessSite{}, err
-	}
-	rollback = false
-	a.store.audit(actor.Username, "fleet_peer_convert", peer.ID)
-	return site.public(), nil
-}
-
-func (a *App) migrateLegacyPeers(ctx context.Context, actor Record) {
-	if !a.cfg.controller() {
-		return
-	}
-	a.fleetMigrationMu.Lock()
-	defer a.fleetMigrationMu.Unlock()
-	peers, err := a.store.fleetPeersWithToken()
-	if err != nil {
-		return
-	}
-	for _, peer := range peers {
-		// An offline or pre-0.23.4 site remains in the compatibility table and
-		// will be retried on the next visit to the unified sub-site page.
-		_, _ = a.adoptLegacyPeer(ctx, actor, peer)
-	}
-}
 func (a *App) relaySiteAPI(w http.ResponseWriter, r *http.Request, actor Record, id string) {
-	if a.cfg.edition() != "pro" || actor.Role != "owner" {
+	if !a.cfg.controller() || actor.Role != "owner" {
 		failure(w, 403, "群站管理需要 Pro 管理员权限")
 		return
 	}
@@ -255,7 +193,7 @@ func (a *App) relaySiteAPI(w http.ResponseWriter, r *http.Request, actor Record,
 		failure(w, 403, "此操作需要在目标站点直接执行")
 		return
 	}
-	peer, err := a.store.fleetPeer(id)
+	peer, err := a.remoteSubsite(id)
 	if err != nil {
 		failure(w, 404, "站点不存在")
 		return
@@ -280,7 +218,7 @@ func (a *App) relaySiteAPI(w http.ResponseWriter, r *http.Request, actor Record,
 		failure(w, 502, "站点连接失败，请检查地址、证书和接入令牌")
 		return
 	}
-	if out.SiteID != peer.SiteID {
+	if out.SiteID != peer.SiteID || peer.InstanceID != "" && out.InstanceID != peer.InstanceID {
 		failure(w, 502, "站点身份发生变化，请重新接入")
 		return
 	}
@@ -370,7 +308,13 @@ func (a *App) fleetAPI(w http.ResponseWriter, r *http.Request, actor Record) {
 			return
 		}
 		a.store.audit(actor.Username, "fleet_token_create", id)
-		jsonResponse(w, 201, object{"id": id, "token": token, "site_id": a.cfg.siteID(), "expires": expires})
+		instanceID, identityErr := a.store.siteInstanceID()
+		if identityErr != nil {
+			failure(w, 500, "读取本站身份失败")
+			return
+		}
+		connection := encodeSiteToken(SiteToken{InstanceID: instanceID, Version: 1, URL: a.cfg.PublicURL, SiteID: a.cfg.siteID(), Token: token, Name: a.store.siteSettings().PanelName})
+		jsonResponse(w, 201, object{"id": id, "token": token, "connection_token": connection, "site_id": a.cfg.siteID(), "expires": expires})
 		return
 	}
 	if strings.HasPrefix(path, "/tokens/") && r.Method == "DELETE" {

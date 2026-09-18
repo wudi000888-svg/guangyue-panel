@@ -99,6 +99,9 @@ func (a *App) businessRequest(ctx context.Context, client *http.Client, path, to
 	return nil
 }
 func (a *App) syncBusinessAgent(ctx context.Context, client *http.Client) error {
+	if localManagementEnabled(a.cfg.StateDir, a.cfg.siteID()) {
+		return nil
+	}
 	a.mu.Lock()
 	state, err := a.store.businessAgentState()
 	a.mu.Unlock()
@@ -209,6 +212,9 @@ func (a *App) businessAgentLoop(ctx context.Context) {
 			return
 		case <-timer.C:
 		}
+		if localManagementEnabled(a.cfg.StateDir, a.cfg.siteID()) {
+			return
+		}
 		request, cancel := context.WithTimeout(ctx, 45*time.Second)
 		err := a.syncBusinessAgent(request, client)
 		cancel()
@@ -241,6 +247,10 @@ func (a *App) applyBusinessSnapshot(ctx context.Context, snapshot BusinessSnapsh
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	// Discard in-flight pull responses after the owner switches to token management.
+	if localManagementEnabled(a.cfg.StateDir, a.cfg.siteID()) {
+		return nil
+	}
 	state, err := a.store.businessAgentState()
 	if err != nil {
 		return err
@@ -641,6 +651,9 @@ func (a *App) queueBusinessCommands(ctx context.Context, commands []BusinessComm
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if localManagementEnabled(a.cfg.StateDir, a.cfg.siteID()) {
+		return nil
+	}
 	state, e := a.store.businessAgentState()
 	if e != nil {
 		return e

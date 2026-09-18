@@ -2,7 +2,7 @@
 
 适用于广月面板 0.23.3。首次部署按本文从上到下执行。已有部署使用[升级流程](OPERATIONS.md)，不要重新运行安装器覆盖数据。
 
-Release assets 已拆分 Lite / Pro；包内标记决定默认版本。本文演示独立 Lite（`--role standalone` 可省略）；新装独立站不需要注册文件。托管子站安装完成后使用主站生成的 `--controller-url`、`--site-id` 和 `--connect-token` 连接，详见[业务站指南](BUSINESS-SITES.md)。旧 `--enrollment-file` 仅用于兼容已有部署。安装 Pro 或从 Lite 升级，先阅读[双版本部署指南](EDITIONS.md)。证书、Nginx 与代理核心步骤两版通用。
+Release assets 分为 Lite / Pro；包内标记决定默认版本。本文演示独立 Lite（`--role standalone` 可省略）；安装不需要注册文件。安装后在子站生成配对令牌，Pro 直接粘贴导入，详见[子站指南](BUSINESS-SITES.md)。旧 `--connect-token` / `--enrollment-file` 参数仅为已有拉取式部署保留。安装 Pro 或从 Lite 升级，先阅读[双版本部署指南](EDITIONS.md)。
 
 ## 1. 系统、资源与域名
 

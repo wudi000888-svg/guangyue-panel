@@ -209,7 +209,7 @@ func TestLitePairingTokenAndProTakeover(t *testing.T) {
 	}
 }
 
-func TestLegacyPeerBecomesBusinessSiteOnUnifiedPage(t *testing.T) {
+func TestLegacyPeerBecomesDirectoryEntryWithoutRemoteAdoption(t *testing.T) {
 	lite := testApp(t)
 	lite.cfg.Edition, lite.cfg.SiteID = "lite", "legacy_child"
 	liteOwner := testUser(t, lite, "legacy-owner", "owner")
@@ -230,16 +230,15 @@ func TestLegacyPeerBecomesBusinessSiteOnUnifiedPage(t *testing.T) {
 	if w := req(t, pro, proOwner, "GET", "/api/business-sites", nil); w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &listing) != nil {
 		t.Fatalf("unified business listing: %d %s", w.Code, w.Body.String())
 	}
-	if len(listing.Sites) != 1 || listing.Sites[0].ID != "legacy_child" {
+	if len(listing.Sites) != 1 || listing.Sites[0].Connection == nil || listing.Sites[0].Connection.SiteID != "legacy_child" {
 		t.Fatalf("legacy peer was not converted: %+v", listing.Sites)
 	}
 	var peers int
 	if err := pro.store.db.QueryRow("SELECT COUNT(*) FROM fleet_peers").Scan(&peers); err != nil || peers != 0 {
 		t.Fatalf("legacy peer remains after conversion: %d %v", peers, err)
 	}
-	marker, err := os.ReadFile(filepath.Join(lite.cfg.StateDir, businessAdoptionFile))
-	if err != nil || !strings.Contains(string(marker), "https://panel.test") {
-		t.Fatalf("adoption marker missing: %v %s", err, marker)
+	if _, err := os.Stat(filepath.Join(lite.cfg.StateDir, businessAdoptionFile)); !os.IsNotExist(err) {
+		t.Fatalf("listing must not write a remote adoption marker: %v", err)
 	}
 }
 

@@ -23,10 +23,11 @@ type GatewayRequest struct {
 	Body   json.RawMessage `json:"body,omitempty"`
 }
 type GatewayResponse struct {
-	SiteID string          `json:"site_id"`
-	Scope  string          `json:"scope,omitempty"`
-	Status int             `json:"status"`
-	Body   json.RawMessage `json:"body"`
+	InstanceID string          `json:"instance_id,omitempty"`
+	SiteID     string          `json:"site_id"`
+	Scope      string          `json:"scope,omitempty"`
+	Status     int             `json:"status"`
+	Body       json.RawMessage `json:"body"`
 }
 
 // AllowedGateway is explicit: federation cannot export recovery keys, mint more
@@ -42,13 +43,16 @@ func AllowedGateway(method, path, scope string) bool {
 	if scope != "manage" {
 		return scope == "read" && method == "GET" && (u.Path == "/api/operations" || u.Path == "/api/dashboard")
 	}
+	if (method == "GET" && u.Path == "/api/site-status") || ((method == "PUT" || method == "POST") && u.Path == "/api/site-control") {
+		return true
+	}
 	if method == "POST" && u.Path == "/api/adopt" {
 		return true
 	}
 	if method == "GET" && u.Path == "/api/monitor" {
 		return true
 	}
-	for _, p := range []string{"/api/state", "/api/dashboard", "/api/subscription", "/api/node-quality", "/api/ips", "/api/nodes", "/api/users", "/api/import-sources", "/api/public-pool", "/api/tasks", "/api/settings", "/api/runtime-settings", "/api/operations"} {
+	for _, p := range []string{"/api/state", "/api/dashboard", "/api/subscription", "/api/node-quality", "/api/ips", "/api/nodes", "/api/users", "/api/import-sources", "/api/public-pool", "/api/tasks", "/api/settings", "/api/runtime-settings", "/api/operations", "/api/plans", "/api/node-groups", "/api/entitlements/batch", "/api/usage"} {
 		if u.Path == p || strings.HasPrefix(u.Path, p+"/") {
 			return true
 		}
