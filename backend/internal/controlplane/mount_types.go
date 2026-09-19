@@ -27,6 +27,7 @@ type MountAccount struct {
 	Credentials Credentials `json:"credentials"`
 }
 type SiteMount struct {
+	Assignment string         `json:"assignment,omitempty"` // "groups" opts into automatic main-site membership/budgets; empty is legacy manual.
 	UsageAck   []NodeUsage    `json:"usage_ack,omitempty"`
 	Catalog    MountCatalog   `json:"catalog"`
 	Nodes      []MountedNode  `json:"nodes"`

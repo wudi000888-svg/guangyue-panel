@@ -234,7 +234,9 @@ const subscriptionResourceIDs = computed(() => new Set(privateSources.value.flat
 const isSubscribedResource = (p: IPResource) => !!p.subscription_id || subscriptionResourceIDs.value.has(p.id);
 const subscriptionIPs = computed(() => ipPool.value.filter(isSubscribedResource));
 const manualIPs = computed(() => ipPool.value.filter(p => !isSubscribedResource(p)));
+const canMountSubsites = computed(() => owner.value && state.value?.system.edition === 'pro' && state.value?.system.role === 'controller' && !selectedSite.value);
 const privateTabs = computed(() => [
+  ...(canMountSubsites.value ? [{id:'subsites',label:t('子站 IP 池')}] : []),
   { id: 'subscriptions', label: t('订阅出口'), ...(privateSourcesReady.value ? { count: subscriptionIPs.value.length } : {}) },
   { id: 'manual', label: t('独立出口'), ...(privateSourcesReady.value ? { count: manualIPs.value.length } : {}) },
   { id: 'sources', label: t('订阅来源'), ...(privateSourcesReady.value ? { count: privateSources.value.length } : {}) },
@@ -244,6 +246,8 @@ function sourceLabel(p: IPResource) {
   return names.join(' · ') || (p.subscription_id ? t('订阅来源') : t('独立添加'));
 }
 function selectPrivateTab(value: string) {
+  if (!['subscriptions','manual','sources','subsites'].includes(value)) return;
+  if (value === 'subsites' && !canMountSubsites.value) value = 'subscriptions';
   privateTab.value = value;
   sourceFilter.value = null;
   ipSearch.value = '';
@@ -306,7 +310,7 @@ const expiringUsers = computed(
   () =>
     (state.value?.users || []).filter(
       (u) =>
-        u.expires > Date.now() / 1000 &&
+        !u.mount_access && u.expires > Date.now() / 1000 &&
         u.expires < Date.now() / 1000 + 7 * 86400,
     ).length,
 );
@@ -446,7 +450,7 @@ const userStatus = (u: User) =>
 const users = computed(() =>
   (state.value?.users || []).filter(
     (u) =>
-      u.username.toLowerCase().includes(userSearch.value.toLowerCase()) &&
+      !u.mount_access && u.username.toLowerCase().includes(userSearch.value.toLowerCase()) &&
       (userRole.value === "all" || u.role === userRole.value) &&
       (userFilter.value === "all" ||
         (userFilter.value === "active"
@@ -470,7 +474,7 @@ async function refresh(silent = false) {
     needsNodeRefresh = false;
     site.value = result.site;
     applyDefaultLocale(site.value.default_locale);
-    if (page.value === "ips" && privateTab.value !== "sources") await loadPrivateSources();
+    if (page.value === "ips" && !["sources","subsites"].includes(privateTab.value)) await loadPrivateSources();
     if (stateRequest.isCurrent(request) && !subUser.value && state.value) subUser.value = state.value.me.id;
     return true;
   } catch (e) {
@@ -547,7 +551,7 @@ function go(id: string) {
   const [section, nested] = target.split("/");
   id = section;
   if (!nav.value.some(item=>item.id===id)) id = owner.value ? "overview" : "subscription";
-  if (id === "ips" && ["subscriptions", "manual", "sources"].includes(nested)) selectPrivateTab(nested);
+  if (id === "ips" && ["subscriptions", "manual", "sources", "subsites"].includes(nested)) selectPrivateTab(nested);
   if (id === "public") publicTab.value = ["resources", "sources", "policy"].includes(nested) ? nested : "resources";
   page.value = id;
   void router.replace("/"+id+(id === "ips" ? "/"+privateTab.value : id === "public" && publicTab.value !== "resources" ? "/"+publicTab.value : id === "fleet" && nested === "independent" ? "/independent" : "")+(id===section?query:""));
@@ -978,5 +982,5 @@ onMounted(async () => {
   poll.start();
 });
 onUnmounted(() => { mounted = false; poll.stop(); stateRequest.cancel(); removeSessionListener(); clearTimeout(toastTimer);  clearSubscription(); });
-return { plans,nodeGroups,loadEntitlements,quotaUsed,selectedSite,selectedSiteName,switchSite, api, stateRequest, state, ready, busy, error, notice, page, mobileNav, site, login, userSearch, userFilter, userRole, modal, editingID, userForm, nodeForm, ipForm, speedRunning, qualityRunning, qualityTest, importMode, importForm, importFile, importFileReading, importIssues, importFileContent, importFileSequence, clearPrivateFile, readPrivateFile, importReport, openImport, importSubscription, speedTest, ipSearch, ipType, ipState, ipPool, publicResources, privateTab, privateSources, privateSourcesReady, privateSourcesLoading, privateSourcesError, privateSourcesRequest, receivePrivateSources, loadPrivateSources, publicTab, selectPublicTab, subscriptionResourceIDs, isSubscribedResource, subscriptionIPs, manualIPs, privateTabs, sourceLabel, selectPrivateTab, viewSourceResources, sourceChanged, selectedIP, poolStats, ipStatus, ipBadge, sourceFilter, filteredIPs, nodePoolLabel, expiringUsers, passwordForm, sub, subUser, format, subProtocol, subSource, qr, qrError, subLoading, subError, probeResult, detecting, theme, sideCollapsed, viewMode, simpleMode, nodeSearch, nodeProtocol, nodeStatus, publicNodePage, publicSubPage, filteredNodes, toggleTheme, originalExit, exitFingerprint, displayedNodeName, confirmation, owner, defaultRealitySNI, editingDefaultDirect, pendingHY, titles, pageDescriptions, allNavGroups, navGroups, nav, currentGroup, active, userStatus, users, subURL, usage, bytes, date, duration, exitName, refresh, clearSession, removeSessionListener, task, toastTimer, toast, signIn, signOut, go, editUser, saveUser, toggleUser, confirmUser, confirmed, editNode, probe, detectNode, editIP, saveIP, detectIP, deleteIP, selectedIPIDs, selectedNodeIDs, selectableNodes, selectAll, batchAction, saveNode, deleteNode, clearSubscription, loadSub, showSub, copy, downloadSub, download, backup, changePassword, actionName, poll, mounted };
+return { canMountSubsites,plans,nodeGroups,loadEntitlements,quotaUsed,selectedSite,selectedSiteName,switchSite, api, stateRequest, state, ready, busy, error, notice, page, mobileNav, site, login, userSearch, userFilter, userRole, modal, editingID, userForm, nodeForm, ipForm, speedRunning, qualityRunning, qualityTest, importMode, importForm, importFile, importFileReading, importIssues, importFileContent, importFileSequence, clearPrivateFile, readPrivateFile, importReport, openImport, importSubscription, speedTest, ipSearch, ipType, ipState, ipPool, publicResources, privateTab, privateSources, privateSourcesReady, privateSourcesLoading, privateSourcesError, privateSourcesRequest, receivePrivateSources, loadPrivateSources, publicTab, selectPublicTab, subscriptionResourceIDs, isSubscribedResource, subscriptionIPs, manualIPs, privateTabs, sourceLabel, selectPrivateTab, viewSourceResources, sourceChanged, selectedIP, poolStats, ipStatus, ipBadge, sourceFilter, filteredIPs, nodePoolLabel, expiringUsers, passwordForm, sub, subUser, format, subProtocol, subSource, qr, qrError, subLoading, subError, probeResult, detecting, theme, sideCollapsed, viewMode, simpleMode, nodeSearch, nodeProtocol, nodeStatus, publicNodePage, publicSubPage, filteredNodes, toggleTheme, originalExit, exitFingerprint, displayedNodeName, confirmation, owner, defaultRealitySNI, editingDefaultDirect, pendingHY, titles, pageDescriptions, allNavGroups, navGroups, nav, currentGroup, active, userStatus, users, subURL, usage, bytes, date, duration, exitName, refresh, clearSession, removeSessionListener, task, toastTimer, toast, signIn, signOut, go, editUser, saveUser, toggleUser, confirmUser, confirmed, editNode, probe, detectNode, editIP, saveIP, detectIP, deleteIP, selectedIPIDs, selectedNodeIDs, selectableNodes, selectAll, batchAction, saveNode, deleteNode, clearSubscription, loadSub, showSub, copy, downloadSub, download, backup, changePassword, actionName, poll, mounted };
 }

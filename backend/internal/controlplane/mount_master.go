@@ -68,7 +68,7 @@ func (a *App) mountSiteAPI(w http.ResponseWriter, r *http.Request, actor Record,
 			return
 		}
 		if current.Mount == nil {
-			current.Mount = &SiteMount{Nodes: []MountedNode{}}
+			current.Mount = &SiteMount{Nodes: []MountedNode{}, Assignment: "groups"}
 		}
 		if current.Mount.Catalog.Revision != catalog.Revision {
 			current.Mount.Accounts = nil
@@ -84,6 +84,7 @@ func (a *App) mountSiteAPI(w http.ResponseWriter, r *http.Request, actor Record,
 	}
 	if r.Method == "PUT" {
 		var in struct {
+			Assignment      string          `json:"assignment"`
 			Revision        string          `json:"revision"`
 			CatalogRevision string          `json:"catalog_revision"`
 			Nodes           []MountedNode   `json:"nodes"`
@@ -100,6 +101,7 @@ func (a *App) mountSiteAPI(w http.ResponseWriter, r *http.Request, actor Record,
 			return
 		}
 		previousGrants := append([]BusinessGrant{}, current.Grants...)
+		current.Mount.Assignment = in.Assignment
 		current.Mount.Nodes = in.Nodes
 		current.Grants = in.Grants
 		if len(in.Nodes) == 0 {
@@ -152,6 +154,12 @@ func (a *App) mountSiteAPI(w http.ResponseWriter, r *http.Request, actor Record,
 	jsonResponse(w, 200, current.public())
 }
 func (a *App) validateMountPolicy(v *BusinessSite) error {
+	if v.Mount.Assignment != "" && v.Mount.Assignment != "manual" && v.Mount.Assignment != "groups" {
+		return errors.New("节点池分配模式无效")
+	}
+	if v.Mount.Assignment == "groups" {
+		v.Grants = nil
+	}
 	if len(v.Mount.Nodes) > 64 || len(v.Grants) > 256 || len(v.Mount.Nodes)*len(v.Grants) > 4096 {
 		return errors.New("每站最多挂载 64 个节点、256 个用户，节点与用户组合不超过 4096")
 	}
@@ -181,6 +189,12 @@ func (a *App) validateMountPolicy(v *BusinessSite) error {
 		sort.Strings(n.GroupIDs)
 	}
 	sort.Slice(v.Mount.Nodes, func(i, j int) bool { return v.Mount.Nodes[i].NodeID < v.Mount.Nodes[j].NodeID })
+	if v.Mount.Assignment == "groups" {
+		if err := a.refreshMountGrants(v); err != nil {
+			return err
+		}
+		return a.validateBusinessAllocations(*v)
+	}
 	previous, err := a.store.businessSite(v.ID)
 	if err != nil {
 		return err
@@ -257,6 +271,10 @@ func (a *App) syncMountSiteLocked(ctx context.Context, id string) (resultErr err
 		v.Mount.LeaseUntil = 0
 	}
 	v.Mount.Catalog = catalog
+	if err = a.refreshMountGrants(&v); err != nil {
+		a.mu.Unlock()
+		return err
+	}
 	users, err := a.store.records()
 	if err == nil {
 		err = a.store.resolveAccess(users)

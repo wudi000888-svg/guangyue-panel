@@ -33,7 +33,7 @@ onMounted(loadEntitlements);
                 <Plus :size="17" />{{ t("新建 HY2 节点") }}</button>
             </div>
           </div>
-          <div v-if="publicNodePage" class="pool-intro"><Globe2 :size="21"/><div><strong>{{ t("公共节点独立维护") }}</strong><p>{{ t("节点由公共池自动创建、拉黑与剔除。普通节点和普通订阅保留在各自页面。") }}</p></div><span class="spacer"/><button @click="go('public')">{{ t("采集与黑名单") }}</button><button class="primary" @click="go('public-subscription')">{{ t("公共订阅") }}</button></div>
+          <div v-if="publicNodePage" class="pool-intro"><Globe2 :size="21"/><div><strong>{{ t("公共节点独立维护") }}</strong><p>{{ t("节点由公共池自动维护，订阅在“订阅管理”中统一选择来源。") }}</p></div><span class="spacer"/><button @click="go('public')">{{ t("采集与黑名单") }}</button><button class="primary" @click="go('subscription')">{{ t("订阅管理") }}</button></div>
           <div class="endpoint-band">
             <span class="endpoint-icon"><Globe2 :size="23" /></span>
             <div>
@@ -65,7 +65,7 @@ onMounted(loadEntitlements);
               <option value="all">{{ t("全部状态") }}</option>
               <option value="enabled">{{ t("已启用") }}</option>
               <option value="disabled">{{ t("已停用") }}</option></select
-            ><select v-model="groupFilter" :aria-label="t('节点权限组')"><option value="all">{{t("全部节点组")}}</option><option value="none">{{t("尚未授权")}}</option><option v-for="g in nodeGroups.filter(g=>(g.scope==='public')===publicNodePage)" :key="g.id" :value="g.id">{{g.name}}</option></select><span class="spacer"></span
+            ><select v-model="groupFilter" :aria-label="t('节点权限组')"><option value="all">{{t("全部节点组")}}</option><option value="none">{{t("尚未授权")}}</option><option v-for="g in nodeGroups" :key="g.id" :value="g.id">{{g.name}}</option></select><span class="spacer"></span
             ><span class="muted">{{ visibleNodes.length }}{{ t("个节点") }}</span>
           </div>
           <div v-if="selectedNodeIDs.length" class="batch-toolbar" role="region" :aria-label="t('批量操作')">

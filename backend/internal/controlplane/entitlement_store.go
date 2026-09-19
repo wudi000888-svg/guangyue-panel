@@ -10,6 +10,7 @@ import (
 
 const legacyPrivateGroup = "legacy-private"
 const legacyPublicGroup = "legacy-public"
+const defaultSubsiteGroup = "default-subsite"
 
 type NodeGroup struct {
 	ID          string `json:"id"`
@@ -89,8 +90,11 @@ func (s *Store) plan(id string) (Plan, error) {
 }
 func (s *Store) initEntitlements() error {
 	done, err := s.readMeta("entitlements_v1")
-	if err != nil || done == "1" {
+	if err != nil {
 		return err
+	}
+	if done == "1" {
+		return s.initSubsiteGroup()
 	}
 	users, err := s.records()
 	if err != nil {
@@ -152,6 +156,35 @@ func (s *Store) initEntitlements() error {
 		}
 	}
 	if _, err = tx.Exec("INSERT INTO meta(key,value) VALUES('entitlements_v1','1') ON CONFLICT(key) DO UPDATE SET value=excluded.value"); err != nil {
+		return err
+	}
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+	return s.initSubsiteGroup()
+}
+
+// Seed once on both installation and upgrade. Never overwrite a renamed or
+// disabled group, recreate an intentionally deleted one, or widen user access.
+func (s *Store) initSubsiteGroup() error {
+	done, err := s.readMeta("subsite_group_v1")
+	if err != nil || done == "1" {
+		return err
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	g := NodeGroup{ID: defaultSubsiteGroup, Name: "默认子站节点组", Description: "挂载子站节点后，将本组分配给用户或套餐即可使用。", Scope: "private", Enabled: true, Sort: 2, Revision: "1"}
+	b, err := json.Marshal(g)
+	if err != nil {
+		return err
+	}
+	if _, err = tx.Exec("INSERT INTO node_groups(id,doc) VALUES(?,?) ON CONFLICT(id) DO NOTHING", g.ID, b); err != nil {
+		return err
+	}
+	if _, err = tx.Exec("INSERT INTO meta(key,value) VALUES('subsite_group_v1','1') ON CONFLICT(key) DO UPDATE SET value=excluded.value"); err != nil {
 		return err
 	}
 	return tx.Commit()

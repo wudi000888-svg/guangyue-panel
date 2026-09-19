@@ -91,3 +91,19 @@ it('uses a new receipt for each edit so a rollback cannot match an older success
   expect(writes).toHaveLength(2);
   expect(JSON.parse(writes[0][1].body).save_request_id).not.toBe(JSON.parse(writes[1][1].body).save_request_id);
 });
+
+it('offers the child pool only on the main Pro site and hides internal proxy users',async()=>{
+ panel.state.value={...fixture(),system:{...fixture().system,edition:'pro',role:'controller'},users:[
+  {id:1,username:'member',role:'user',enabled:true},
+  {id:2,username:'internal-proxy',role:'user',enabled:true,mount_access:{token_id:'fixture',user_id:1}},
+ ]} as State;
+ await nextTick();
+ expect(panel.privateTabs.value.some(tab=>tab.id==='subsites')).toBe(true);
+ expect(panel.users.value.map(user=>user.id)).toEqual([1]);
+ panel.selectedSite.value='child';
+ expect(panel.privateTabs.value.some(tab=>tab.id==='subsites')).toBe(false);
+ panel.selectPrivateTab('subsites');
+ expect(panel.privateTab.value).toBe('subscriptions');
+ panel.selectedSite.value='';panel.state.value!.system.edition='lite';
+ expect(panel.privateTabs.value.some(tab=>tab.id==='subsites')).toBe(false);
+});

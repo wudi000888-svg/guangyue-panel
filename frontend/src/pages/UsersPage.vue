@@ -8,13 +8,14 @@ import { Pencil, Plus, Power, QrCode, Search,Package } from "lucide-vue-next";
 import { t } from "../i18n";
 import { usePagination } from "../composables/usePagination";
 import ListTable from "../components/ListTable.vue";
+const localUsers=computed(()=>(state.value?.users||[]).filter(u=>!u.mount_access));
 const selected=ref<number[]>([]),entitlementUsers=ref<User[]>([]),planFilter=ref('all');
-const planOptions=computed(()=>[...new Map((state.value?.users||[]).filter(u=>u.entitlement).map(u=>[u.entitlement!.plan_id,u.entitlement!.name])).entries()]);
+const planOptions=computed(()=>[...new Map(localUsers.value.filter(u=>u.entitlement).map(u=>[u.entitlement!.plan_id,u.entitlement!.name])).entries()]);
 const visibleUsers=computed(()=>users.value.filter(u=>planFilter.value==='all'||(planFilter.value==='independent'?!u.entitlement:u.entitlement?.plan_id===planFilter.value)));
 const {page:listPage,pages:listPages,rows:listRows}=usePagination(visibleUsers);
 const allSelected=computed(()=>!!visibleUsers.value.length&&visibleUsers.value.every(u=>selected.value.includes(u.id)));
 function toggleAll(){selected.value=allSelected.value?[]:visibleUsers.value.filter(u=>!u.archived).map(u=>u.id);}
-function editEntitlements(){entitlementUsers.value=(state.value?.users||[]).filter(u=>!u.archived&&selected.value.includes(u.id));}
+function editEntitlements(){entitlementUsers.value=localUsers.value.filter(u=>!u.archived&&selected.value.includes(u.id));}
 
 </script>
 <template>
@@ -22,7 +23,7 @@ function editEntitlements(){entitlementUsers.value=(state.value?.users||[]).filt
           <div class="page-heading">
             <div>
               <div class="eyebrow">ACCESS</div>
-              <h1>{{ t("用户管理") }}<span class="count">{{ state.users.length }}</span>
+              <h1>{{ t("用户管理") }}<span class="count">{{ localUsers.length }}</span>
               </h1>
             </div>
             <button class="primary" @click="editUser()">
@@ -30,10 +31,10 @@ function editEntitlements(){entitlementUsers.value=(state.value?.users||[]).filt
           </div>
           <div class="user-stat-grid">
             <div>
-              <span>{{ t("全部用户") }}</span><strong>{{ state.users.length }}</strong>
+              <span>{{ t("全部用户") }}</span><strong>{{ localUsers.length }}</strong>
             </div>
             <div>
-              <span>{{ t("当前可用") }}</span><strong>{{ state.totals.active }}</strong>
+              <span>{{ t("当前可用") }}</span><strong>{{ localUsers.filter(active).length }}</strong>
             </div>
             <div>
               <span>{{ t("7 天内到期") }}</span><strong>{{ expiringUsers }}</strong>
@@ -41,7 +42,7 @@ function editEntitlements(){entitlementUsers.value=(state.value?.users||[]).filt
             <div>
               <span>{{ t("累计流量") }}</span
               ><strong>{{
-                bytes(state.totals.upload + state.totals.download)
+                bytes(localUsers.reduce((total,u)=>total+u.upload+u.download,0))
               }}</strong>
             </div>
           </div>

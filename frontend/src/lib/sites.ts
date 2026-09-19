@@ -6,7 +6,7 @@ export type SiteStatus = {
 };
 export type SiteTemplate={policy_version?:number;rate_milli?:number;group_ids?:string[];rate_revision?:string;id:string;name:string;exit_id:string;protocol:string;enabled:boolean;reality_sni?:string;dns?:{mode:string;doh?:string;ipv6?:string}};
 export type MountedNode={node_id:string;name:string;enabled:boolean;group_ids:string[]};
-export type SiteMount={catalog:{info:{vless_host:string;hy2_host:string};nodes:Node[];groups:NodeGroup[];revision:string;paused:boolean};nodes:MountedNode[];sequence:number;lease_until:number;last_sync:number;error:string};
+export type SiteMount={assignment?:'groups'|'manual';catalog:{info:{vless_host:string;hy2_host:string};nodes:Node[];groups:NodeGroup[];revision:string;paused:boolean};nodes:MountedNode[];sequence:number;lease_until:number;last_sync:number;error:string};
 export type ManagedSite={
  mount?:SiteMount;
  id:string;name:string;group:string;enabled:boolean;exclusive:boolean;revision:string;last_seen:number;applied:string;desired:string;lease_until:number;error:string;
