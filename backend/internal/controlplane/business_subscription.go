@@ -9,7 +9,7 @@ import (
 // No network call occurs when serving a subscription. Only a site's acknowledged
 // policy and scoped credentials enter the catalog; transport secrets stay local.
 func (a *App) subscriptionCatalog(record Record, public bool, protocol string) ([]subscriptionEntry, error) {
-	source := "private"
+	source := "legacy-private"
 	if public {
 		source = "public"
 	}
@@ -25,9 +25,28 @@ func (a *App) subscriptionCatalogSource(record Record, source, protocol string) 
 	if err != nil {
 		return nil, err
 	}
+	groups, err := a.store.nodeGroups()
+	if err != nil {
+		return nil, err
+	}
+	subsiteGroups := map[string]bool{defaultSubsiteGroup: true}
+	for _, g := range groups {
+		if g.Scope == "subsite" {
+			subsiteGroups[g.ID] = true
+		}
+	}
+	isSubsiteNode := func(n Node) bool {
+		for _, id := range normalizeNodePolicy(n).GroupIDs {
+			if subsiteGroups[id] {
+				return true
+			}
+		}
+		return false
+	}
 	selected := []Node{}
 	for _, n := range nodes {
-		if source == "all" || source == "local" && n.ManagedBy != publicManager || source == "private" && n.ManagedBy != publicManager || source == "public" && n.ManagedBy == publicManager {
+		local := n.ManagedBy != publicManager && !isSubsiteNode(n)
+		if source == "all" || source == "local" && local || source == "private" && local || source == "legacy-private" && n.ManagedBy != publicManager || source == "public" && n.ManagedBy == publicManager {
 			selected = append(selected, n)
 		}
 	}
@@ -51,12 +70,12 @@ func (a *App) subscriptionCatalogSource(record Record, source, protocol string) 
 	}
 	for _, site := range sites {
 		if site.Connection != nil {
-			if source == "all" || source == "mounted" {
+			if source == "all" || source == "mounted" || source == "subsite" {
 				entries = append(entries, a.mountedSubscriptionEntries(record, site, protocol)...)
 			}
 			continue
 		}
-		if source == "mounted" || source == "local" {
+		if source == "mounted" || source == "local" || source == "private" {
 			continue
 		}
 		if !site.Enabled || site.Info == nil || site.Applied == "" || site.Applied != site.Desired || site.LeaseUntil <= time.Now().Unix() || !a.businessOwnerEnabled(site) {

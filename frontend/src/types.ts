@@ -4,8 +4,8 @@ import type { SiteSettings } from "./PanelSettings.vue";
 
 export type QuotaMeter = {period_id:string;start:number;end:number;pending_reset:boolean;upload:number;download:number;base_upload:number;base_download:number;raw_base_upload:number;raw_base_download:number};
 export type Entitlement = {plan_id:string;version:number;name:string;group_ids:string[];cycle:string;timezone:string;assigned_at:number;revision:string};
-export type Plan = {id:string;version:number;name:string;description:string;category:string;notes:string;archived:boolean;sort:number;quota:number;valid_days:number;cycle:string;timezone:string;group_ids:string[];vless:boolean;hy2:boolean;price?:string};
-export type NodeGroup = {id:string;name:string;description:string;scope:'private'|'public';enabled:boolean;sort:number;revision:string};
+export type Plan = {id:string;version:number;name:string;description:string;category:string;notes:string;archived:boolean;sort:number;quota:number;valid_days:number;cycle:string;timezone:string;group_ids:string[];vless:boolean;hy2:boolean;price?:string;system?:boolean;kind?:string};
+export type NodeGroup = {id:string;name:string;description:string;scope:'private'|'public'|'subsite';enabled:boolean;sort:number;revision:string};
 export type GroupMember = {site_id:string;site_name?:string;source?:'local'|'public'|'mounted'|'business';node_id:string;name:string;protocol:string;entry_host?:string;entry_port?:number;exit_ip?:string;enabled?:boolean;status?:'ready'|'disabled'|'pending';rate_milli?:number};
 export type User = {
  node_group_ids?:string[];
@@ -110,4 +110,4 @@ export type State = {
   history: { hour: number; upload: number; download: number }[];
   audit: { at: number; actor: string; action: string; target: string }[];
 };
-export type Sub = { url: string; raw: string; active: boolean; user: User; pool: "private" | "public" | "all" | "local" | "mounted"; nodes: SubscriptionNode[] };
+export type Sub = { url: string; raw: string; active: boolean; user: User; pool: "private" | "public" | "all" | "local" | "mounted" | "subsite"; nodes: SubscriptionNode[] };

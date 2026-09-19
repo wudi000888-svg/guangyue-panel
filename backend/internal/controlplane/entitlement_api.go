@@ -114,7 +114,7 @@ func (a *App) entitlementAPI(w http.ResponseWriter, r *http.Request, actor Recor
 			return
 		}
 		g.Name = strings.TrimSpace(g.Name)
-		if g.Sort < 0 || g.Sort > 9999 || g.Name == "" || len(g.Name) > 100 || len(g.Description) > 1000 || g.Scope != "private" && g.Scope != "public" {
+		if g.Sort < 0 || g.Sort > 9999 || g.Name == "" || len(g.Name) > 100 || len(g.Description) > 1000 || g.Scope != "private" && g.Scope != "public" && g.Scope != "subsite" {
 			failure(w, 400, "节点组名称或订阅范围无效")
 			return
 		}
@@ -195,6 +195,15 @@ func (a *App) entitlementAPI(w http.ResponseWriter, r *http.Request, actor Recor
 			if old.Version != p.Version {
 				failure(w, 409, "套餐已变化，请刷新后重试")
 				return
+			}
+			if old.System {
+				// System plans may be renamed or documented, but their identity and
+				// lifecycle cannot be removed from the catalog.
+				p.System, p.Kind = true, old.Kind
+				if p.Archived {
+					failure(w, 400, "系统预置套餐不能归档")
+					return
+				}
 			}
 			p.Version++
 		}

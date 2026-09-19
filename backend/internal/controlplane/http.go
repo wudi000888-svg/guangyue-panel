@@ -394,12 +394,12 @@ func (a *App) subscriptionInfo(w http.ResponseWriter, r *http.Request, actor Rec
 		return
 	}
 	pool := r.URL.Query().Get("pool")
-	if pool != "" && pool != "private" && pool != "public" && pool != "all" && pool != "local" && pool != "mounted" {
+	if pool != "" && pool != "private" && pool != "public" && pool != "all" && pool != "local" && pool != "mounted" && pool != "subsite" {
 		failure(w, 400, "订阅池不存在")
 		return
 	}
 	if pool == "" {
-		pool = "private"
+		pool = "local"
 	}
 	public := pool == "public"
 	protocol := r.URL.Query().Get("protocol")
@@ -441,7 +441,7 @@ func (a *App) subscriptionInfo(w http.ResponseWriter, r *http.Request, actor Rec
 	if public {
 		address = a.cfg.PublicURL + "/public-sub/" + strconv.FormatInt(record.ID, 10) + "/" + record.Credentials.PublicToken
 	}
-	if !public && pool != "private" {
+	if !public && pool != "private" && pool != "local" {
 		address += "?source=" + pool
 	}
 	jsonResponse(w, 200, object{"url": address, "pool": pool, "raw": raw, "nodes": views, "protocol": protocol, "active": record.Active() && (len(views) > 0 || public), "user": record.User})
@@ -480,9 +480,9 @@ func (a *App) serveSubscription(w http.ResponseWriter, r *http.Request) {
 	if public {
 		source = "public"
 	} else if source == "" {
-		source = "private"
+		source = "local"
 	}
-	if source != "private" && source != "public" && source != "all" && source != "local" && source != "mounted" {
+	if source != "private" && source != "public" && source != "all" && source != "local" && source != "mounted" && source != "subsite" {
 		failure(w, 400, "订阅来源无效")
 		return
 	}
@@ -735,13 +735,24 @@ func (a *App) createUser(w http.ResponseWriter, r *http.Request, actor Record) {
 	}
 	record := Record{User: User{Username: input.Username, Role: "user", Enabled: input.Enabled, VLESS: input.VLESS, HY2: input.HY2, Expires: input.Expires, Quota: input.Quota, Created: time.Now().Unix()}, Credentials: Credentials{HY2: randomToken(24), Token: randomToken(32), VLESS: map[string]string{}}, Password: hash}
 	record.InitMeter("period-"+randomToken(12), record.Created)
-	if input.PlanID != "" {
-		p, e := a.store.plan(input.PlanID)
-		if e != nil || p.Archived {
+	planID := input.PlanID
+	// New members start with the safe, zero-cost demo package. The explicit
+	// "independent" value keeps the administrator's advanced manual mode.
+	if planID == "" {
+		planID = defaultDemoPlan
+	}
+	if planID != "independent" {
+		p, e := a.store.plan(planID)
+		if e != nil && input.PlanID == "" {
+			// Legacy/test stores that predate the bootstrap catalog keep the
+			// original independent-account behavior.
+			planID = "independent"
+		} else if e != nil || p.Archived {
 			failure(w, 400, "套餐不存在或已归档")
 			return
+		} else {
+			assignPlan(&record, p, time.Now().Unix())
 		}
-		assignPlan(&record, p, time.Now().Unix())
 	}
 	for _, n := range nodes {
 		if n.Protocol == "vless" {

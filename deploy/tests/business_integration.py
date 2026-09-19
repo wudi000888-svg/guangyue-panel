@@ -141,7 +141,10 @@ try:
     wait_for(synchronized)
     assert synchronized()['info']['edition']==edition
     print('PASS '+edition+' business installation: SQLite, low memory budget, HTTPS enrollment and acknowledged configuration',flush=True)
-    sub,_=api('/api/subscription',cookie=cookie);nodes=[n for n in sub['nodes'] if n.get('site_id')=='ci_edge'];assert {n['protocol'] for n in nodes}=={'vless','hy2'}
+    # Child-site nodes are intentionally isolated from the regular subscription.
+    # The dedicated subsite pool is the explicit opt-in surface for mounted
+    # business-site traffic.
+    sub,_=api('/api/subscription?pool=subsite',cookie=cookie);nodes=[n for n in sub['nodes'] if n.get('site_id')=='ci_edge'];assert {n['protocol'] for n in nodes}=={'vless','hy2'}
     from urllib.parse import urlparse,parse_qs,unquote
     for node in nodes:
         uri=urlparse(node['uri']);q=parse_qs(uri.query);port=19891 if node['protocol']=='vless' else 19892
@@ -165,11 +168,11 @@ try:
     rows=[hashlib.sha256((bad/name).read_bytes()).hexdigest()+'  '+name for _,name in (row.split('  ',1) for row in (bad/'SHA256SUMS').read_text().splitlines())];(bad/'SHA256SUMS').write_text('\n'.join(rows)+'\n')
     assert run(sys.executable,str(bundle/'deploy/upgrade.py'),'--bundle',str(bad),'--apply',success=False).returncode!=0
     install.health();wait_for(synchronized)
-    restored,_=api('/api/subscription',cookie=cookie);assert sorted(n['uri'] for n in restored['nodes'] if n.get('site_id')=='ci_edge')==sorted(n['uri'] for n in nodes)
+    restored,_=api('/api/subscription?pool=subsite',cookie=cookie);assert sorted(n['uri'] for n in restored['nodes'] if n.get('site_id')=='ci_edge')==sorted(n['uri'] for n in nodes)
     print('PASS business upgrade and failed-executable rollback preserve scoped credentials and role',flush=True)
     site=synchronized();policy.update(revision=site['revision'],enabled=False,grants=[]);api('/api/business-sites/ci_edge',policy,'PUT',cookie)
     wait_for(lambda: not synchronized().get('sent_grants') if synchronized() else False)
-    sub,_=api('/api/subscription',cookie=cookie);assert not any(n.get('site_id')=='ci_edge' for n in sub['nodes'])
+    sub,_=api('/api/subscription?pool=subsite',cookie=cookie);assert not any(n.get('site_id')=='ci_edge' for n in sub['nodes'])
     api('/api/business-sites/ci_edge',{},'DELETE',cookie)
     print('PASS revocation acknowledged before deletion and unified subscription withdrawal',flush=True)
 finally:

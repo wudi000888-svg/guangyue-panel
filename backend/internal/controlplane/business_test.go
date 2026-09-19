@@ -118,6 +118,14 @@ func testBusinessLifecycle(t *testing.T, edition string) {
 	if err != nil || len(catalog) != 4 {
 		t.Fatalf("catalog: %d %v", len(catalog), err)
 	}
+	localOnly, err := master.subscriptionCatalogSource(user, "local", "")
+	if err != nil || len(localOnly) != 2 {
+		t.Fatalf("local subscription unexpectedly includes child nodes: %d %v", len(localOnly), err)
+	}
+	subsiteOnly, err := master.subscriptionCatalogSource(user, "subsite", "")
+	if err != nil || len(subsiteOnly) != 2 {
+		t.Fatalf("subsite subscription did not include child nodes: %d %v", len(subsiteOnly), err)
+	}
 	foreign, _ := master.subscriptionCatalog(other, false, "")
 	if len(foreign) != 2 {
 		t.Fatal("unassigned user received business nodes")

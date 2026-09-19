@@ -15,19 +15,19 @@ import NodeGroupPicker from '../components/NodeGroupPicker.vue';
 const route=useRoute();
 const groupSearch=ref(''),groupSource=ref('all');
 const groupRows=(id:string)=>filterGroupMembers(members.value[id]||[],groupSearch.value,groupSource.value);
-const {simpleMode}=usePanelContext(),api=useApi();
+const {simpleMode,publicFeaturesEnabled}=usePanelContext(),api=useApi();
 const plans=ref<Plan[]>([]),groups=ref<NodeGroup[]>([]),members=ref<Record<string,GroupMember[]>>({}),loaded=ref(false),busy=ref(false),error=ref(''),tab=ref(route.query.tab==='groups'?'groups':'plans'),search=ref(''),category=ref(''),archived=ref(false);
 watch(()=>route.query.tab,value=>{tab.value=value==='groups'?'groups':'plans';});
 const editingPlan=ref<Plan|null>(null),editingGroup=ref<NodeGroup|null>(null),quotaGB=ref(0),unlimited=ref(false),priceYuan=ref('0.00'),dialog=ref<HTMLElement|null>(null);
 const open=computed(()=>!!editingPlan.value||!!editingGroup.value);
 const categories=computed(()=>[...new Set(plans.value.map(p=>p.category).filter(Boolean))].sort());
 const filtered=computed(()=>plans.value.filter(p=>(archived.value||!p.archived)&&(!category.value||p.category===category.value)&&[p.name,p.description,p.category].join(' ').toLowerCase().includes(search.value.toLowerCase())).sort((a,b)=>a.sort-b.sort||a.name.localeCompare(b.name)));
-const visibleGroups=computed(()=>[...groups.value].sort((a,b)=>a.sort-b.sort||a.name.localeCompare(b.name)));
+const visibleGroups=computed(()=>[...groups.value].filter(g=>((simpleMode.value||!publicFeaturesEnabled.value)&&g.scope==='public')?false:true).sort((a,b)=>a.sort-b.sort||a.name.localeCompare(b.name)));
 const cycleLabel=(cycle:string)=>cycle==='30d'?t('每 30 天'):cycle==='month'?t('每自然月'):t('不自动重置');
 function close(){if(!busy.value){editingPlan.value=null;editingGroup.value=null;error.value='';}}
 useModalFocus(open,dialog,close);
 async function load(){try{const [p,g]=await Promise.all([api<{plans:Plan[]}>('/plans'),api<{groups:NodeGroup[];members:Record<string,GroupMember[]>}>('/node-groups')]);plans.value=p.plans;groups.value=g.groups;members.value=g.members;loaded.value=true;}catch(e){if(!isCancelled(e))error.value=(e as Error).message;}}
-function editPlan(p?:Plan){error.value='';editingPlan.value=p?JSON.parse(JSON.stringify(p)):{id:'',version:0,name:'',description:'',category:'',notes:'',archived:false,sort:0,quota:100*1024**3,valid_days:30,cycle:'30d',timezone:'Asia/Shanghai',group_ids:[],vless:true,hy2:true,price:'0'};quotaGB.value=editingPlan.value!.quota/1024**3;unlimited.value=!editingPlan.value!.quota;priceYuan.value=(Number(editingPlan.value!.price||'0')/100).toFixed(2);}
+function editPlan(p?:Plan){error.value='';editingPlan.value=p?JSON.parse(JSON.stringify(p)):{id:'',version:0,name:'',description:'',category:'',notes:'',archived:false,sort:0,quota:100*1024**3,valid_days:30,cycle:'30d',timezone:'Asia/Shanghai',group_ids:[],vless:true,hy2:true,price:'0',system:false};quotaGB.value=editingPlan.value!.quota/1024**3;unlimited.value=!editingPlan.value!.quota;priceYuan.value=(Number(editingPlan.value!.price||'0')/100).toFixed(2);}
 function editGroup(g?:NodeGroup){error.value='';editingGroup.value=g?JSON.parse(JSON.stringify(g)):{id:'',name:'',description:'',scope:'private',enabled:true,sort:0,revision:''};}
 async function save(){busy.value=true;error.value='';try{if(editingPlan.value){const price=priceYuan.value.trim()==='0'||priceYuan.value.trim()==='0.0'||priceYuan.value.trim()==='0.00'?'0':cents(priceYuan.value);const p={...editingPlan.value,price,quota:unlimited.value?0:Math.round(quotaGB.value*1024**3)};if(!unlimited.value&&p.quota<=0)throw new Error(t('有限额度必须大于 0'));await api('/plans','POST',p);}else if(editingGroup.value)await api('/node-groups','POST',editingGroup.value);editingPlan.value=null;editingGroup.value=null;await load();}catch(e){if(!isCancelled(e))error.value=(e as Error).message;}finally{busy.value=false;}}
 onMounted(load);

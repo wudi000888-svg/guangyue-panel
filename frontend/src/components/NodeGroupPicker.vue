@@ -8,11 +8,13 @@ import {t} from '../i18n';
 const model=defineModel<string[]>({default:()=>[]});
 const props=defineProps<{groups:NodeGroup[];members?:Record<string,GroupMember[]>;scope?:'private'|'public';hidePublic?:boolean}>();
 const panel=inject(panelKey,null),rows=computed(()=>props.members??panel?.groupMembers.value??{});
+const hidePublic=computed(()=>!!props.hidePublic||!!panel?.simpleMode.value||panel?.publicFeaturesEnabled.value===false);
+const visibleGroups=computed(()=>props.groups.filter(g=>!hidePublic.value||g.scope!=='public'));
 </script>
 <template>
 <div class="group-picker"><fieldset><legend>{{t('节点组')}}</legend>
- <div v-for="g in groups" :key="g.id" class="group-option"><label><input type="checkbox" v-model="model" :value="g.id"/><span><strong>{{g.name}}</strong><small> · {{rows[g.id]?.length||0}} {{t('个节点')}}<template v-if="!g.enabled"> · {{t('已停用')}}</template></small><small class="sources">{{groupSources(rows[g.id]||[]).map(s=>t(s)).join(' · ')||t('此组暂无节点')}}</small></span></label><details v-if="rows[g.id]?.length"><summary>{{t('查看组内节点')}}</summary><GroupNodeList :members="rows[g.id]"/></details></div>
- <p v-if="!groups.length" class="field-help">{{t('暂无节点权限组，请先在套餐管理中创建。')}}</p>
+ <div v-for="g in visibleGroups" :key="g.id" class="group-option"><label><input type="checkbox" v-model="model" :value="g.id"/><span><strong>{{g.name}}</strong><small> · {{rows[g.id]?.length||0}} {{t('个节点')}}<template v-if="!g.enabled"> · {{t('已停用')}}</template></small><small class="sources">{{groupSources(rows[g.id]||[]).map(s=>t(s)).join(' · ')||t('此组暂无节点')}}</small></span></label><details v-if="rows[g.id]?.length"><summary>{{t('查看组内节点')}}</summary><GroupNodeList :members="rows[g.id]"/></details></div>
+ <p v-if="!visibleGroups.length" class="field-help">{{t('暂无可见节点权限组，请在高级模式中开启公共功能或先创建普通节点组。')}}</p>
  </fieldset></div>
 </template>
 <style scoped>

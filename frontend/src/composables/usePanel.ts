@@ -318,7 +318,7 @@ const passwordForm = reactive({ current: "", password: "", confirm: "" });
 const probeResult = ref("");
 const detecting = ref("");
 const preferences=usePreferencesStore();
-const {theme,sideCollapsed,viewMode,simpleMode}=storeToRefs(preferences);
+const {theme,sideCollapsed,viewMode,simpleMode,publicFeaturesEnabled}=storeToRefs(preferences);
 const {toggleTheme}=preferences;
 const nodeSearch = ref(""),
   nodeProtocol = ref("all"),
@@ -416,16 +416,18 @@ const allNavGroups = computed(() => [
  {id:'access',label:t('成员与权益'),items:[...(owner.value?[{id:'users',label:t('用户管理'),icon:Users},{id:'plans',label:t('套餐管理'),icon:Package}]:[]),{id:'messages',label:t('站内信'),icon:Mail}]},
   ...(!selectedSite.value?[{id:'commerce',label:t('账户与服务'),items:[{id:'wallet',label:t('账户余额'),icon:Wallet},{id:'shop',label:t('购买套餐'),icon:ShoppingBag},{id:'orders',label:t('订单管理'),icon:Receipt},{id:'tickets',label:t('工单中心'),icon:Ticket},...(owner.value?[{id:'redeem-codes',label:t('兑换码管理'),icon:Gift}]:[])]}]:[]),
   {id:'business',label:t('业务资源'),items:[...(owner.value?[{id:'ips',label:t('私有 IP 池'),icon:Database},{id:'nodes',label:t('普通节点'),icon:RadioTower}]:[]),{id:'subscription',label:t('订阅管理'),icon:QrCode}]},
-  {id:'public',label:t('公共代理'),items:[...(owner.value?[{id:'public',label:t('公共 IP 池'),icon:Database},{id:'public-nodes',label:t('公共节点'),icon:Globe2}]:[])]},
+  {id:'public',label:t('公共代理'),items:[...(owner.value?[{id:'public',label:t('公共 IP 池'),icon:Database},{id:'public-nodes',label:t('公共节点'),icon:Globe2},{id:'public-subscription',label:t('公共订阅'),icon:QrCode}]:[])]},
   ...(owner.value?[{id:'admin',label:t('系统管理'),items:[...(state.value?.system.edition==='pro'&&state.value?.system.role==='controller'&&!getRemoteSite()?[{id:'fleet',label:t('群站管理'),icon:Globe2}]:[]),...(!getRemoteSite()?[{id:'pairing',label:t('配对令牌'),icon:KeyRound}]:[]),{id:'tasks',label:t('任务中心'),icon:Server},{id:'system',label:t('运维状态'),icon:Server},{id:'settings',label:t('系统设置'),icon:Settings2}]}]:[]),
 ]);
 const navGroups = computed(() => {
-  if (!simpleMode.value) return allNavGroups.value;
+  const hidePublic = simpleMode.value || !publicFeaturesEnabled.value;
+  if (!hidePublic && !simpleMode.value) return allNavGroups.value;
   const allowed = new Set(owner.value
     ? ["overview", "clients", "monitor", "users", "plans", "ips", "nodes", "subscription", "settings", "wallet", "shop", "orders", "tickets", "redeem-codes", "messages", "pairing", "fleet"]
     : ["clients", "subscription", "wallet", "shop", "orders", "tickets", "messages"]);
   return allNavGroups.value
     .map(group => ({ ...group, items: group.items.filter(item => allowed.has(item.id)) }))
+    .filter(group => !hidePublic || group.id !== 'public')
     .filter(group => group.items.length);
 });
 const nav = computed(()=>navGroups.value.flatMap(group=>group.items));
@@ -983,5 +985,5 @@ onMounted(async () => {
   poll.start();
 });
 onUnmounted(() => { mounted = false; poll.stop(); stateRequest.cancel(); removeSessionListener(); clearTimeout(toastTimer);  clearSubscription(); });
-return { canMountSubsites,plans,nodeGroups,groupMembers,loadEntitlements,quotaUsed,selectedSite,selectedSiteName,switchSite, api, stateRequest, state, ready, busy, error, notice, page, mobileNav, site, login, userSearch, userFilter, userRole, modal, editingID, userForm, nodeForm, ipForm, speedRunning, qualityRunning, qualityTest, importMode, importForm, importFile, importFileReading, importIssues, importFileContent, importFileSequence, clearPrivateFile, readPrivateFile, importReport, openImport, importSubscription, speedTest, ipSearch, ipType, ipState, ipPool, publicResources, privateTab, privateSources, privateSourcesReady, privateSourcesLoading, privateSourcesError, privateSourcesRequest, receivePrivateSources, loadPrivateSources, publicTab, selectPublicTab, subscriptionResourceIDs, isSubscribedResource, subscriptionIPs, manualIPs, privateTabs, sourceLabel, selectPrivateTab, viewSourceResources, sourceChanged, selectedIP, poolStats, ipStatus, ipBadge, sourceFilter, filteredIPs, nodePoolLabel, expiringUsers, passwordForm, sub, subUser, format, subProtocol, subSource, qr, qrError, subLoading, subError, probeResult, detecting, theme, sideCollapsed, viewMode, simpleMode, nodeSearch, nodeProtocol, nodeStatus, publicNodePage, publicSubPage, filteredNodes, toggleTheme, originalExit, exitFingerprint, displayedNodeName, confirmation, owner, defaultRealitySNI, editingDefaultDirect, pendingHY, titles, pageDescriptions, allNavGroups, navGroups, nav, currentGroup, active, userStatus, users, subURL, usage, bytes, date, duration, exitName, refresh, clearSession, removeSessionListener, task, toastTimer, toast, signIn, signOut, go, editUser, saveUser, toggleUser, confirmUser, confirmed, editNode, probe, detectNode, editIP, saveIP, detectIP, deleteIP, selectedIPIDs, selectedNodeIDs, selectableNodes, selectAll, batchAction, saveNode, deleteNode, clearSubscription, loadSub, showSub, copy, downloadSub, download, backup, changePassword, actionName, poll, mounted };
+return { canMountSubsites,plans,nodeGroups,groupMembers,loadEntitlements,quotaUsed,selectedSite,selectedSiteName,switchSite, api, stateRequest, state, ready, busy, error, notice, page, mobileNav, site, login, userSearch, userFilter, userRole, modal, editingID, userForm, nodeForm, ipForm, speedRunning, qualityRunning, qualityTest, importMode, importForm, importFile, importFileReading, importIssues, importFileContent, importFileSequence, clearPrivateFile, readPrivateFile, importReport, openImport, importSubscription, speedTest, ipSearch, ipType, ipState, ipPool, publicResources, privateTab, privateSources, privateSourcesReady, privateSourcesLoading, privateSourcesError, privateSourcesRequest, receivePrivateSources, loadPrivateSources, publicTab, selectPublicTab, subscriptionResourceIDs, isSubscribedResource, subscriptionIPs, manualIPs, privateTabs, sourceLabel, selectPrivateTab, viewSourceResources, sourceChanged, selectedIP, poolStats, ipStatus, ipBadge, sourceFilter, filteredIPs, nodePoolLabel, expiringUsers, passwordForm, sub, subUser, format, subProtocol, subSource, qr, qrError, subLoading, subError, probeResult, detecting, theme, sideCollapsed, viewMode, simpleMode, publicFeaturesEnabled, nodeSearch, nodeProtocol, nodeStatus, publicNodePage, publicSubPage, filteredNodes, toggleTheme, originalExit, exitFingerprint, displayedNodeName, confirmation, owner, defaultRealitySNI, editingDefaultDirect, pendingHY, titles, pageDescriptions, allNavGroups, navGroups, nav, currentGroup, active, userStatus, users, subURL, usage, bytes, date, duration, exitName, refresh, clearSession, removeSessionListener, task, toastTimer, toast, signIn, signOut, go, editUser, saveUser, toggleUser, confirmUser, confirmed, editNode, probe, detectNode, editIP, saveIP, detectIP, deleteIP, selectedIPIDs, selectedNodeIDs, selectableNodes, selectAll, batchAction, saveNode, deleteNode, clearSubscription, loadSub, showSub, copy, downloadSub, download, backup, changePassword, actionName, poll, mounted };
 }

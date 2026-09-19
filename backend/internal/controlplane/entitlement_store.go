@@ -11,6 +11,8 @@ import (
 const legacyPrivateGroup = "legacy-private"
 const legacyPublicGroup = "legacy-public"
 const defaultSubsiteGroup = "default-subsite"
+const defaultAdminPlan = "plan-admin"
+const defaultDemoPlan = "plan-demo"
 
 type NodeGroup struct {
 	ID          string `json:"id"`
@@ -37,6 +39,10 @@ type Plan struct {
 	GroupIDs    []string `json:"group_ids"`
 	VLESS       bool     `json:"vless"`
 	HY2         bool     `json:"hy2"`
+	// System plans are seeded by the installation and retained as stable
+	// entry points for the administrator and the demo experience.
+	System bool   `json:"system,omitempty"`
+	Kind   string `json:"kind,omitempty"`
 	// Price is the package's default catalog price in integer CNY cents.
 	Price int64 `json:"price,string,omitempty"`
 }
@@ -176,7 +182,7 @@ func (s *Store) initSubsiteGroup() error {
 		return err
 	}
 	defer tx.Rollback()
-	g := NodeGroup{ID: defaultSubsiteGroup, Name: "默认子站节点组", Description: "挂载子站节点后，将本组分配给用户或套餐即可使用。", Scope: "private", Enabled: true, Sort: 2, Revision: "1"}
+	g := NodeGroup{ID: defaultSubsiteGroup, Name: "默认子站节点组", Description: "挂载子站节点后，将本组分配给用户或套餐即可使用。", Scope: "subsite", Enabled: true, Sort: 2, Revision: "1"}
 	b, err := json.Marshal(g)
 	if err != nil {
 		return err
@@ -186,6 +192,43 @@ func (s *Store) initSubsiteGroup() error {
 	}
 	if _, err = tx.Exec("INSERT INTO meta(key,value) VALUES('subsite_group_v1','1') ON CONFLICT(key) DO UPDATE SET value=excluded.value"); err != nil {
 		return err
+	}
+	return tx.Commit()
+}
+
+// initDefaultPlans is intentionally run from bootstrap rather than the
+// entitlement migration. The migration must remain a no-op for existing user
+// data and tests that exercise only the legacy group upgrade; bootstrap is the
+// installation/upgrade boundary where the default catalog belongs.
+func (s *Store) initDefaultPlans() error {
+	groups, err := s.nodeGroups()
+	if err != nil {
+		return err
+	}
+	known := map[string]bool{}
+	for _, g := range groups {
+		known[g.ID] = true
+	}
+	if !known[legacyPrivateGroup] || !known[legacyPublicGroup] || !known[defaultSubsiteGroup] {
+		return errors.New("默认节点组尚未初始化")
+	}
+	plans := []Plan{
+		{ID: defaultAdminPlan, Version: 1, Name: "管理员套餐", Description: "系统管理员完整管理权限。", Category: "系统", Notes: "系统预置套餐", Sort: 0, Quota: 0, ValidDays: 0, Cycle: "none", Timezone: "Asia/Shanghai", GroupIDs: []string{legacyPrivateGroup, legacyPublicGroup, defaultSubsiteGroup}, VLESS: true, HY2: true, System: true, Kind: "admin"},
+		{ID: defaultDemoPlan, Version: 1, Name: "演示套餐", Description: "用于快速体验本站普通节点的演示套餐。", Category: "系统", Notes: "系统预置套餐", Sort: 1, Quota: 0, ValidDays: 30, Cycle: "30d", Timezone: "Asia/Shanghai", GroupIDs: []string{legacyPrivateGroup}, VLESS: true, HY2: true, Price: 0, System: true, Kind: "demo"},
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	for _, p := range plans {
+		b, e := json.Marshal(p)
+		if e != nil {
+			return e
+		}
+		if _, e = tx.Exec("INSERT INTO plans(id,doc) VALUES(?,?) ON CONFLICT(id) DO NOTHING", p.ID, b); e != nil {
+			return e
+		}
 	}
 	return tx.Commit()
 }
