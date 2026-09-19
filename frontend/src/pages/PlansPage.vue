@@ -15,14 +15,14 @@ import NodeGroupPicker from '../components/NodeGroupPicker.vue';
 const route=useRoute();
 const groupSearch=ref(''),groupSource=ref('all');
 const groupRows=(id:string)=>filterGroupMembers(members.value[id]||[],groupSearch.value,groupSource.value);
-const {simpleMode}=usePanelContext(),api=useApi();
+const {simpleMode,publicFeaturesEnabled}=usePanelContext(),api=useApi();
 const plans=ref<Plan[]>([]),groups=ref<NodeGroup[]>([]),members=ref<Record<string,GroupMember[]>>({}),loaded=ref(false),busy=ref(false),error=ref(''),tab=ref(route.query.tab==='groups'?'groups':'plans'),search=ref(''),category=ref(''),archived=ref(false);
 watch(()=>route.query.tab,value=>{tab.value=value==='groups'?'groups':'plans';});
 const editingPlan=ref<Plan|null>(null),editingGroup=ref<NodeGroup|null>(null),quotaGB=ref(0),unlimited=ref(false),priceYuan=ref('0.00'),dialog=ref<HTMLElement|null>(null);
 const open=computed(()=>!!editingPlan.value||!!editingGroup.value);
 const categories=computed(()=>[...new Set(plans.value.map(p=>p.category).filter(Boolean))].sort());
 const filtered=computed(()=>plans.value.filter(p=>(archived.value||!p.archived)&&(!category.value||p.category===category.value)&&[p.name,p.description,p.category].join(' ').toLowerCase().includes(search.value.toLowerCase())).sort((a,b)=>a.sort-b.sort||a.name.localeCompare(b.name)));
-const visibleGroups=computed(()=>[...groups.value].sort((a,b)=>a.sort-b.sort||a.name.localeCompare(b.name)));
+const visibleGroups=computed(()=>[...groups.value].filter(g=>((simpleMode.value||!publicFeaturesEnabled.value)&&g.scope==='public')?false:true).sort((a,b)=>a.sort-b.sort||a.name.localeCompare(b.name)));
 const cycleLabel=(cycle:string)=>cycle==='30d'?t('每 30 天'):cycle==='month'?t('每自然月'):t('不自动重置');
 function close(){if(!busy.value){editingPlan.value=null;editingGroup.value=null;error.value='';}}
 useModalFocus(open,dialog,close);
