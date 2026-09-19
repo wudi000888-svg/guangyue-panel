@@ -51,13 +51,24 @@ func (a *App) entitlementAPI(w http.ResponseWriter, r *http.Request, actor Recor
 		for _, g := range groups {
 			members[g.ID] = []object{}
 		}
-		add := func(site string, n Node) {
+		add := func(siteID, siteName, source, host, status string, n Node) {
 			for _, id := range normalizeNodePolicy(n).GroupIDs {
-				members[id] = append(members[id], object{"site_id": site, "node_id": n.ID, "name": n.Name, "protocol": n.Protocol})
+				members[id] = append(members[id], object{"site_id": siteID, "site_name": siteName, "source": source, "node_id": n.ID, "name": n.Name, "protocol": n.Protocol, "entry_host": host, "entry_port": 443, "exit_ip": n.ProbeIP, "enabled": status != "disabled", "status": status, "rate_milli": n.RateMilli})
 			}
 		}
+		panelName := a.store.siteSettings().PanelName
 		for _, n := range nodes {
-			add(a.cfg.siteID(), n)
+			source, host, status := "local", a.cfg.VLESSHost, "ready"
+			if n.ManagedBy == publicManager {
+				source = "public"
+			}
+			if n.Protocol == "hy2" {
+				host = a.cfg.HY2Host
+			}
+			if !n.Enabled {
+				status = "disabled"
+			}
+			add(a.cfg.siteID(), panelName, source, host, status, n)
 		}
 		sites, e := a.store.businessSites()
 		if e != nil {
@@ -65,13 +76,33 @@ func (a *App) entitlementAPI(w http.ResponseWriter, r *http.Request, actor Recor
 			return
 		}
 		for _, s := range sites {
+			if s.Removed {
+				continue
+			}
 			ns, e := a.materializeBusinessNodes(s)
 			if e != nil {
 				failure(w, 500, "读取业务节点失败")
 				return
 			}
 			for _, n := range ns {
-				add(s.ID, n)
+				source, status, info := "business", "ready", s.Info
+				if s.Mount != nil {
+					source = "mounted"
+					info = &s.Mount.Catalog.Info
+				}
+				host := ""
+				if info != nil {
+					host = info.VLESSHost
+					if n.Protocol == "hy2" {
+						host = info.HY2Host
+					}
+				}
+				if !n.Enabled || !s.Enabled || s.Mount != nil && s.Mount.Catalog.Paused {
+					status = "disabled"
+				} else if s.Mount != nil && (s.Mount.LeaseUntil <= time.Now().Unix() || s.Mount.Error != "") {
+					status = "pending"
+				}
+				add(s.ID, s.Name, source, host, status, n)
 			}
 		}
 		jsonResponse(w, 200, object{"groups": groups, "members": members})
@@ -225,13 +256,15 @@ func (a *App) validatePlan(p *Plan) error {
 }
 
 type entitlementRequest struct {
-	IDs         []int64 `json:"ids"`
-	Action      string  `json:"action"`
-	PlanID      string  `json:"plan_id"`
-	Days        int     `json:"days"`
-	Preview     bool    `json:"preview"`
-	Expected    string  `json:"expected"`
-	OperationID string  `json:"operation_id"`
+	GroupIDs    []string `json:"group_ids,omitempty"`
+	GroupMode   string   `json:"group_mode,omitempty"`
+	IDs         []int64  `json:"ids"`
+	Action      string   `json:"action"`
+	PlanID      string   `json:"plan_id"`
+	Days        int      `json:"days"`
+	Preview     bool     `json:"preview"`
+	Expected    string   `json:"expected"`
+	OperationID string   `json:"operation_id"`
 }
 
 func (a *App) entitlementBatch(w http.ResponseWriter, r *http.Request, actor Record) {
@@ -243,9 +276,36 @@ func (a *App) entitlementBatch(w http.ResponseWriter, r *http.Request, actor Rec
 	if !decode(w, r, &in) {
 		return
 	}
-	if len(in.IDs) == 0 || len(in.IDs) > 100 || in.Action != "assign" && in.Action != "renew" && in.Action != "reset" && in.Action != "independent" && in.Action != "disable" {
+	if len(in.IDs) == 0 || len(in.IDs) > 100 || in.Action != "groups" && in.Action != "assign" && in.Action != "renew" && in.Action != "reset" && in.Action != "independent" && in.Action != "disable" {
 		failure(w, 400, "请选择用户和有效的权益操作")
 		return
+	}
+	var groupVersions []NodeGroup
+	if in.Action == "groups" {
+		if in.GroupMode != "add" && in.GroupMode != "replace" && in.GroupMode != "inherit" || len(in.GroupIDs) > 128 || in.GroupMode == "add" && len(in.GroupIDs) == 0 || in.GroupMode == "inherit" && len(in.GroupIDs) > 0 {
+			failure(w, 400, "请选择有效的节点权限操作")
+			return
+		}
+		groups, err := a.store.nodeGroups()
+		if err != nil {
+			failure(w, 500, "读取节点组失败")
+			return
+		}
+		known, seen := map[string]NodeGroup{}, map[string]bool{}
+		for _, g := range groups {
+			known[g.ID] = g
+		}
+		for _, id := range in.GroupIDs {
+			g, ok := known[id]
+			if !ok || seen[id] {
+				failure(w, 400, "节点组不存在或重复")
+				return
+			}
+			seen[id] = true
+			groupVersions = append(groupVersions, g)
+		}
+		sort.Strings(in.GroupIDs)
+		sort.Slice(groupVersions, func(i, j int) bool { return groupVersions[i].ID < groupVersions[j].ID })
 	}
 	if in.Action == "renew" && (in.Days < 1 || in.Days > 36500) {
 		failure(w, 400, "续期天数需为 1–36500")
@@ -322,12 +382,32 @@ func (a *App) entitlementBatch(w http.ResponseWriter, r *http.Request, actor Rec
 			return
 		}
 		u.InitMeter("legacy-"+businessUsageKey(u.ID), time.Now().Unix())
-		versions = append(versions, object{"id": id, "entitlement": u.Entitlement, "quota": u.Quota, "expires": u.Expires, "enabled": u.Enabled, "vless": u.VLESS, "hy2": u.HY2, "period": u.Meter.PeriodID})
+		versions = append(versions, object{"id": id, "entitlement": u.Entitlement, "node_group_ids": u.NodeGroupIDs, "quota": u.Quota, "expires": u.Expires, "enabled": u.Enabled, "vless": u.VLESS, "hy2": u.HY2, "period": u.Meter.PeriodID})
 		before := u.User
 		meterCopy := *u.Meter
 		u.Meter = &meterCopy
 		switch in.Action {
+		case "groups":
+			if in.GroupMode == "inherit" {
+				u.NodeGroupIDs = nil
+				break
+			}
+			ids := append([]string{}, in.GroupIDs...)
+			if in.GroupMode == "add" {
+				for _, id := range userNodeGroupIDs(u.User) {
+					found := false
+					for _, added := range ids {
+						found = found || added == id
+					}
+					if !found {
+						ids = append(ids, id)
+					}
+				}
+			}
+			sort.Strings(ids)
+			u.NodeGroupIDs = &ids
 		case "assign":
+			u.NodeGroupIDs = nil
 			u.Entitlement = &domain.Entitlement{PlanID: plan.ID, Version: plan.Version, Name: plan.Name, GroupIDs: append([]string{}, plan.GroupIDs...), Cycle: plan.Cycle, Timezone: plan.Timezone, AssignedAt: time.Now().Unix(), Revision: randomToken(12)}
 			u.Quota, u.VLESS, u.HY2 = plan.Quota, plan.VLESS, plan.HY2
 			u.Expires = 0
@@ -344,6 +424,7 @@ func (a *App) entitlementBatch(w http.ResponseWriter, r *http.Request, actor Rec
 		case "reset":
 			u.Meter.PendingReset = true
 		case "independent":
+			u.NodeGroupIDs = nil
 			u.Entitlement = nil
 			u.Meter.End = 0
 		case "disable":
@@ -362,7 +443,7 @@ func (a *App) entitlementBatch(w http.ResponseWriter, r *http.Request, actor Rec
 		effects = append(effects, object{"id": id, "username": u.Username, "before": before, "after": u.User, "quota_used": u.QuotaUsed(), "exhausted": u.Quota > 0 && u.QuotaUsed() >= u.Quota, "sync": "pending"})
 		records = append(records, u)
 	}
-	fingerprintData, _ := json.Marshal(object{"request": requestHash, "versions": versions, "plan": plan})
+	fingerprintData, _ := json.Marshal(object{"request": requestHash, "versions": versions, "plan": plan, "groups": groupVersions})
 	fingerprint := digest(string(fingerprintData))
 	if in.Preview {
 		jsonResponse(w, 200, object{"effects": effects, "expected": fingerprint})

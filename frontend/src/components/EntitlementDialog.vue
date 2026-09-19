@@ -6,6 +6,7 @@ import {useApi,isCancelled} from '../lib/api';
 import {bytes,date} from '../lib/format';
 import {quotaUsed} from '../lib/quota';
 import {t} from '../i18n';
+import {userNodeGroups} from '../lib/nodeGroups';
 import {useModalFocus} from '../composables/useModalFocus';
 const props=defineProps<{users:User[]}>(),emit=defineEmits<{close:[];updated:[]}>(),api=useApi();
 const plans=ref<Plan[]>([]),action=ref('assign'),planID=ref(''),days=ref(30),busy=ref(false),error=ref(''),dialog=ref<HTMLElement|null>(null),operationID=crypto.randomUUID();
@@ -15,7 +16,7 @@ useModalFocus(computed(()=>true),dialog,()=>{if(!busy.value)emit('close');});
 watch([action,planID,days],()=>preview.value=null);
 const body=()=>({ids:props.users.map(u=>u.id),action:action.value,plan_id:planID.value,days:days.value,operation_id:operationID});
 async function submit(){busy.value=true;error.value='';try{if(!preview.value){preview.value=await api('/entitlements/batch','POST',{...body(),preview:true});}else{await api('/entitlements/batch','POST',{...body(),expected:preview.value.expected});emit('updated');emit('close');}}catch(e){if(!isCancelled(e)){error.value=(e as Error).message;preview.value=null;}}finally{busy.value=false;}}
-const groupsChanged=(e:Effect)=>{const old=e.before.entitlement?.group_ids??['legacy-private','legacy-public'],next=e.after.entitlement?.group_ids??['legacy-private','legacy-public'];return {added:next.filter(g=>!old.includes(g)).length,removed:old.filter(g=>!next.includes(g)).length};};
+const groupsChanged=(e:Effect)=>{const old=userNodeGroups(e.before),next=userNodeGroups(e.after);return {added:next.filter(g=>!old.includes(g)).length,removed:old.filter(g=>!next.includes(g)).length};};
 onMounted(async()=>{try{plans.value=(await api<{plans:Plan[]}>('/plans')).plans.filter(p=>!p.archived);}catch(e){if(!isCancelled(e))error.value=(e as Error).message;}});
 </script>
 <template>

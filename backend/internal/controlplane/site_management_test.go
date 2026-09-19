@@ -324,6 +324,8 @@ func TestConvertedPoliciesPreserveNodeAccess(t *testing.T) {
 	denied := testUser(t, a, "denied", "user")
 	allowed.CompiledGroups = pointer([]string{"remote-group"})
 	denied.CompiledGroups = pointer([]string{})
+	allowed.NodeGroupIDs = pointer([]string{})
+	denied.NodeGroupIDs = pointer([]string{"remote-group"})
 	for _, u := range []*Record{&allowed, &denied} {
 		if err := a.store.save(u); err != nil {
 			t.Fatal(err)

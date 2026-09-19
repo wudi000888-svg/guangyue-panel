@@ -82,7 +82,7 @@ async function downloadSub() {
 watch([() => {
   const userID = owner.value ? subUser.value || state.value?.me.id : state.value?.me.id;
   const user = state.value?.users.find(u => u.id === userID) || (state.value?.me.id === userID ? state.value?.me : undefined);
-  return JSON.stringify([state.value?.nodes.map(n => [n.id, n.enabled, n.reality_sni, n.dns]), user?.id, user?.vless, user?.hy2, user ? active(user) : false]);
+  return JSON.stringify([state.value?.nodes.map(n => [n.id, n.enabled, n.reality_sni, n.dns]), user?.id, user?.vless, user?.hy2, user?.node_group_ids, user?.entitlement?.group_ids, user ? active(user) : false]);
 }, () => JSON.stringify(state.value?.nodes.map(n => [n.id, n.checked_at, n.quality?.at]))], ([authorization], [previousAuthorization]) => {
   if (page.value === 'subscription' || page.value === 'public-subscription') loadSub(authorization !== previousAuthorization);
 });

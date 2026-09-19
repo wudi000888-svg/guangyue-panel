@@ -643,6 +643,7 @@ func (s *Store) materializeLocalPolicies() error {
 		}
 		e.PlanID = ""
 		e.GroupIDs = append([]string{}, (*u.CompiledGroups)...)
+		u.NodeGroupIDs = nil // The compiled policy is authoritative during detachment.
 		u.Entitlement = &e
 		b, marshalErr := json.Marshal(u.User)
 		if marshalErr != nil {

@@ -70,7 +70,11 @@ func userCommerceVersion(u Record) string {
 	if u.Meter != nil {
 		period = u.Meter.PeriodID
 	}
-	return digest(string(jsonBytes(object{"entitlement": u.Entitlement, "quota": u.Quota, "expires": u.Expires, "enabled": u.Enabled, "vless": u.VLESS, "hy2": u.HY2, "period": period})))
+	v := object{"entitlement": u.Entitlement, "quota": u.Quota, "expires": u.Expires, "enabled": u.Enabled, "vless": u.VLESS, "hy2": u.HY2, "period": period}
+	if u.NodeGroupIDs != nil {
+		v["node_group_ids"] = u.NodeGroupIDs
+	}
+	return digest(string(jsonBytes(v)))
 }
 func (a *App) listOffers(w http.ResponseWriter, actor Record) error {
 	offers, e := readDocuments[Offer](a.store, "commerce_offers")

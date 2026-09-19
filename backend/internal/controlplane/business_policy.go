@@ -92,7 +92,7 @@ func (a *App) businessSnapshot(v *BusinessSite) (BusinessSnapshot, error) {
 			if g.Quota > 0 && used.total() >= g.Quota {
 				continue
 			}
-			if v.Info != nil && v.Info.Protocol < 2 && r.Entitlement != nil {
+			if v.Info != nil && v.Info.Protocol < 2 && (r.Entitlement != nil || r.NodeGroupIDs != nil) {
 				continue
 			}
 			r = businessRecord(r, v.ID, nodes)

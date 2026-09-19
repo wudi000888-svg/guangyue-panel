@@ -16,6 +16,7 @@ type MountAccess struct {
 }
 
 type User struct {
+	NodeGroupIDs   *[]string    `json:"node_group_ids,omitempty"`
 	Mount          *MountAccess `json:"mount_access,omitempty"`
 	Archived       bool         `json:"archived,omitempty"`
 	ID             int64        `json:"id"`

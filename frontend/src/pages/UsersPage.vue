@@ -1,14 +1,19 @@
 <script setup lang="ts">
 import { usePanelContext } from "../composables/panelContext";
-const { state, busy, refresh,quotaUsed, userSearch, userFilter, userRole, expiringUsers, active, userStatus, users, usage, bytes, date, editUser, toggleUser, showSub } = usePanelContext();
-import {computed,ref} from "vue";
+const { state, busy, refresh,nodeGroups,loadEntitlements,quotaUsed, userSearch, userFilter, userRole, expiringUsers, active, userStatus, users, usage, bytes, date, editUser, toggleUser, showSub } = usePanelContext();
+import {computed,onMounted,ref} from "vue";
+import {userNodeGroups} from "../lib/nodeGroups";
 import type {User} from "../types";
+import UserNodeAccess from "../components/UserNodeAccess.vue";
 import EntitlementDialog from "../components/EntitlementDialog.vue";
 import { Pencil, Plus, Power, QrCode, Search,Package } from "lucide-vue-next";
 import { t } from "../i18n";
 import { usePagination } from "../composables/usePagination";
 import ListTable from "../components/ListTable.vue";
 const localUsers=computed(()=>(state.value?.users||[]).filter(u=>!u.mount_access));
+onMounted(()=>loadEntitlements());
+const groupLabel=(u:User)=>userNodeGroups(u).map(id=>nodeGroups.value.find(g=>g.id===id)?.name||id).join('、')||t('无节点权限');
+const accessUsers=ref<User[]>([]);
 const selected=ref<number[]>([]),entitlementUsers=ref<User[]>([]),planFilter=ref('all');
 const planOptions=computed(()=>[...new Map(localUsers.value.filter(u=>u.entitlement).map(u=>[u.entitlement!.plan_id,u.entitlement!.name])).entries()]);
 const visibleUsers=computed(()=>users.value.filter(u=>planFilter.value==='all'||(planFilter.value==='independent'?!u.entitlement:u.entitlement?.plan_id===planFilter.value)));
@@ -67,13 +72,13 @@ function editEntitlements(){entitlementUsers.value=localUsers.value.filter(u=>!u
             ><select v-model="planFilter" :aria-label="t('套餐筛选')"><option value="all">{{t("全部套餐")}}</option><option value="independent">{{t("独立配置")}}</option><option v-for="[id,name] in planOptions" :key="id" :value="id">{{name}}</option></select><span class="spacer"></span
             ><span class="muted">{{ visibleUsers.length }}{{ t("位成员") }}</span>
           </div>
-          <div v-if="selected.length" class="batch-toolbar"><strong>{{t("已选择")}} {{selected.length}}</strong><button class="primary" :disabled="busy" @click="editEntitlements"><Package :size="15"/>{{t("批量设置权益")}}</button><button @click="selected=[]">{{t("清空选择")}}</button></div>
+          <div v-if="selected.length" class="batch-toolbar"><strong>{{t("已选择")}} {{selected.length}}</strong><button :disabled="busy" @click="accessUsers=localUsers.filter(u=>!u.archived&&selected.includes(u.id))">{{t("分配节点")}}</button><button class="primary" :disabled="busy" @click="editEntitlements"><Package :size="15"/>{{t("批量设置权益")}}</button><button @click="selected=[]">{{t("清空选择")}}</button></div>
  <ListTable :total="visibleUsers.length" v-model:page="listPage" :pages="listPages">
             <table class="adaptive-table">
               <thead>
                 <tr>
                   <th class="select-cell"><input type="checkbox" :checked="allSelected" :aria-label="t('选择全部当前结果')" @change="toggleAll"/></th><th>{{ t("成员") }}</th>
- <th>{{t("当前套餐")}}</th>
+ <th>{{t("套餐与节点")}}</th>
                   <th>{{ t("状态") }}</th>
                   <th>{{ t("协议") }}</th>
                   <th class="usage-cell">{{ t("流量使用") }}</th>
@@ -97,7 +102,7 @@ function editEntitlements(){entitlementUsers.value=localUsers.value.filter(u=>!u
                       </div>
                     </div>
                   </td>
-                  <td :data-label="t('当前套餐')"><strong>{{u.entitlement?.name||t("独立配置")}}</strong><small v-if="u.entitlement">v{{u.entitlement.version}}</small><small v-if="u.meter?.end">{{t("下次重置")}} · {{date(u.meter.end)}}</small></td>
+                  <td :data-label="t('套餐与节点')"><strong>{{u.entitlement?.name||t("独立配置")}}</strong><small v-if="u.entitlement">v{{u.entitlement.version}}</small><small class="user-groups">{{groupLabel(u)}}</small><small v-if="u.meter?.end">{{t("下次重置")}} · {{date(u.meter.end)}}</small></td>
  <td :data-label="t('状态')">
                     <span
                       :class="['badge', active(u) ? 'success' : 'danger']"
@@ -129,7 +134,7 @@ function editEntitlements(){entitlementUsers.value=localUsers.value.filter(u=>!u
                   </td>
                   <td :data-label="t('操作')">
                     <span v-if="u.archived" class="muted">{{t("历史记录只读")}}</span><div v-else class="row-actions">
- <button class="icon" :title="t('套餐与权益')" @click="entitlementUsers=[u]"><Package :size="17"/></button><button class="icon" :title="t('查看订阅')" @click="showSub(u)">
+ <button @click="accessUsers=[u]">{{t('分配节点')}}</button><button class="icon" :title="t('套餐与权益')" @click="entitlementUsers=[u]"><Package :size="17"/></button><button class="icon" :title="t('查看订阅')" @click="showSub(u)">
                         <QrCode :size="17" /></button
                       ><button
                         class="icon"
@@ -154,5 +159,9 @@ function editEntitlements(){entitlementUsers.value=localUsers.value.filter(u=>!u
               </tbody>
             </table>
           </ListTable>
+        <UserNodeAccess v-if="accessUsers.length" :users="accessUsers" @close="accessUsers=[]" @updated="selected=[];refresh()"/>
         <EntitlementDialog v-if="entitlementUsers.length" :users="entitlementUsers" @close="entitlementUsers=[]" @updated="selected=[];refresh()"/></section>
 </template>
+<style scoped>
+.user-groups{display:block;max-width:220px;white-space:normal;overflow-wrap:anywhere;line-height:1.6;margin-top:5px}
+</style>

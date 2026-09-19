@@ -190,6 +190,16 @@ func (s *Store) initSubsiteGroup() error {
 	return tx.Commit()
 }
 
+func userNodeGroupIDs(u User) []string {
+	if u.NodeGroupIDs != nil {
+		return *u.NodeGroupIDs
+	}
+	if u.Entitlement != nil {
+		return u.Entitlement.GroupIDs
+	}
+	return []string{legacyPrivateGroup, legacyPublicGroup}
+}
+
 func (s *Store) resolveAccess(records []Record) error {
 	groups, err := s.nodeGroups()
 	if err != nil {
@@ -203,10 +213,7 @@ func (s *Store) resolveAccess(records []Record) error {
 		r := &records[i]
 		r.AccessResolved = true
 		r.AllowedGroups = []string{}
-		ids := []string{legacyPrivateGroup, legacyPublicGroup}
-		if r.Entitlement != nil {
-			ids = r.Entitlement.GroupIDs
-		}
+		ids := userNodeGroupIDs(r.User)
 		for _, id := range ids {
 			if enabled[id] {
 				r.AllowedGroups = append(r.AllowedGroups, id)
@@ -228,10 +235,7 @@ func nodeGroupAllowed(r Record, n Node) bool {
 	if !r.AccessResolved && r.CompiledGroups != nil {
 		ids = *r.CompiledGroups
 	} else if !r.AccessResolved {
-		ids = []string{legacyPrivateGroup, legacyPublicGroup}
-		if r.Entitlement != nil {
-			ids = r.Entitlement.GroupIDs
-		}
+		ids = userNodeGroupIDs(r.User)
 	}
 	for _, group := range normalizeNodePolicy(n).GroupIDs {
 		for _, id := range ids {

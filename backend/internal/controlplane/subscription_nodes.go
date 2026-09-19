@@ -14,10 +14,7 @@ type SubscriptionNode struct {
 
 func authorizedNodeGroups(r Record, n Node) []string {
 	out := []string{}
-	ids := []string{legacyPrivateGroup, legacyPublicGroup}
-	if r.Entitlement != nil {
-		ids = r.Entitlement.GroupIDs
-	}
+	ids := userNodeGroupIDs(r.User)
 	for _, g := range n.GroupIDs {
 		for _, id := range ids {
 			if g == id {

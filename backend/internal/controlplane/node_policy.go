@@ -8,6 +8,7 @@ import (
 )
 
 func assignPlan(r *Record, p Plan, now int64) {
+	r.NodeGroupIDs = nil
 	r.InitMeter("period-"+randomToken(12), now)
 	r.Entitlement = &domain.Entitlement{PlanID: p.ID, Version: p.Version, Name: p.Name, GroupIDs: append([]string{}, p.GroupIDs...), Cycle: p.Cycle, Timezone: p.Timezone, AssignedAt: now, Revision: randomToken(12)}
 	r.Quota, r.VLESS, r.HY2 = p.Quota, p.VLESS, p.HY2
