@@ -161,7 +161,7 @@ useModalFocus(computed(()=>!!modal.value || !!confirmation.value), computed(()=>
             :required="!editingID"
             maxlength="72"
         /></label><p class="field-help">{{t('密码至少 1 位，无复杂度要求，最多 72 字节。')}}</p>
-        <label v-if="!editingID">{{t('套餐')}}<select v-model="userForm.plan_id" :aria-label="t('套餐')"><option value="">{{t('独立配置')}}</option><option v-for="p in plans.filter(p=>!p.archived)" :key="p.id" :value="p.id">{{p.name}} · v{{p.version}}</option></select></label>
+            <label v-if="!editingID">{{t('套餐')}}<select v-model="userForm.plan_id" :aria-label="t('套餐')"><option value="">{{t('默认演示套餐')}}</option><option value="independent">{{t('独立配置')}}</option><option v-for="p in plans.filter(p=>!p.archived)" :key="p.id" :value="p.id">{{p.name}} · v{{p.version}}</option></select></label>
         <p v-if="editingID&&hasPlan" class="field-help">{{t('套餐权益请通过用户管理中的套餐与权益操作变更。')}}</p>
         <p v-if="!editingID&&hasPlan" class="field-help">{{plans.find(p=>p.id===userForm.plan_id)?.description}} · {{t('创建后按所选套餐发放额度、协议和有效期。')}}</p>
         <div v-if="!hasPlan" class="field-row">

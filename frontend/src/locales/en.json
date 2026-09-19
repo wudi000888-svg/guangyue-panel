@@ -2239,5 +2239,17 @@
   "未挂载": "Not mounted",
   "确认分配": "Confirm assignment",
   "请选择有效的节点权限操作": "Choose a valid node access operation",
-  "节点组不存在或重复": "Node groups do not exist or are duplicated"
+  "节点组不存在或重复": "Node groups do not exist or are duplicated",
+  "高级功能显示": "Advanced feature visibility",
+  "按需显示公共代理相关入口，减少日常操作干扰": "Show public proxy tools only when needed to keep daily work focused",
+  "显示公共 IP 池、公共节点和公共订阅": "Show public IP pool, public nodes, and public subscription",
+  "关闭后公共功能只会从导航和路由中隐藏，已有数据不会删除。": "When disabled, public tools are hidden from navigation and routes; existing data is not deleted.",
+  "套餐订阅": "Plan subscription",
+  "公共节点仅在高级模式开启后使用。": "Public nodes are available after enabling advanced mode.",
+  "按当前套餐分发本站普通节点；子站节点单独作为挂载订阅，不会混入普通订阅。": "The current plan distributes local standard nodes; child-site nodes use a separate mounted subscription and never enter the standard subscription.",
+  "本站普通节点": "Local standard nodes",
+  "子站节点池（挂载）": "Child-site node pool (mounted)",
+  "套餐决定账号额度、有效期和节点组；范围只用于选择对应来源的订阅。": "The plan defines quota, validity, and node groups; the scope only selects the matching subscription source.",
+  "系统预置": "System preset",
+  "默认演示套餐": "Default demo plan"
 }

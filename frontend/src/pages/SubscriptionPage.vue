@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { usePanelContext } from "../composables/panelContext";
 import {quotaUsed,rawPeriodUsed} from "../lib/quota";
-const { state, busy, sub, subUser, format, subProtocol, subSource, qr, qrError, subLoading, subError,  owner, userStatus, subURL, bytes, date, confirmUser, loadSub, copy, downloadSub } = usePanelContext();
+const { state, busy, sub, subUser, format, subProtocol, subSource, qr, qrError, subLoading, subError, owner, publicSubPage, userStatus, subURL, bytes, date, confirmUser, loadSub, copy, downloadSub } = usePanelContext();
 import { Copy, Download, KeyRound, LoaderCircle, QrCode, RefreshCw } from "lucide-vue-next";
 import { t } from "../i18n";
 import UsageDetails from "../components/UsageDetails.vue";
@@ -22,9 +22,9 @@ import NodeSubscriptionCards from "../NodeSubscriptionCards.vue";
               </option>
             </select>
           </div>
-          <div class="pool-intro"><QrCode :size="21"/><div><strong>{{t('统一订阅')}}</strong><p>{{t('按节点组权限合并本站、公共和子站挂载节点。挂载节点直接连接子站，名称标注来源。')}}</p></div></div>
-          <label class="sub-source">{{t('订阅包含范围')}}<select v-model="subSource"><option value="all">{{t('全部授权节点')}}</option><option value="local">{{t('本站节点')}}</option><option value="public">{{t('公共节点')}}</option><option value="mounted">{{t('子站挂载节点')}}</option></select></label>
-          <p class="field-help">{{t('范围选择会同时更新节点列表、订阅地址和二维码；旧订阅地址仍保留原范围。')}}</p>
+          <div class="pool-intro"><QrCode :size="21"/><div><strong>{{publicSubPage?t('公共订阅'):t('套餐订阅')}}</strong><p>{{publicSubPage?t('公共节点仅在高级模式开启后使用。'):t('按当前套餐分发本站普通节点；子站节点单独作为挂载订阅，不会混入普通订阅。')}}</p></div></div>
+          <label class="sub-source">{{t('订阅包含范围')}}<select v-model="subSource"><option v-if="!publicSubPage" value="local">{{t('本站普通节点')}}</option><option v-if="!publicSubPage" value="subsite">{{t('子站节点池（挂载）')}}</option><option v-if="publicSubPage" value="public">{{t('公共节点')}}</option></select></label>
+          <p class="field-help">{{t('套餐决定账号额度、有效期和节点组；范围只用于选择对应来源的订阅。')}}</p>
           <p v-if="subError" class="error" role="alert">{{ t(subError) }} <button :disabled="subLoading" @click="loadSub(true)"><RefreshCw :size="14"/>{{t('重试')}}</button></p>
           <div v-if="subLoading && !sub" class="empty" role="status"><LoaderCircle :size="20" class="spin"/> {{t('正在读取订阅节点…')}}</div>
           <template v-if="sub"

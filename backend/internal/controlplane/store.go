@@ -186,6 +186,9 @@ func (s *Store) audit(actor, action, target string) {
 	_, _ = s.db.Exec("DELETE FROM audit WHERE id < (SELECT COALESCE(MAX(id),0)-2000 FROM audit)")
 }
 func (s *Store) bootstrap(dir string) error {
+	if err := s.initDefaultPlans(); err != nil {
+		return err
+	}
 	var count int
 	if err := s.db.QueryRow("SELECT COUNT(*) FROM users").Scan(&count); err != nil {
 		return err
@@ -209,6 +212,9 @@ func (s *Store) bootstrap(dir string) error {
 		return err
 	}
 	r := Record{User: User{Username: "owner", Role: "owner", Enabled: true, VLESS: true, HY2: true, Created: time.Now().Unix()}, Password: hash, Credentials: Credentials{HY2: randomToken(24), Token: randomToken(32), VLESS: map[string]string{n.ID: uuid()}}}
+	if p, e := s.plan(defaultAdminPlan); e == nil {
+		assignPlan(&r, p, r.Created)
+	}
 	if s.business {
 		// Keep a stable, non-controller ID outside the positive IDs issued by the
 		// master. This lets policy replacement preserve the local administrator.
@@ -248,6 +254,9 @@ func (s *Store) ensureLocalOwner(dir string) error {
 		}
 	}
 	r := Record{User: User{Username: "owner", Role: "owner", Enabled: true, VLESS: true, HY2: true, Created: time.Now().Unix()}, Password: hash, Credentials: creds}
+	if p, e := s.plan(defaultAdminPlan); e == nil {
+		assignPlan(&r, p, r.Created)
+	}
 	r.ID = -1
 	if err = writeJSON(filepath.Join(dir, "initial-owner.json"), map[string]string{"username": "owner", "password": pass}); err != nil {
 		return err
