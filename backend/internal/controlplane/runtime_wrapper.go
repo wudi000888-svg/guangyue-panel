@@ -93,6 +93,28 @@ func runRuntimeService(name string) int {
 			ctx = childCtx
 		}
 	}
+	if name != "panel" {
+		leases, e := readMountLeases("/var/lib/guangyue")
+		if e != nil {
+			return 1
+		}
+		activeMounts := map[string]bool{}
+		for id, deadline := range leases.Users {
+			if deadline > time.Now().Unix() {
+				activeMounts[id] = true
+			}
+		}
+		prepared, cleanup, e := prepareMountedCore(name, "/var/lib/guangyue", args)
+		if e != nil {
+			return 1
+		}
+		defer cleanup()
+		cmd.Args = append([]string{path}, prepared...)
+		childCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		go guardMountLeases(childCtx, "/var/lib/guangyue", activeMounts, leases, cancel)
+		ctx = childCtx
+	}
 	err = superviseRuntimeChild(ctx, cmd, "/var/lib/guangyue", os.Stdout, os.Stderr)
 	if err == nil || ctx.Err() != nil {
 		return 0

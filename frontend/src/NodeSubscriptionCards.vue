@@ -9,6 +9,7 @@ import { locale, t } from './i18n';
 import type { IPQuality } from './quality';
 
 export type SubscriptionNode = {
+ mounted?:boolean;source?:string;group_ids?:string[];
  rate_milli?:number;
   dns?: {mode: string; doh?: string; ipv6?: string};
   site_id?: string;
@@ -23,7 +24,7 @@ export type SubscriptionNode = {
   checked_at: number;
   quality: IPQuality | null;
 };
-const props = defineProps<{ nodes: SubscriptionNode[]; active: boolean; pool: 'private' | 'public'; loading?: boolean }>();
+const props = defineProps<{ nodes: SubscriptionNode[]; active: boolean; pool: 'private' | 'public' | 'all' | 'local' | 'mounted'; loading?: boolean }>();
 const emit = defineEmits<{ refresh: [] }>();
 const search = ref(''), copied = ref(''), copyError = ref('');
 const availableNodes = computed(() => props.active ? props.nodes.filter(node => !!node.id && !!node.uri) : []);
@@ -103,7 +104,7 @@ onUnmounted(() => { alive = false; qrSequence++; clearTimeout(copiedTimer); qrDi
 <template>
   <section class="subscription-nodes" :aria-label="t('订阅节点与质量')" :aria-busy="loading">
     <header class="subscription-nodes-heading">
-      <div><span class="subscription-nodes-eyebrow"><ShieldCheck :size="13"/>{{ pool === 'public' ? t('公共订阅') : t('普通订阅') }}</span><h2>{{ t('节点与质量') }}</h2><p>{{ t('在同一张节点卡片中复制链接、查看二维码和质量报告。') }}</p></div>
+      <div><span class="subscription-nodes-eyebrow"><ShieldCheck :size="13"/>{{ t('订阅管理') }}</span><h2>{{ t('节点与质量') }}</h2><p>{{ t('在同一张节点卡片中复制链接、查看二维码和质量报告。') }}</p></div>
       <div class="subscription-nodes-tools">
         <button v-if="visibleNodes.length > 1" :disabled="loading" @click="copyNodes(visibleNodes, 'all')"><Check v-if="copied === 'all'" :size="14"/><Copy v-else :size="14"/>{{ copied === 'all' ? t('已复制') : t('复制当前节点') }}</button>
         <button class="text-button" :disabled="loading" @click="emit('refresh')"><RefreshCw :size="14" :class="{ spin: loading }"/>{{ t('刷新节点与报告') }}</button>
@@ -118,7 +119,7 @@ onUnmounted(() => { alive = false; qrSequence++; clearTimeout(copiedTimer); qrDi
       <div class="subscription-node-grid">
         <article v-for="node in visibleNodes" :key="node.id" class="subscription-node-card">
           <header><CountryMark :code="node.country_code" :country="node.country"/><div><h3>{{ node.name.replace(/｜[0-9.]+×/, "") }}</h3><span class="badge neutral" :title="t('节点流量按此倍率计入配额')">{{rateText(node)}}</span><p>{{ node.probe_ip || t('出口待确认') }}</p></div><span :class="['tag', node.protocol === 'hy2' ? 'hy2' : 'vless']">{{ protocolName(node) }}</span></header>
-          <div v-if="node.site_name" class="subscription-node-sni"><span>{{t('业务站')}}</span><strong>{{node.site_name}}</strong></div>
+          <div v-if="node.site_name" class="subscription-node-sni"><span>{{t(node.mounted?'子站挂载':'业务站')}}</span><strong>{{node.site_name}}</strong></div>
           <div v-if="nodeSNI(node)" class="subscription-node-sni"><span>SNI</span><strong>{{nodeSNI(node)}}</strong></div><div v-if="node.dns?.mode === 'secure'" class="subscription-node-sni"><ShieldCheck :size="12"/><span>{{t('出口 DNS 防护')}}</span><strong>{{node.dns.ipv6 === 'block' ? t('IPv6 已阻止') : 'IPv4 / IPv6'}}</strong></div>
           <div class="subscription-node-quality"><QualityTags :value="node.quality?.at ? node.quality : undefined" :name="node.name" read-only/></div>
           <div class="subscription-node-report"><Clock3 :size="12"/><span>{{ t('报告时间') }} · {{ reportDate(node) }}</span></div>
@@ -132,7 +133,7 @@ onUnmounted(() => { alive = false; qrSequence++; clearTimeout(copiedTimer); qrDi
   <Teleport to="body">
     <dialog ref="qrDialog" class="subscription-node-qr" aria-labelledby="subscription-node-qr-title" @cancel.prevent="closeQR" @close="clearQR" @click="clickBackdrop">
       <template v-if="qrNode">
-        <header><div><span>{{ protocolName(qrNode) }} · {{ pool === 'public' ? t('公共订阅') : t('普通订阅') }}</span><h2 id="subscription-node-qr-title">{{ t('节点二维码') }}</h2></div><button class="icon" :aria-label="t('关闭节点二维码')" autofocus @click="closeQR"><X :size="20"/></button></header>
+        <header><div><span>{{ protocolName(qrNode) }} · {{ t('订阅管理') }}</span><h2 id="subscription-node-qr-title">{{ t('节点二维码') }}</h2></div><button class="icon" :aria-label="t('关闭节点二维码')" autofocus @click="closeQR"><X :size="20"/></button></header>
         <p class="subscription-node-qr-name">{{ qrNode.name }}</p>
         <div class="subscription-node-qr-image" :aria-busy="qrLoading"><LoaderCircle v-if="qrLoading" :size="28" class="spin"/><img v-else-if="qrImage" :src="qrImage" :alt="t('当前节点链接二维码')" width="320" height="320"/><p v-else-if="qrError" role="alert">{{ qrError }}</p></div>
         <p class="subscription-node-qr-note">{{ t('使用代理客户端扫描，导入当前节点。') }}</p>

@@ -3,7 +3,20 @@ package domain
 
 import "time"
 
+// MountAccess binds a delegated proxy identity to one pairing token. It never
+// replaces local accounts or grants default node-group membership.
+type MountAccess struct {
+	TokenID    string   `json:"token_id"`
+	MasterID   string   `json:"master_id"`
+	UserID     int64    `json:"user_id"`
+	NodeIDs    []string `json:"node_ids"`
+	LeaseUntil int64    `json:"lease_until"`
+	Revision   int64    `json:"revision,omitempty"`
+	Generation string   `json:"generation"`
+}
+
 type User struct {
+	Mount          *MountAccess `json:"mount_access,omitempty"`
 	Archived       bool         `json:"archived,omitempty"`
 	ID             int64        `json:"id"`
 	Username       string       `json:"username"`
@@ -25,7 +38,7 @@ type User struct {
 }
 
 func (u User) Active() bool {
-	return u.Enabled && (u.Expires == 0 || u.Expires > time.Now().Unix()) && (u.Meter == nil || !u.Meter.PendingReset && (u.Meter.End == 0 || u.Meter.End > time.Now().Unix())) && (u.Quota == 0 || u.QuotaUsed() < u.Quota)
+	return u.Enabled && (u.Mount == nil || u.Mount.LeaseUntil > time.Now().Unix()) && (u.Expires == 0 || u.Expires > time.Now().Unix()) && (u.Meter == nil || !u.Meter.PendingReset && (u.Meter.End == 0 || u.Meter.End > time.Now().Unix())) && (u.Quota == 0 || u.QuotaUsed() < u.Quota)
 }
 
 type Credentials struct {

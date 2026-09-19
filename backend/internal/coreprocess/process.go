@@ -34,5 +34,28 @@ func Restart(unit string) error {
 	if err != nil {
 		return err
 	}
-	return p.Signal(syscall.SIGTERM)
+	if err = p.Signal(syscall.SIGTERM); err != nil && !errors.Is(err, os.ErrProcessDone) && !errors.Is(err, syscall.ESRCH) {
+		return err
+	}
+	// Signalling the wrapper is asynchronous. Its old API port can remain
+	// reachable until the child exits; callers must not mistake that for the
+	// replacement being ready and repeatedly terminate the recovering service.
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	return waitReplacement(ctx, pid, func() int { return PID(unit) })
+}
+
+func waitReplacement(ctx context.Context, previous int, current func() int) error {
+	ticker := time.NewTicker(200 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		if pid := current(); pid > 1 && pid != previous {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return errors.New("core replacement did not start; systemd recovery required")
+		case <-ticker.C:
+		}
+	}
 }

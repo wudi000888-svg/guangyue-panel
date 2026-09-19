@@ -6,11 +6,10 @@ defineProps<{groups:NodeGroup[];scope?:'private'|'public';hidePublic?:boolean}>(
 </script>
 <template>
 <div class="group-picker">
- <fieldset v-for="kind in (scope?[scope]:hidePublic?['private']:['private','public'])" :key="kind"><legend>{{kind==='public'?t('公共节点组'):t('普通节点组')}}</legend>
- <label v-for="g in groups.filter(g=>g.scope===kind)" :key="g.id"><input type="checkbox" v-model="model" :value="g.id"/><span>{{g.name}}<small v-if="!g.enabled"> · {{t('已停用')}}</small></span></label>
- <p v-if="!groups.some(g=>g.scope===kind)" class="field-help">{{t('暂无节点权限组，请先在套餐管理中创建。')}}</p>
+ <fieldset><legend>{{t('节点组')}}</legend>
+ <label v-for="g in groups" :key="g.id"><input type="checkbox" v-model="model" :value="g.id"/><span>{{g.name}}<small v-if="!g.enabled"> · {{t('已停用')}}</small></span></label>
+ <p v-if="!groups.length" class="field-help">{{t('暂无节点权限组，请先在套餐管理中创建。')}}</p>
  </fieldset>
- <small v-if="hidePublic&&groups.some(g=>g.scope==='public'&&model.includes(g.id))" class="field-help">{{t('已有公共组授权已保留，专业模式下可编辑。')}}</small>
 </div>
 </template>
 <style scoped>

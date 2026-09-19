@@ -11,6 +11,7 @@ const sub = ref<Sub | null>(null),
   subUser = ref(0),
   format = ref("mihomo"),
   subProtocol = ref(""),
+  subSource = ref<Sub["pool"]>(publicSubPage.value?"public":"all"),
   qr = ref(""),
   qrError = ref(""),
   subLoading = ref(false),
@@ -18,7 +19,7 @@ const sub = ref<Sub | null>(null),
 const subURL = computed(() =>
   sub.value
     ? sub.value.url +
-      "?format=" +
+      (sub.value.url.includes("?")?"&format=":"?format=") +
       format.value +
       (subProtocol.value ? "&protocol=" + subProtocol.value : "")
     : "",
@@ -41,7 +42,7 @@ async function loadSub(clear = false) {
   const controller = new AbortController(), sequence = ++subscriptionSequence;
   subscriptionRequest = controller;
   const requestPage = page.value, requestUser = owner.value ? subUser.value || state.value.me.id : state.value.me.id;
-  const requestPool = publicSubPage.value ? "public" : "private", requestProtocol = subProtocol.value;
+  const requestPool = subSource.value, requestProtocol = subProtocol.value;
   if (clear) sub.value = null;
   subLoading.value = true;
   subError.value = "";
@@ -50,7 +51,7 @@ async function loadSub(clear = false) {
     if (requestProtocol) query.set("protocol", requestProtocol);
     const loaded = await api<Sub>("/subscription?" + query, "GET", undefined, { signal: controller.signal });
     if (controller.signal.aborted || sequence !== subscriptionSequence) return;
-    if (page.value !== requestPage || (owner.value ? subUser.value || state.value?.me.id : state.value?.me.id) !== requestUser || subProtocol.value !== requestProtocol) return;
+    if (page.value !== requestPage || (owner.value ? subUser.value || state.value?.me.id : state.value?.me.id) !== requestUser || subProtocol.value !== requestProtocol || subSource.value!==requestPool) return;
     if (loaded.user?.id !== requestUser || loaded.pool !== requestPool || !Array.isArray(loaded.nodes)) throw new Error(t("订阅节点明细暂不可用，请刷新重试。"));
     sub.value = loaded as Sub;
   } catch (e) {
@@ -85,7 +86,8 @@ watch([() => {
 }, () => JSON.stringify(state.value?.nodes.map(n => [n.id, n.checked_at, n.quality?.at]))], ([authorization], [previousAuthorization]) => {
   if (page.value === 'subscription' || page.value === 'public-subscription') loadSub(authorization !== previousAuthorization);
 });
-watch([page, subUser, subProtocol], () => { loadSub(true); }, { flush: 'sync' });
+watch(page,()=>{subSource.value=publicSubPage.value?"public":"all";},{flush:"sync"});
+watch([page, subUser, subProtocol,subSource], () => { loadSub(true); }, { flush: 'sync' });
 let subscriptionQRSequence = 0;
 watch(subURL, async (v) => {
   const sequence = ++subscriptionQRSequence;
@@ -105,5 +107,5 @@ watch(subURL, async (v) => {
 });
 
 onScopeDispose(()=>{clearSubscription();subscriptionQRSequence++;});
-return {sub,subUser,format,subProtocol,qr,qrError,subLoading,subError,subURL,clearSubscription,loadSub,showSub,downloadSub};
+return {sub,subUser,format,subProtocol,subSource,qr,qrError,subLoading,subError,subURL,clearSubscription,loadSub,showSub,downloadSub};
 }

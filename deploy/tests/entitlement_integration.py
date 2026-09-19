@@ -89,6 +89,37 @@ def verify_entitlements(bundle, temp, cert, api, cookie, admin_password):
             time.sleep(1)
         raise AssertionError('entitlement configuration did not apply')
 
+    def wait_reconnected(port):
+        # HY2 can retain a transport to the terminated server until its QUIC
+        # timeout. Verify the same client recovers after access is restored.
+        deadline = time.monotonic() + 45
+        while True:
+            try:
+                roundtrip(port)
+                return
+            except OSError:
+                if time.monotonic() >= deadline:
+                    raise AssertionError('client did not reconnect after authorization restored')
+                time.sleep(1)
+
+    def launch(nodes,base_port):
+        for index, node in enumerate(nodes):
+            uri = urlparse(node['uri'])
+            query = parse_qs(uri.query)
+            port = base_port + index
+            if node['protocol'] == 'vless':
+                config = {'log': {'loglevel': 'none'}, 'inbounds': [{'listen': '127.0.0.1', 'port': port, 'protocol': 'socks', 'settings': {'auth': 'noauth', 'udp': True}}], 'outbounds': [{'protocol': 'vless', 'settings': {'vnext': [{'address': '127.0.0.1', 'port': 443, 'users': [{'id': uri.username, 'encryption': 'none', 'flow': 'xtls-rprx-vision'}]}]}, 'streamSettings': {'network': 'tcp', 'security': 'reality', 'realitySettings': {'fingerprint': 'chrome', 'serverName': query['sni'][0], 'publicKey': query['pbk'][0], 'shortId': query['sid'][0]}}}]}
+                args = [str(bundle / 'bin/xray-linux-amd64'), 'run', '-c']
+            else:
+                config = {'server': '127.0.0.1:443', 'auth': unquote(uri.username), 'tls': {'sni': query['sni'][0], 'ca': str(cert)}, 'socks5': {'listen': '127.0.0.1:' + str(port)}}
+                args = [str(bundle / 'bin/hysteria-node-linux-amd64'), 'client', '--disable-update-check', '-c']
+            path = temp / ('entitlement-client-' + str(port) + '.json')
+            path.write_text(json.dumps(config))
+            path.chmod(0o600)
+            log = (temp / ('entitlement-client-' + str(port) + '.log')).open('wb')
+            files.append(log)
+            processes.append(subprocess.Popen([*args, str(path)], stdout=log, stderr=log))
+
     group = call('/node-groups', {'name': 'CI entitlement', 'scope': 'private', 'enabled': True})
     plan = call('/plans', {'name': 'CI plan', 'quota': 1 << 30, 'valid_days': 1, 'cycle': 'none', 'vless': True, 'hy2': True, 'group_ids': [group['id']]})
     password=secrets.token_urlsafe(24)
@@ -103,22 +134,7 @@ def verify_entitlements(bundle, temp, cert, api, cookie, admin_password):
     catalog = call('/subscription?user_id=' + str(user['id']))
     assert len(catalog['nodes']) == 2, 'plan access did not reach subscription'
     try:
-        for index, node in enumerate(catalog['nodes']):
-            uri = urlparse(node['uri'])
-            query = parse_qs(uri.query)
-            port = 19891 + index
-            if node['protocol'] == 'vless':
-                config = {'log': {'loglevel': 'none'}, 'inbounds': [{'listen': '127.0.0.1', 'port': port, 'protocol': 'socks', 'settings': {'auth': 'noauth', 'udp': True}}], 'outbounds': [{'protocol': 'vless', 'settings': {'vnext': [{'address': '127.0.0.1', 'port': 443, 'users': [{'id': uri.username, 'encryption': 'none', 'flow': 'xtls-rprx-vision'}]}]}, 'streamSettings': {'network': 'tcp', 'security': 'reality', 'realitySettings': {'fingerprint': 'chrome', 'serverName': query['sni'][0], 'publicKey': query['pbk'][0], 'shortId': query['sid'][0]}}}]}
-                args = [str(bundle / 'bin/xray-linux-amd64'), 'run', '-c']
-            else:
-                config = {'server': '127.0.0.1:443', 'auth': unquote(uri.username), 'tls': {'sni': query['sni'][0], 'ca': str(cert)}, 'socks5': {'listen': '127.0.0.1:' + str(port)}}
-                args = [str(bundle / 'bin/hysteria-node-linux-amd64'), 'client', '--disable-update-check', '-c']
-            path = temp / ('entitlement-client-' + str(index) + '.json')
-            path.write_text(json.dumps(config))
-            path.chmod(0o600)
-            log = (temp / ('entitlement-client-' + str(index) + '.log')).open('wb')
-            files.append(log)
-            processes.append(subprocess.Popen([*args, str(path)], stdout=log, stderr=log))
+        launch(catalog["nodes"],19891)
         time.sleep(2)
         for rate in [0, 500, 1000, 1500, 2000]:
             call('/nodes/policy', {'ids': ids, 'rate_milli': rate})
@@ -168,6 +184,7 @@ def verify_entitlements(bundle, temp, cert, api, cookie, admin_password):
         group = call('/node-groups', group)
         wait_applied()
         for port in [19891, 19892]:
+            wait_reconnected(port)
             sock, _ = socks(port, 1, tcp.server_address[1])
             sock.sendall(b'old-period')
             assert receive(sock, 10) == b'old-period'
@@ -193,18 +210,10 @@ def verify_entitlements(bundle, temp, cert, api, cookie, admin_password):
             assert not survived, 'old stream survived quota-period reset'
         assert current['quota_used'] == 0 and current['user']['upload'] > 0, 'reset erased lifetime usage'
         for port in [19891, 19892]:
-            # A cached QUIC connection discovers an abrupt server restart on
-            # its transport timeout. Keep the same client and verify recovery.
-            deadline = time.monotonic() + 45
-            while True:
-                try:
-                    roundtrip(port)
-                    break
-                except OSError:
-                    if time.monotonic() >= deadline:
-                        raise AssertionError('client did not reconnect after quota reset')
-                    time.sleep(1)
+            wait_reconnected(port)
         print('PASS local quota reset closes idle old VLESS/HY2 streams, preserves lifetime usage and admits new connections')
+        from mount_integration import verify_mounts
+        verify_mounts(call,cookie,launch,roundtrip,socks,receive,tcp.server_address[1],user['id'],19891+next(i for i,n in enumerate(catalog['nodes']) if n['protocol']=='vless'))
 
     finally:
         for sock in held:

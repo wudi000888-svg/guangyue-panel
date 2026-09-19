@@ -252,8 +252,13 @@ func (a *App) importSubsite(w http.ResponseWriter, r *http.Request, actor Record
 	// A changed address or newly issued token still refers to the same site.
 	for _, v := range sites {
 		if v.Connection != nil && connection.InstanceID != "" && v.Connection.InstanceID == connection.InstanceID {
-			id = v.ID
-			break
+			if v.Connection.Token == connection.Token {
+				id = v.ID
+				break
+			}
+			if !v.Removed {
+				id = v.ID
+			}
 		}
 	}
 	count := 0
@@ -285,6 +290,21 @@ func (a *App) importSubsite(w http.ResponseWriter, r *http.Request, actor Record
 	if err != nil {
 		v = BusinessSite{ID: id, OwnerID: actor.ID, Created: time.Now().Unix()}
 	}
+	var retired *BusinessSite
+	if v.Mount != nil && v.Connection != nil && v.Connection.Token != connection.Token && len(v.PeriodRules) > 0 {
+		old := v
+		old.Removed = true
+		old.Enabled = false
+		old.Grants = nil
+		old.Revision = randomToken(12)
+		old.Mount.Nodes = nil
+		old.Mount.Accounts = nil
+		old.Mount.LeaseUntil = 0
+		old.Mount.Error = "等待撤销与流量结算"
+		retired = &old
+		id = "site_" + digest(connection.InstanceID + "/" + connection.Token)[:24]
+		v = BusinessSite{ID: id, OwnerID: actor.ID, Created: time.Now().Unix()}
+	}
 	v.Name, v.Enabled, v.Removed, v.Revision = in.Name, true, false, randomToken(12)
 	v.Connection = &connection
 	v.LastSeen = time.Now().Unix()
@@ -293,7 +313,24 @@ func (a *App) importSubsite(w http.ResponseWriter, r *http.Request, actor Record
 	v.defaults()
 	b, err := a.store.vault.seal(v)
 	if err == nil {
-		_, err = a.store.db.Exec("INSERT INTO business_sites(id,doc) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET doc=excluded.doc", id, b)
+		tx, e := a.store.db.Begin()
+		err = e
+		if err == nil {
+			defer tx.Rollback()
+			if retired != nil {
+				var old []byte
+				old, err = a.store.vault.seal(retired)
+				if err == nil {
+					_, err = tx.Exec("UPDATE business_sites SET doc=? WHERE id=?", old, retired.ID)
+				}
+			}
+			if err == nil {
+				_, err = tx.Exec("INSERT INTO business_sites(id,doc) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET doc=excluded.doc", id, b)
+			}
+			if err == nil {
+				err = tx.Commit()
+			}
+		}
 	}
 	if err != nil {
 		failure(w, 500, "保存子站连接失败")
@@ -313,10 +350,32 @@ func (a *App) directSiteAPI(w http.ResponseWriter, r *http.Request, actor Record
 	if err != nil || v.Connection == nil {
 		return false
 	}
+	if len(parts) == 2 && parts[1] == "node-pool" || len(parts) == 3 && parts[1] == "node-pool" && parts[2] == "sync" {
+		a.mountSiteAPI(w, r, actor, v)
+		return true
+	}
 	if len(parts) == 1 && r.Method == "DELETE" {
 		a.mu.Lock()
 		defer a.mu.Unlock()
-		if _, err = a.store.db.Exec("DELETE FROM business_sites WHERE id=?", v.ID); err != nil {
+		current, e := a.store.businessSite(v.ID)
+		if e != nil {
+			failure(w, 404, "子站不存在")
+			return true
+		}
+		if current.Mount != nil {
+			current.Removed = true
+			current.Enabled = false
+			current.Grants = nil
+			current.Revision = randomToken(12)
+			current.Mount.Nodes = nil
+			current.Mount.Accounts = nil
+			current.Mount.LeaseUntil = 0
+			current.Mount.Error = "等待撤销与流量结算"
+			err = a.store.saveBusinessSite(current)
+		} else {
+			_, err = a.store.db.Exec("DELETE FROM business_sites WHERE id=?", v.ID)
+		}
+		if err != nil {
 			failure(w, 500, "移除子站失败")
 			return true
 		}

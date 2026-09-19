@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Increment the patch version and update every release-checked version file."""
+import argparse
 import json
 import re
 from pathlib import Path
@@ -10,7 +11,12 @@ current = version_path.read_text().strip()
 match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", current)
 if not match:
     raise SystemExit(f"invalid VERSION: {current!r}")
-next_version = f"{match.group(1)}.{match.group(2)}.{int(match.group(3)) + 1}"
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("--version", help="Explicit newer semantic version, for a feature release")
+args = parser.parse_args()
+next_version = args.version or f"{match.group(1)}.{match.group(2)}.{int(match.group(3)) + 1}"
+if not re.fullmatch(r"\d+\.\d+\.\d+", next_version) or tuple(map(int, next_version.split('.'))) <= tuple(map(int, current.split('.'))):
+    raise SystemExit("release version must be newer than " + current)
 version_path.write_text(next_version + "\n")
 
 config = root / "backend/internal/controlplane/config.go"

@@ -63,6 +63,7 @@ type BusinessCommand struct {
 	State   string `json:"state"`
 }
 type BusinessSite struct {
+	Mount             *SiteMount              `json:"mount,omitempty"`
 	Connection        *SiteConnection         `json:"connection,omitempty"`
 	Removed           bool                    `json:"removed,omitempty"`
 	DefaultNodes      []Node                  `json:"default_nodes,omitempty"`
@@ -127,6 +128,12 @@ func (v *BusinessSite) defaults() {
 func (v BusinessSite) public() BusinessSite {
 	v.defaults()
 	v.PendingToken = ""
+	if v.Mount != nil {
+		m := *v.Mount
+		m.Accounts = nil
+		m.UsageAck = nil
+		v.Mount = &m
+	}
 	if v.Connection != nil {
 		c := *v.Connection
 		c.Token = ""

@@ -301,6 +301,10 @@ func (a *App) entitlementBatch(w http.ResponseWriter, r *http.Request, actor Rec
 			return
 		}
 		u, e := a.store.record(id)
+		if e == nil && u.Mount != nil {
+			failure(w, 409, "挂载身份的额度由主站管理")
+			return
+		}
 		if e != nil {
 			failure(w, 404, "部分用户已不存在")
 			return

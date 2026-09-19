@@ -13,6 +13,17 @@ func businessDefaultNodes() []Node {
 	return []Node{{ID: "vless-main", Name: "本机直连", Protocol: "vless", Exit: "direct", Enabled: true, DefaultDirect: true, DNS: defaultNodeDNS()}, {ID: "hy2-main", Name: "本机直连", Protocol: "hy2", Exit: "direct", Enabled: true, DefaultDirect: true, DNS: defaultNodeDNS()}}
 }
 func (a *App) materializeBusinessNodes(v BusinessSite) ([]Node, error) {
+	if v.Connection != nil {
+		out := []Node{}
+		if v.Mount != nil && !v.Removed {
+			for _, m := range v.Mount.Nodes {
+				if n, ok := mountSource(v.Mount.Catalog, m.NodeID); ok {
+					out = append(out, mountNodePolicy(m, n))
+				}
+			}
+		}
+		return out, nil
+	}
 	out := businessDefaultNodes()
 	for i := range out {
 		out[i] = normalizeNodePolicy(out[i])

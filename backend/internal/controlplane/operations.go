@@ -71,12 +71,20 @@ func (a *App) desiredCoreHash() (string, error) {
 	}
 	users := []object{}
 	for _, u := range records {
-		users = append(users, object{"id": u.ID, "active": u.Active(), "vless": u.VLESS, "hy2": u.HY2, "credentials": u.Credentials, "groups": u.AllowedGroups})
+		users = append(users, object{"id": u.ID, "active": u.Active(), "vless": u.VLESS, "hy2": u.HY2, "credentials": u.Credentials, "mount_nodes": func() []string {
+			if u.Mount != nil {
+				return u.Mount.NodeIDs
+			}
+			return nil
+		}(), "groups": u.AllowedGroups})
 	}
 	b, err := json.Marshal(object{"memberships": memberships, "hy2_optimized": a.cfg.HY2Optimized, "vless": nodeHash(nodes, "vless"), "hy2": nodeHash(nodes, "hy2"), "users": users, "sni": a.cfg.RealitySNI, "target": a.cfg.RealityTarget})
 	return digest(string(b)), err
 }
 func (a *App) reconcileIfNeeded() error {
+	if err := a.writeMountLeases(); err != nil {
+		return err
+	}
 	hash, err := a.desiredCoreHash()
 	if err != nil {
 		return err
@@ -87,6 +95,9 @@ func (a *App) reconcileIfNeeded() error {
 	return a.reconcile()
 }
 func (a *App) reconcile() (err error) {
+	if err = a.writeMountLeases(); err != nil {
+		return err
+	}
 	if err = a.controlReady(); err != nil {
 		return err
 	}

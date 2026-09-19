@@ -182,6 +182,9 @@ func writeChanged(path string, v any) error {
 	return atomicWrite(path, b, 0600)
 }
 func (a *App) prepare() error {
+	if err := a.writeMountLeases(); err != nil {
+		return err
+	}
 	if !a.cfg.Dev {
 		if err := a.verifyHYCore(); err != nil {
 			return err
@@ -529,6 +532,7 @@ func subscription(c Config, r Record, nodes []Node, format, protocol string) ([]
 }
 
 type subscriptionEntry struct {
+	mounted  bool
 	siteID   string
 	siteName string
 	node     Node

@@ -20,6 +20,7 @@ import (
 )
 
 type App struct {
+	mountSyncMu      [64]sync.Mutex
 	ticketProcessor  func(context.Context, []byte, string) ([]byte, error)
 	updateClient     *http.Client
 	controllerLease  *persistence.ControllerLease
@@ -199,6 +200,9 @@ func Run() {
 	}
 	defer workers.Wait()
 	startWorker(a.loop)
+	if cfg.controller() {
+		startWorker(a.mountLoop)
+	}
 	startWorker(func(ctx context.Context) {
 		ticker := time.NewTicker(20 * time.Second)
 		defer ticker.Stop()
@@ -276,6 +280,9 @@ func (a *App) loop(ctx context.Context) {
 		err := a.advanceQuotaPeriods(time.Now().Unix())
 		if err == nil {
 			err = a.reconcileIfNeeded()
+			if err == nil {
+				err = a.settleHYRevocations()
+			}
 		}
 		err = errors.Join(err, commerceErr)
 		if err != nil {

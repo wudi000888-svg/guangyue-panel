@@ -60,13 +60,17 @@ func (a *App) businessAPI(w http.ResponseWriter, r *http.Request, actor Record) 
 			return
 		}
 		visible := []BusinessSite{}
+		settling := []BusinessSite{}
 		for _, site := range sites {
+			if site.Removed && site.Mount != nil && (len(site.Issued) > 0 || len(site.IssuedUnlimited) > 0) {
+				settling = append(settling, site.public())
+			}
 			if !site.Removed {
 				visible = append(visible, site.public())
 			}
 		}
 		sites = visible
-		jsonResponse(w, 200, object{"role": a.cfg.deploymentRole(), "site_id": a.cfg.siteID(), "sites": sites, "lease_seconds": businessLeaseSeconds})
+		jsonResponse(w, 200, object{"role": a.cfg.deploymentRole(), "site_id": a.cfg.siteID(), "sites": sites, "settling": settling, "lease_seconds": businessLeaseSeconds})
 		return
 	}
 	if path == "" && r.Method == "POST" {

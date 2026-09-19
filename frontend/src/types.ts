@@ -108,4 +108,4 @@ export type State = {
   history: { hour: number; upload: number; download: number }[];
   audit: { at: number; actor: string; action: string; target: string }[];
 };
-export type Sub = { url: string; raw: string; active: boolean; user: User; pool: "private" | "public"; nodes: SubscriptionNode[] };
+export type Sub = { url: string; raw: string; active: boolean; user: User; pool: "private" | "public" | "all" | "local" | "mounted"; nodes: SubscriptionNode[] };

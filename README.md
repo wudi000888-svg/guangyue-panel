@@ -10,7 +10,7 @@
 
 [English](README_EN.md) · [安装指南](docs/INSTALL.md) · [使用手册](docs/USER_GUIDE.md) · [Nginx 共存](docs/NGINX.md) · [运维与备份](docs/OPERATIONS.md)
 
-![version](https://img.shields.io/badge/version-0.24.0-2563eb)
+![version](https://img.shields.io/badge/version-0.25.0-2563eb)
 ![license](https://img.shields.io/badge/panel_license-LGPL--3.0-16a34a)
 ![platform](https://img.shields.io/badge/server-Linux_amd64-475569)
 
@@ -35,7 +35,7 @@
 | 私有 IP 池 | 独立出口 / 订阅出口 / 订阅来源分栏；HTTP CONNECT、SOCKS5、单节点和订阅导入 |
 | 来源管理 | 手动更新、删除，默认每日错峰自动更新；删除来源清理独占资源及绑定节点 |
 | 公共 IP 池 | 独立来源、采集策略、黑名单、并发与时限预算、定时检查；自动维护独立节点 |
-| 用户与订阅 | 管理员/成员、协议权限、有效期、共享流量配额；私有与公共订阅令牌分别管理 |
+| 用户与订阅 | 管理员/成员、协议权限、有效期、共享流量配额；统一订阅管理、节点来源筛选及挂载来源标注，兼容旧订阅地址 |
 | 订阅体验 | Raw / Base64 / Mihomo，节点链接一键复制、二维码、成员可见质量报告 |
 | IP 质量 | 多源地理位置、ASN、代理风险信号、公开页面可达性；保留来源、时间、未知和冲突 |
 | DNS / IPv6 | 每节点 DNS 出口策略，安全 DoH 与 IPv6 允许/阻断选项 |
@@ -117,3 +117,5 @@ flowchart LR
 文档组织和专业控制台分区参考 [Sub2API](https://github.com/Wei-Shaw/sub2api)；没有复制其产品标识、截图或文案。感谢 Xray、Hysteria、Mihomo、Go、Vue 与 SQLite 生态。
 
 面板源码自 0.15.0 使用 [LGPL-3.0-only](LICENSE)，配套 [GPL-3.0 文本](licenses/GPL-3.0.txt)和[历史 MIT 声明](licenses/guangyue-legacy-MIT.txt)随项目提供。Hysteria 修改补丁使用 MIT；Xray 和 Mihomo 分别适用 MPL-2.0 与 GPL-3.0，详见第三方许可。
+
+子站节点挂载与统一订阅的使用及兼容说明见 [节点挂载](docs/NODE_MOUNTS.md)。

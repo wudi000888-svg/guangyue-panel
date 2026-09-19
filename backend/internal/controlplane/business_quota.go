@@ -94,6 +94,9 @@ func (a *App) coreRecords() ([]Record, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err = a.filterMountRecords(records); err != nil {
+		return nil, err
+	}
 	if a.store.meta("site_paused") == "true" {
 		for i := range records {
 			records[i].Enabled = false

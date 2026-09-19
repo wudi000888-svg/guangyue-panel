@@ -21,7 +21,7 @@ func (a *App) validateEntitlementSites(u Record, action string) error {
 			assigned = assigned || g.UserID == u.ID
 		}
 		_, issued := s.Issued[u.ID]
-		if (assigned || issued || s.IssuedUnlimited[u.ID]) && (s.Info == nil || s.Info.Protocol < 2) && (u.Entitlement != nil || action == "reset") {
+		if s.Connection == nil && (assigned || issued || s.IssuedUnlimited[u.ID]) && (s.Info == nil || s.Info.Protocol < 2) && (u.Entitlement != nil || action == "reset") {
 			return fmt.Errorf("请先升级业务站 %s，旧版本不支持套餐权限和配额周期", s.Name)
 		}
 	}

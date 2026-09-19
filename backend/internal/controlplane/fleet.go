@@ -117,7 +117,11 @@ func (a *App) fleetGateway(w http.ResponseWriter, r *http.Request) {
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("X-Requested-With", "guangyue")
 	buffer := &httpapi.BufferResponse{}
-	a.dispatchAuthenticated(buffer, request, actor)
+	if request.URL.Path == "/api/node-pool" || request.URL.Path == "/api/node-mounts/sync" {
+		a.mountGateway(buffer, request, actor, id)
+	} else {
+		a.dispatchAuthenticated(buffer, request, actor)
+	}
 	if buffer.Overflow || !json.Valid(buffer.Body.Bytes()) {
 		failure(w, 502, "站点响应无效或超出限制")
 		return
@@ -231,7 +235,7 @@ func (a *App) fleetAPI(w http.ResponseWriter, r *http.Request, actor Record) {
 	// Lite exposes only its local pairing-token lifecycle.  Site takeover and
 	// peer administration remain Pro-master capabilities.
 	if a.cfg.edition() != "pro" {
-		allowed := path == "" && r.Method == "GET" || path == "/tokens" && r.Method == "POST" || strings.HasPrefix(path, "/tokens/") && r.Method == "DELETE"
+		allowed := strings.HasPrefix(path, "/tokens/") && strings.HasSuffix(path, "/sharing") && (r.Method == "GET" || r.Method == "PUT") || path == "" && r.Method == "GET" || path == "/tokens" && r.Method == "POST" || strings.HasPrefix(path, "/tokens/") && r.Method == "DELETE"
 		if !allowed {
 			failure(w, 403, "Lite 仅支持生成和撤销配对令牌，站点接管需要 Pro 主站")
 			return
@@ -317,14 +321,25 @@ func (a *App) fleetAPI(w http.ResponseWriter, r *http.Request, actor Record) {
 		jsonResponse(w, 201, object{"id": id, "token": token, "connection_token": connection, "site_id": a.cfg.siteID(), "expires": expires})
 		return
 	}
+	if strings.HasPrefix(path, "/tokens/") && strings.HasSuffix(path, "/sharing") {
+		a.mountSharingAPI(w, r, actor, strings.TrimSuffix(strings.TrimPrefix(path, "/tokens/"), "/sharing"))
+		return
+	}
 	if strings.HasPrefix(path, "/tokens/") && r.Method == "DELETE" {
+		a.mu.Lock()
+		defer a.mu.Unlock()
 		id := strings.TrimPrefix(path, "/tokens/")
 		if _, err := a.store.db.Exec("DELETE FROM fleet_tokens WHERE id=?", id); err != nil {
 			failure(w, 500, "撤销令牌失败")
 			return
 		}
+		a.status = "pending"
+		err := a.reconcile()
+		if err == nil {
+			err = a.settleHYRevocations()
+		}
 		a.store.audit(actor.Username, "fleet_token_revoke", id)
-		jsonResponse(w, 200, object{"ok": true})
+		jsonResponse(w, 200, object{"ok": true, "pending": err != nil})
 		return
 	}
 	if path == "/peers" && r.Method == "POST" {

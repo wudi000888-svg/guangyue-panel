@@ -377,8 +377,8 @@ const titles: Record<string, string> = {
   public: "公共 IP 池",
   nodes: "普通节点",
   "public-nodes": "公共节点",
-  "public-subscription": "公共订阅",
-  subscription: "普通订阅",
+  "public-subscription": "订阅管理",
+  subscription: "订阅管理",
   tasks: "任务中心",
   fleet: "群站管理",
   pairing: "配对令牌",
@@ -411,8 +411,8 @@ const allNavGroups = computed(() => [
   {id:'workspace',label:t('工作台'),items:[{id:'overview',label:t('仪表盘'),icon:LayoutDashboard},{id:'clients',label:t('客户端中心'),icon:Package},...(owner.value?[{id:'monitor',label:t('实时监控'),icon:RadioTower}]:[])]},
  {id:'access',label:t('成员与权益'),items:[...(owner.value?[{id:'users',label:t('用户管理'),icon:Users},{id:'plans',label:t('套餐管理'),icon:Package}]:[]),{id:'messages',label:t('站内信'),icon:Mail}]},
   ...(!selectedSite.value?[{id:'commerce',label:t('账户与服务'),items:[{id:'wallet',label:t('账户余额'),icon:Wallet},{id:'shop',label:t('购买套餐'),icon:ShoppingBag},{id:'orders',label:t('订单管理'),icon:Receipt},{id:'tickets',label:t('工单中心'),icon:Ticket},...(owner.value?[{id:'redeem-codes',label:t('兑换码管理'),icon:Gift}]:[])]}]:[]),
-  {id:'business',label:t('业务资源'),items:[...(owner.value?[{id:'ips',label:t('私有 IP 池'),icon:Database},{id:'nodes',label:t('普通节点'),icon:RadioTower}]:[]),{id:'subscription',label:t('普通订阅'),icon:QrCode}]},
-  {id:'public',label:t('公共代理'),items:[...(owner.value?[{id:'public',label:t('公共 IP 池'),icon:Database},{id:'public-nodes',label:t('公共节点'),icon:Globe2}]:[]),{id:'public-subscription',label:t('公共订阅'),icon:QrCode}]},
+  {id:'business',label:t('业务资源'),items:[...(owner.value?[{id:'ips',label:t('私有 IP 池'),icon:Database},{id:'nodes',label:t('普通节点'),icon:RadioTower}]:[]),{id:'subscription',label:t('订阅管理'),icon:QrCode}]},
+  {id:'public',label:t('公共代理'),items:[...(owner.value?[{id:'public',label:t('公共 IP 池'),icon:Database},{id:'public-nodes',label:t('公共节点'),icon:Globe2}]:[])]},
   ...(owner.value?[{id:'admin',label:t('系统管理'),items:[...(state.value?.system.edition==='pro'&&state.value?.system.role==='controller'&&!getRemoteSite()?[{id:'fleet',label:t('群站管理'),icon:Globe2}]:[]),...(!getRemoteSite()?[{id:'pairing',label:t('配对令牌'),icon:KeyRound}]:[]),{id:'tasks',label:t('任务中心'),icon:Server},{id:'system',label:t('运维状态'),icon:Server},{id:'settings',label:t('系统设置'),icon:Settings2}]}]:[]),
 ]);
 const navGroups = computed(() => {
@@ -458,7 +458,7 @@ const users = computed(() =>
               : !!u.quota && quotaUsed(u) >= u.quota)),
   ),
 );
-const {sub,subUser,format,subProtocol,qr,qrError,subLoading,subError,subURL,clearSubscription,loadSub,showSub,downloadSub} = useSubscription({state,page,owner,publicSubPage,active,task,go});
+const {sub,subUser,format,subProtocol,subSource,qr,qrError,subLoading,subError,subURL,clearSubscription,loadSub,showSub,downloadSub} = useSubscription({state,page,owner,publicSubPage,active,task,go});
 const usage = (u: User) =>
   u.quota ? Math.min(100, (quotaUsed(u) / u.quota) * 100) : 0;
 async function refresh(silent = false) {
@@ -618,6 +618,7 @@ function confirmUser(u: User, action: string) {
     {
       revoke:
         t("旧订阅和节点凭据将失效。HY2 会撤销连接，VLESS 会通过核心重启关闭现有连接。"),
+      "rotate-all-sub": t("重置后所有旧订阅地址失效，已有节点凭据仍然有效。"),
       "rotate-sub": t("普通订阅旧地址将失效，公共订阅地址不变。已导入节点凭据仍然有效。"),
       "rotate-public-sub": t("公共订阅旧地址将失效，普通订阅地址不变。已导入节点凭据仍然有效。"),
       "reset-traffic": t("已用流量将归零，达到额度上限的账号会恢复可用。"),
@@ -629,6 +630,7 @@ function confirmUser(u: User, action: string) {
       (
         {
           revoke: t("撤销全部旧配置"),
+          "rotate-all-sub": t("重置全部订阅地址"),
           "rotate-sub": t("重置普通订阅地址"),
           "rotate-public-sub": t("重置公共订阅地址"),
           "reset-traffic": t("重置流量"),
@@ -976,5 +978,5 @@ onMounted(async () => {
   poll.start();
 });
 onUnmounted(() => { mounted = false; poll.stop(); stateRequest.cancel(); removeSessionListener(); clearTimeout(toastTimer);  clearSubscription(); });
-return { plans,nodeGroups,loadEntitlements,quotaUsed,selectedSite,selectedSiteName,switchSite, api, stateRequest, state, ready, busy, error, notice, page, mobileNav, site, login, userSearch, userFilter, userRole, modal, editingID, userForm, nodeForm, ipForm, speedRunning, qualityRunning, qualityTest, importMode, importForm, importFile, importFileReading, importIssues, importFileContent, importFileSequence, clearPrivateFile, readPrivateFile, importReport, openImport, importSubscription, speedTest, ipSearch, ipType, ipState, ipPool, publicResources, privateTab, privateSources, privateSourcesReady, privateSourcesLoading, privateSourcesError, privateSourcesRequest, receivePrivateSources, loadPrivateSources, publicTab, selectPublicTab, subscriptionResourceIDs, isSubscribedResource, subscriptionIPs, manualIPs, privateTabs, sourceLabel, selectPrivateTab, viewSourceResources, sourceChanged, selectedIP, poolStats, ipStatus, ipBadge, sourceFilter, filteredIPs, nodePoolLabel, expiringUsers, passwordForm, sub, subUser, format, subProtocol, qr, qrError, subLoading, subError, probeResult, detecting, theme, sideCollapsed, viewMode, simpleMode, nodeSearch, nodeProtocol, nodeStatus, publicNodePage, publicSubPage, filteredNodes, toggleTheme, originalExit, exitFingerprint, displayedNodeName, confirmation, owner, defaultRealitySNI, editingDefaultDirect, pendingHY, titles, pageDescriptions, allNavGroups, navGroups, nav, currentGroup, active, userStatus, users, subURL, usage, bytes, date, duration, exitName, refresh, clearSession, removeSessionListener, task, toastTimer, toast, signIn, signOut, go, editUser, saveUser, toggleUser, confirmUser, confirmed, editNode, probe, detectNode, editIP, saveIP, detectIP, deleteIP, selectedIPIDs, selectedNodeIDs, selectableNodes, selectAll, batchAction, saveNode, deleteNode, clearSubscription, loadSub, showSub, copy, downloadSub, download, backup, changePassword, actionName, poll, mounted };
+return { plans,nodeGroups,loadEntitlements,quotaUsed,selectedSite,selectedSiteName,switchSite, api, stateRequest, state, ready, busy, error, notice, page, mobileNav, site, login, userSearch, userFilter, userRole, modal, editingID, userForm, nodeForm, ipForm, speedRunning, qualityRunning, qualityTest, importMode, importForm, importFile, importFileReading, importIssues, importFileContent, importFileSequence, clearPrivateFile, readPrivateFile, importReport, openImport, importSubscription, speedTest, ipSearch, ipType, ipState, ipPool, publicResources, privateTab, privateSources, privateSourcesReady, privateSourcesLoading, privateSourcesError, privateSourcesRequest, receivePrivateSources, loadPrivateSources, publicTab, selectPublicTab, subscriptionResourceIDs, isSubscribedResource, subscriptionIPs, manualIPs, privateTabs, sourceLabel, selectPrivateTab, viewSourceResources, sourceChanged, selectedIP, poolStats, ipStatus, ipBadge, sourceFilter, filteredIPs, nodePoolLabel, expiringUsers, passwordForm, sub, subUser, format, subProtocol, subSource, qr, qrError, subLoading, subError, probeResult, detecting, theme, sideCollapsed, viewMode, simpleMode, nodeSearch, nodeProtocol, nodeStatus, publicNodePage, publicSubPage, filteredNodes, toggleTheme, originalExit, exitFingerprint, displayedNodeName, confirmation, owner, defaultRealitySNI, editingDefaultDirect, pendingHY, titles, pageDescriptions, allNavGroups, navGroups, nav, currentGroup, active, userStatus, users, subURL, usage, bytes, date, duration, exitName, refresh, clearSession, removeSessionListener, task, toastTimer, toast, signIn, signOut, go, editUser, saveUser, toggleUser, confirmUser, confirmed, editNode, probe, detectNode, editIP, saveIP, detectIP, deleteIP, selectedIPIDs, selectedNodeIDs, selectableNodes, selectAll, batchAction, saveNode, deleteNode, clearSubscription, loadSub, showSub, copy, downloadSub, download, backup, changePassword, actionName, poll, mounted };
 }

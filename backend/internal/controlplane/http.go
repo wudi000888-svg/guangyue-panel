@@ -157,7 +157,7 @@ func (a *App) login(w http.ResponseWriter, r *http.Request) {
 	if err != nil || e != nil {
 		hash = []byte("$2a$12$5MJHI2X5oyMlWCDFi.QcEeYZkyCvZcjBrghueRf.T28NiMvIaGH0C")
 	}
-	if bcrypt.CompareHashAndPassword(hash, []byte(input.Password)) != nil || err != nil || e != nil || !record.Enabled {
+	if bcrypt.CompareHashAndPassword(hash, []byte(input.Password)) != nil || err != nil || e != nil || !record.Enabled || record.Mount != nil {
 		failure(w, 401, "账号或密码不正确")
 		return
 	}
@@ -394,9 +394,12 @@ func (a *App) subscriptionInfo(w http.ResponseWriter, r *http.Request, actor Rec
 		return
 	}
 	pool := r.URL.Query().Get("pool")
-	if pool != "" && pool != "private" && pool != "public" {
+	if pool != "" && pool != "private" && pool != "public" && pool != "all" && pool != "local" && pool != "mounted" {
 		failure(w, 400, "订阅池不存在")
 		return
+	}
+	if pool == "" {
+		pool = "private"
 	}
 	public := pool == "public"
 	protocol := r.URL.Query().Get("protocol")
@@ -406,15 +409,23 @@ func (a *App) subscriptionInfo(w http.ResponseWriter, r *http.Request, actor Rec
 	}
 	views := []SubscriptionNode{}
 	lines := []string{}
-	if record.Active() {
-		entries, err := a.subscriptionCatalog(record, public, protocol)
+	if record.Active() && record.Mount == nil {
+		entries, err := a.subscriptionCatalogSource(record, pool, protocol)
 		if err != nil {
 			failure(w, 500, "读取订阅节点失败")
 			return
 		}
 		for _, entry := range entries {
 			n := entry.node
-			views = append(views, SubscriptionNode{MemberNodeQuality: MemberNodeQuality{RateMilli: nodeRate(n), ID: n.ID, Name: entry.name, Protocol: n.Protocol, ProbeIP: n.ProbeIP, Country: n.Country, CountryCode: n.CountryCode, CheckedAt: n.CheckedAt, Quality: memberQualityReport(n)}, URI: entry.uri, DNS: n.DNS, SiteID: entry.siteID, SiteName: entry.siteName})
+			views = append(views, SubscriptionNode{Mounted: entry.mounted, Source: func() string {
+				if entry.mounted {
+					return "mounted"
+				}
+				if n.ManagedBy == publicManager {
+					return "public"
+				}
+				return "local"
+			}(), GroupIDs: authorizedNodeGroups(record, n), MemberNodeQuality: MemberNodeQuality{RateMilli: nodeRate(n), ID: n.ID, Name: entry.name, Protocol: n.Protocol, ProbeIP: n.ProbeIP, Country: n.Country, CountryCode: n.CountryCode, CheckedAt: n.CheckedAt, Quality: memberQualityReport(n)}, URI: entry.uri, DNS: n.DNS, SiteID: entry.siteID, SiteName: entry.siteName})
 			lines = append(lines, entry.uri)
 		}
 	}
@@ -430,7 +441,10 @@ func (a *App) subscriptionInfo(w http.ResponseWriter, r *http.Request, actor Rec
 	if public {
 		address = a.cfg.PublicURL + "/public-sub/" + strconv.FormatInt(record.ID, 10) + "/" + record.Credentials.PublicToken
 	}
-	jsonResponse(w, 200, object{"url": address, "pool": map[bool]string{true: "public", false: "private"}[public], "raw": raw, "nodes": views, "protocol": protocol, "active": record.Active() && (len(views) > 0 || public), "user": record.User})
+	if !public && pool != "private" {
+		address += "?source=" + pool
+	}
+	jsonResponse(w, 200, object{"url": address, "pool": pool, "raw": raw, "nodes": views, "protocol": protocol, "active": record.Active() && (len(views) > 0 || public), "user": record.User})
 }
 func (a *App) serveSubscription(w http.ResponseWriter, r *http.Request) {
 	token := r.PathValue("token")
@@ -453,7 +467,7 @@ func (a *App) serveSubscription(w http.ResponseWriter, r *http.Request) {
 		failure(w, 404, "订阅不存在")
 		return
 	}
-	if !record.Active() {
+	if !record.Active() || record.Mount != nil {
 		failure(w, 403, "账号已停用、到期或额度已用尽")
 		return
 	}
@@ -462,7 +476,17 @@ func (a *App) serveSubscription(w http.ResponseWriter, r *http.Request) {
 		failure(w, 500, "读取节点失败")
 		return
 	}
-	entries, err := a.subscriptionCatalog(record, public, r.URL.Query().Get("protocol"))
+	source := r.URL.Query().Get("source")
+	if public {
+		source = "public"
+	} else if source == "" {
+		source = "private"
+	}
+	if source != "private" && source != "public" && source != "all" && source != "local" && source != "mounted" {
+		failure(w, 400, "订阅来源无效")
+		return
+	}
+	entries, err := a.subscriptionCatalogSource(record, source, r.URL.Query().Get("protocol"))
 	if err != nil {
 		failure(w, 500, "读取订阅节点失败")
 		return
@@ -754,6 +778,25 @@ func (a *App) changeUser(w http.ResponseWriter, r *http.Request, actor Record) {
 		failure(w, 404, "用户不存在")
 		return
 	}
+	if record.Mount != nil {
+		if r.Method != "DELETE" || action != "" {
+			failure(w, 409, "挂载身份仅用于代理；请在配对令牌中管理共享权限")
+			return
+		}
+		record.Enabled = false
+		record.Mount.LeaseUntil = 0
+		record.Mount.NodeIDs = nil
+		if err = a.store.save(&record); err != nil {
+			failure(w, 500, "停用挂载身份失败")
+			return
+		}
+		a.status = "pending"
+		if err = a.reconcile(); err == nil {
+			err = a.settleHYRevocations()
+		}
+		jsonResponse(w, 200, object{"ok": true, "pending": err != nil})
+		return
+	}
 	if record.Archived {
 		failure(w, 409, "账号已归档，历史记录只读")
 		return
@@ -855,6 +898,9 @@ func (a *App) changeUser(w http.ResponseWriter, r *http.Request, actor Record) {
 		record.Credentials.HYGeneration++
 	} else if r.Method == "POST" {
 		switch action {
+		case "rotate-all-sub":
+			record.Credentials.PublicToken = randomToken(32)
+			record.Credentials.Token = randomToken(32)
 		case "rotate-public-sub":
 			record.Credentials.PublicToken = randomToken(32)
 		case "rotate-sub":

@@ -9,6 +9,13 @@ import (
 // No network call occurs when serving a subscription. Only a site's acknowledged
 // policy and scoped credentials enter the catalog; transport secrets stay local.
 func (a *App) subscriptionCatalog(record Record, public bool, protocol string) ([]subscriptionEntry, error) {
+	source := "private"
+	if public {
+		source = "public"
+	}
+	return a.subscriptionCatalogSource(record, source, protocol)
+}
+func (a *App) subscriptionCatalogSource(record Record, source, protocol string) ([]subscriptionEntry, error) {
 	resolved := []Record{record}
 	if err := a.store.resolveAccess(resolved); err != nil {
 		return nil, err
@@ -20,7 +27,7 @@ func (a *App) subscriptionCatalog(record Record, public bool, protocol string) (
 	}
 	selected := []Node{}
 	for _, n := range nodes {
-		if (n.ManagedBy == publicManager) == public {
+		if source == "all" || source == "local" && n.ManagedBy != publicManager || source == "private" && n.ManagedBy != publicManager || source == "public" && n.ManagedBy == publicManager {
 			selected = append(selected, n)
 		}
 	}
@@ -43,6 +50,15 @@ func (a *App) subscriptionCatalog(record Record, public bool, protocol string) (
 		return nil, err
 	}
 	for _, site := range sites {
+		if site.Connection != nil {
+			if source == "all" || source == "mounted" {
+				entries = append(entries, a.mountedSubscriptionEntries(record, site, protocol)...)
+			}
+			continue
+		}
+		if source == "mounted" || source == "local" {
+			continue
+		}
 		if !site.Enabled || site.Info == nil || site.Applied == "" || site.Applied != site.Desired || site.LeaseUntil <= time.Now().Unix() || !a.businessOwnerEnabled(site) {
 			continue
 		}
@@ -72,7 +88,7 @@ func (a *App) subscriptionCatalog(record Record, public bool, protocol string) (
 		remote := businessRecord(record, site.ID, site.SentNodes)
 		selected = nil
 		for _, n := range site.SentNodes {
-			if (n.ManagedBy == publicManager) != public {
+			if source != "all" && (n.ManagedBy == publicManager) != (source == "public") {
 				continue
 			}
 			for _, reported := range site.Reports {
@@ -114,4 +130,53 @@ func (a *App) subscriptionCatalog(record Record, public bool, protocol string) (
 		}
 	}
 	return entries, nil
+}
+
+func (a *App) mountedSubscriptionEntries(record Record, site BusinessSite, protocol string) []subscriptionEntry {
+	m := site.Mount
+	if m == nil || !site.Enabled || site.Removed || m.Catalog.Paused || m.LeaseUntil <= time.Now().Unix() || !a.businessOwnerEnabled(site) {
+		return nil
+	}
+	granted := false
+	for _, g := range site.Grants {
+		if g.UserID == record.ID && (g.Quota == 0 || site.Usage[record.ID].total() < g.Quota) {
+			granted = true
+		}
+	}
+	if !granted {
+		return nil
+	}
+	for _, account := range m.Accounts {
+		if account.UserID != record.ID || account.Generation != mountGeneration(record) {
+			continue
+		}
+		remote := record
+		remote.Credentials = account.Credentials
+		nodes := []Node{}
+		for _, mount := range m.Nodes {
+			n, ok := mountSource(m.Catalog, mount.NodeID)
+			if !ok || !mount.Enabled || !n.Enabled {
+				continue
+			}
+			allowed := false
+			for _, id := range account.NodeIDs {
+				allowed = allowed || id == n.ID
+			}
+			if !allowed {
+				continue
+			}
+			n = mountNodePolicy(mount, n)
+			n.Name = "[挂载·" + site.Name + "] " + n.Name
+			nodes = append(nodes, n)
+		}
+		out := subscriptionEntries(businessConfig(m.Catalog.Info), remote, nodes, protocol)
+		for i := range out {
+			out[i].siteID = site.ID
+			out[i].siteName = site.Name
+			out[i].mounted = true
+			out[i].node.ID = site.ID + "/" + out[i].node.ID
+		}
+		return out
+	}
+	return nil
 }

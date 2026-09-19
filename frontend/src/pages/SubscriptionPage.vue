@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { usePanelContext } from "../composables/panelContext";
 import {quotaUsed,rawPeriodUsed} from "../lib/quota";
-const { state, busy, sub, subUser, format, subProtocol, qr, qrError, subLoading, subError, simpleMode, publicSubPage, owner, userStatus, subURL, bytes, date, go, confirmUser, loadSub, copy, downloadSub } = usePanelContext();
+const { state, busy, sub, subUser, format, subProtocol, subSource, qr, qrError, subLoading, subError,  owner, userStatus, subURL, bytes, date, confirmUser, loadSub, copy, downloadSub } = usePanelContext();
 import { Copy, Download, KeyRound, LoaderCircle, QrCode, RefreshCw } from "lucide-vue-next";
 import { t } from "../i18n";
 import UsageDetails from "../components/UsageDetails.vue";
@@ -13,7 +13,7 @@ import NodeSubscriptionCards from "../NodeSubscriptionCards.vue";
             <div>
               <div class="eyebrow">SUBSCRIPTION</div>
               <h1>
-                {{ publicSubPage ? t("公共订阅") : t("普通订阅") }}
+                {{ t("订阅管理") }}
               </h1>
             </div>
             <select v-if="owner" v-model="subUser" :aria-label="t('订阅成员')">
@@ -22,7 +22,9 @@ import NodeSubscriptionCards from "../NodeSubscriptionCards.vue";
               </option>
             </select>
           </div>
-          <div class="pool-intro"><QrCode :size="21"/><div><strong>{{publicSubPage ? t('公共节点专用订阅') : t('普通节点订阅')}}</strong><p>{{publicSubPage ? t('独立订阅凭据，仅含公共节点；拉黑或剔除后自动更新。公共池为空时，Mihomo 配置使用 REJECT，不回退直连。') : simpleMode ? t('获取已授权的节点配置，将订阅导入客户端即可连接。') : t('仅含普通节点，公共节点使用独立公共订阅地址。')}}</p></div><span v-if="!simpleMode" class="spacer"/><button v-if="!simpleMode" @click="go(publicSubPage ? 'subscription' : 'public-subscription')">{{publicSubPage ? t('普通订阅') : t('公共订阅')}}</button></div>
+          <div class="pool-intro"><QrCode :size="21"/><div><strong>{{t('统一订阅')}}</strong><p>{{t('按节点组权限合并本站、公共和子站挂载节点。挂载节点直接连接子站，名称标注来源。')}}</p></div></div>
+          <label class="sub-source">{{t('订阅包含范围')}}<select v-model="subSource"><option value="all">{{t('全部授权节点')}}</option><option value="local">{{t('本站节点')}}</option><option value="public">{{t('公共节点')}}</option><option value="mounted">{{t('子站挂载节点')}}</option></select></label>
+          <p class="field-help">{{t('范围选择会同时更新节点列表、订阅地址和二维码；旧订阅地址仍保留原范围。')}}</p>
           <p v-if="subError" class="error" role="alert">{{ t(subError) }} <button :disabled="subLoading" @click="loadSub(true)"><RefreshCw :size="14"/>{{t('重试')}}</button></p>
           <div v-if="subLoading && !sub" class="empty" role="status"><LoaderCircle :size="20" class="spin"/> {{t('正在读取订阅节点…')}}</div>
           <template v-if="sub"
@@ -56,7 +58,7 @@ import NodeSubscriptionCards from "../NodeSubscriptionCards.vue";
                 ><strong>{{ date(sub.user.expires) }}</strong>
               </div>
             </div>
-            <div class="quota-detail"><span>{{t("实际周期流量")}} · {{bytes(rawPeriodUsed(sub.user))}}</span><span>{{t("下次重置")}} · {{sub.user.meter?.end?date(sub.user.meter.end):t("不自动重置")}}</span><span>{{t("普通与公共订阅共用账号配额")}}</span></div>
+            <div class="quota-detail"><span>{{t("实际周期流量")}} · {{bytes(rawPeriodUsed(sub.user))}}</span><span>{{t("下次重置")}} · {{sub.user.meter?.end?date(sub.user.meter.end):t("不自动重置")}}</span><span>{{t("所有订阅来源共用账号配额")}}</span></div>
  <UsageDetails :user="sub.user"/><div class="section-head">
               <h2>{{ t("订阅配置") }}</h2>
               <span class="muted">{{
@@ -136,7 +138,7 @@ import NodeSubscriptionCards from "../NodeSubscriptionCards.vue";
             <NodeSubscriptionCards :key="sub.user.id + ':' + sub.pool + ':' + subProtocol" :nodes="sub.nodes" :active="sub.active" :pool="sub.pool" :loading="subLoading" @refresh="loadSub()"/>
             <div v-if="owner" class="subscription-security">
               <h2>{{ t("凭据管理") }}</h2>
-              <button @click="confirmUser(sub.user, publicSubPage ? 'rotate-public-sub' : 'rotate-sub')">
+              <button @click="confirmUser(sub.user, 'rotate-all-sub')">
                 <RefreshCw :size="16" />{{ t("重置订阅地址") }}</button
               ><button
                 class="danger-button"

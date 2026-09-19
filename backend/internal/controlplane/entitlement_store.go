@@ -183,6 +183,14 @@ func (s *Store) resolveAccess(records []Record) error {
 	return nil
 }
 func nodeGroupAllowed(r Record, n Node) bool {
+	if r.Mount != nil {
+		for _, id := range r.Mount.NodeIDs {
+			if id == n.ID {
+				return true
+			}
+		}
+		return false
+	}
 	ids := r.AllowedGroups
 	if !r.AccessResolved && r.CompiledGroups != nil {
 		ids = *r.CompiledGroups
@@ -219,13 +227,9 @@ func (s *Store) validateNodePolicy(n *Node, old *Node) error {
 	if err != nil {
 		return err
 	}
-	scope := "private"
-	if n.ManagedBy == publicManager {
-		scope = "public"
-	}
 	known := map[string]bool{}
 	for _, g := range groups {
-		known[g.ID] = g.Scope == scope
+		known[g.ID] = true
 	}
 	seen := map[string]bool{}
 	for _, id := range n.GroupIDs {
