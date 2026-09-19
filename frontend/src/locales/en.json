@@ -1692,6 +1692,7 @@
   "公共节点组": "Public node groups",
   "普通节点组": "Private node groups",
   "暂无节点权限组，请先在套餐管理中创建。": "No node groups yet. Create one in Plans first.",
+  "暂无可见节点权限组，请在高级模式中开启公共功能或先创建普通节点组。": "No visible node groups. Enable public features in advanced mode or create a regular node group first.",
   "已有公共组授权已保留，专业模式下可编辑。": "Existing public group access is retained and can be edited in professional mode.",
   "调整倍率与分组": "Change rates and groups",
   "修改倍率": "Change multiplier",
