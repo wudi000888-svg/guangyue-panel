@@ -16,9 +16,6 @@ func (a *App) subscriptionCatalog(record Record, public bool, protocol string) (
 	return a.subscriptionCatalogSource(record, source, protocol)
 }
 func (a *App) subscriptionCatalogSource(record Record, source, protocol string) ([]subscriptionEntry, error) {
-	if source == "subsite" {
-		source = "mounted"
-	}
 	resolved := []Record{record}
 	if err := a.store.resolveAccess(resolved); err != nil {
 		return nil, err
@@ -73,7 +70,7 @@ func (a *App) subscriptionCatalogSource(record Record, source, protocol string) 
 	}
 	for _, site := range sites {
 		if site.Connection != nil {
-			if source == "all" || source == "mounted" {
+			if source == "all" || source == "mounted" || source == "subsite" {
 				entries = append(entries, a.mountedSubscriptionEntries(record, site, protocol)...)
 			}
 			continue
