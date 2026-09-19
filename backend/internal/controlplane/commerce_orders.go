@@ -223,8 +223,8 @@ func (a *App) createOrder(w http.ResponseWriter, r *http.Request, actor Record) 
 	}
 	now := time.Now().Unix()
 	action := "purchase"
-	demoEntitlement := actor.Entitlement != nil && actor.Entitlement.PlanID == defaultDemoPlan
-	if actor.Entitlement != nil && !demoEntitlement && (actor.Expires == 0 || actor.Expires > now) {
+	replaceableSystemEntitlement := actor.Entitlement != nil && (actor.Entitlement.PlanID == defaultDemoPlan || actor.Entitlement.PlanID == defaultAdminPlan)
+	if actor.Entitlement != nil && !replaceableSystemEntitlement && (actor.Expires == 0 || actor.Expires > now) {
 		if actor.Entitlement.PlanID != offer.Plan.ID || actor.Entitlement.Version != offer.Plan.Version {
 			return commerceFail(409, "首版仅支持当前套餐同版本续费")
 		}
