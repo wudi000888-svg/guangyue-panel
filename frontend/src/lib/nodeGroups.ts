@@ -1,5 +1,5 @@
 import type {User,GroupMember} from '../types';
-export const userNodeGroups=(u:User):string[]=>u.node_group_ids??u.entitlement?.group_ids??['legacy-private','legacy-public'];
+export const userNodeGroups=(u:User):string[]=>u.entitlement?.group_ids??u.node_group_ids??['legacy-private','legacy-public'];
 export const groupMemberKey=(m:GroupMember)=>[m.source||'',m.site_id,m.node_id].join('/');
 export function filterGroupMembers(members:GroupMember[],search:string,source='all'):GroupMember[]{
  const query=search.trim().toLowerCase();
