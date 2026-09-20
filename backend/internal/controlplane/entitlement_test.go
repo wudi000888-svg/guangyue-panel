@@ -3,6 +3,7 @@ package controlplane
 import (
 	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -38,6 +39,46 @@ func TestPlanPriceRoundTrip(t *testing.T) {
 	plans, e := a.store.plans()
 	if e != nil || len(plans) != 1 || plans[0].Price != 1999 {
 		t.Fatalf("stored plans=%+v err=%v", plans, e)
+	}
+}
+
+func TestPlanAndNodeGroupDeletionHonorsReferences(t *testing.T) {
+	a := testApp(t)
+	owner := testUser(t, a, "owner", "owner")
+	group := NodeGroup{Name: "Temporary group", Description: "delete me", Scope: "private", Enabled: true}
+	w := req(t, a, owner, "POST", "/api/node-groups", group)
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &group); err != nil || group.ID == "" {
+		t.Fatalf("created group=%+v err=%v", group, err)
+	}
+	plan := Plan{Name: "Temporary plan", Quota: 1000, ValidDays: 30, Cycle: "30d", Timezone: "UTC", GroupIDs: []string{group.ID}, VLESS: true}
+	w = req(t, a, owner, "POST", "/api/plans", plan)
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &plan); err != nil {
+		t.Fatal(err)
+	}
+	if w = req(t, a, owner, "DELETE", "/api/node-groups/"+group.ID, nil); w.Code != 200 || !strings.Contains(w.Body.String(), `"deleted":true`) {
+		t.Fatalf("destructive group delete status=%d body=%s", w.Code, w.Body.String())
+	}
+	if w = req(t, a, owner, "DELETE", "/api/plans/"+plan.ID, nil); w.Code != 200 || !strings.Contains(w.Body.String(), `"deleted":true`) {
+		t.Fatalf("plan delete status=%d body=%s", w.Code, w.Body.String())
+	}
+	if w = req(t, a, owner, "DELETE", "/api/node-groups/"+group.ID, nil); w.Code != 404 {
+		t.Fatalf("deleted group second delete status=%d body=%s", w.Code, w.Body.String())
+	}
+	if _, err := a.store.plan(plan.ID); err == nil {
+		t.Fatal("deleted plan still exists")
+	}
+	var count int
+	if err := a.store.db.QueryRow("SELECT COUNT(*) FROM node_groups WHERE id=?", group.ID).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatal("deleted node group still exists")
 	}
 }
 func applyTestEntitlement(t *testing.T, a *App, owner Record, in entitlementRequest) {

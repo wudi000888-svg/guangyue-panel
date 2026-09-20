@@ -599,7 +599,7 @@ func (a *App) password(w http.ResponseWriter, r *http.Request, actor Record) {
 }
 
 func (a *App) admin(w http.ResponseWriter, r *http.Request, actor Record) {
-	if r.URL.Path == "/api/plans" || r.URL.Path == "/api/node-groups" || r.URL.Path == "/api/entitlements/batch" || r.URL.Path == "/api/nodes/policy" {
+	if r.URL.Path == "/api/plans" || strings.HasPrefix(r.URL.Path, "/api/plans/") || r.URL.Path == "/api/node-groups" || strings.HasPrefix(r.URL.Path, "/api/node-groups/") || r.URL.Path == "/api/entitlements/batch" || r.URL.Path == "/api/nodes/policy" {
 		a.entitlementAPI(w, r, actor)
 		return
 	}

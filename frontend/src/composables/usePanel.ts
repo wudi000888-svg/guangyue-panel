@@ -3,7 +3,7 @@ import { download } from "../lib/download";
 import { useAccessStore } from "../stores/access";
 import { useRouter, useRoute } from "vue-router";
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
-import { Mail, Globe2, KeyRound, LayoutDashboard, Database, QrCode, RadioTower, Server, Settings2, Users, Package, Wallet, Ticket, ShoppingBag, Receipt, Gift } from "lucide-vue-next";
+import { Mail, Globe2, KeyRound, LayoutDashboard, Database, QrCode, RadioTower, Server, Settings2, Users, Package, Wallet, Ticket, ShoppingBag, Receipt, Gift, Layers3 } from "lucide-vue-next";
 import { bytes, date, duration, exitName } from "../lib/format";
 import { useSubscription } from "./useSubscription";
 import { useApi, ApiError, downloadBlob, invalidateSession, onSessionExpired, isCancelled, setRemoteSite, getRemoteSite, requestGeneration } from "../lib/api";
@@ -377,6 +377,7 @@ const titles: Record<string, string> = {
   wallet: "账户余额", shop: "购买套餐", orders: "订单管理", tickets: "工单中心", "redeem-codes": "兑换码管理",
   overview: "仪表盘",
   plans: "套餐管理",
+  "node-groups": "节点组",
  users: "用户管理",
   ips: "私有 IP 池",
   public: "公共 IP 池",
@@ -397,7 +398,8 @@ const pageDescriptions: Record<string, string> = {
   clients: "按系统与架构下载客户端，再导入对应格式的面板订阅", monitor: "查看每位用户的活跃连接与实时流量",
   wallet: "查看可用余额、冻结金额与收支明细", shop: "使用站内余额开通或续费套餐", orders: "追踪订单、开通进度与退款状态", tickets: "提交服务问题并跟进处理进度", "redeem-codes": "生成定额兑换码，管理有效期与作废状态",
   overview: "集中查看企业网络用量、出口与运行状态",
-  plans: "管理套餐权益、节点权限组与手动授权",
+  plans: "管理套餐额度、有效期与订阅节点权限",
+  "node-groups": "维护节点分组，供套餐组合本站和子站节点",
  users: "管理成员访问权限、流量配额与有效期",
   ips: "集中维护出口资源，按需分配给接入节点",
   public: "自动发现、筛选和维护全球公开代理出口",
@@ -416,21 +418,18 @@ const pageDescriptions: Record<string, string> = {
 };
 const allNavGroups = computed(() => [
   {id:'workspace',label:t('工作台'),items:[{id:'overview',label:t('仪表盘'),icon:LayoutDashboard},{id:'clients',label:t('客户端中心'),icon:Package},...(owner.value?[{id:'monitor',label:t('实时监控'),icon:RadioTower}]:[])]},
- {id:'access',label:t('成员与权益'),items:[...(owner.value?[{id:'users',label:t('用户管理'),icon:Users},{id:'plans',label:t('套餐管理'),icon:Package}]:[]),{id:'messages',label:t('站内信'),icon:Mail}]},
-  ...(!selectedSite.value?[{id:'commerce',label:t('账户与服务'),items:[{id:'wallet',label:t('账户余额'),icon:Wallet},{id:'shop',label:t('购买套餐'),icon:ShoppingBag},{id:'orders',label:t('订单管理'),icon:Receipt},{id:'tickets',label:t('工单中心'),icon:Ticket},...(owner.value?[{id:'redeem-codes',label:t('兑换码管理'),icon:Gift}]:[])]}]:[]),
-  {id:'business',label:t('业务资源'),items:[...(owner.value?[{id:'ips',label:t('本地 IP 池'),icon:Database},{id:'nodes',label:t('本地节点'),icon:RadioTower},{id:'subsite-nodes',label:t('子站节点'),icon:Globe2}]:[]),{id:'subscription',label:t('订阅管理'),icon:QrCode}]},
-  {id:'public',label:t('公共代理'),items:[...(owner.value?[{id:'public',label:t('公共 IP 池'),icon:Database},{id:'public-nodes',label:t('公共节点'),icon:Globe2},{id:'public-subscription',label:t('公共订阅'),icon:QrCode}]:[])]},
-  ...(owner.value?[{id:'admin',label:t('系统管理'),items:[...(state.value?.system.edition==='pro'&&state.value?.system.role==='controller'&&!getRemoteSite()?[{id:'fleet',label:t('群站管理'),icon:Globe2}]:[]),...(!getRemoteSite()?[{id:'pairing',label:t('配对令牌'),icon:KeyRound}]:[]),{id:'tasks',label:t('任务中心'),icon:Server},{id:'system',label:t('运维状态'),icon:Server},{id:'settings',label:t('系统设置'),icon:Settings2}]}]:[]),
+ {id:'access',label:t('用户与套餐'),items:[...(owner.value?[{id:'users',label:t('用户管理'),icon:Users},{id:'plans',label:t('套餐管理'),icon:Package},{id:'node-groups',label:t('节点组'),icon:Layers3}]:[]),{id:'subscription',label:t('订阅管理'),icon:QrCode},{id:'messages',label:t('站内信'),icon:Mail}]},
+  {id:'resources',label:t('节点与出口'),items:[...(owner.value?[{id:'ips',label:t('本地 IP 池'),icon:Database},{id:'nodes',label:t('本地节点'),icon:RadioTower},{id:'subsite-nodes',label:t('子站节点'),icon:Globe2},{id:'public',label:t('公共 IP 池'),icon:Database},{id:'public-nodes',label:t('公共节点'),icon:Globe2},{id:'public-subscription',label:t('公共订阅'),icon:QrCode}]:[])]},
+  {id:'system',label:t('系统与服务'),items:[...(!selectedSite.value?[{id:'wallet',label:t('账户余额'),icon:Wallet},{id:'shop',label:t('购买套餐'),icon:ShoppingBag},{id:'orders',label:t('订单管理'),icon:Receipt},{id:'tickets',label:t('工单中心'),icon:Ticket},...(owner.value?[{id:'redeem-codes',label:t('兑换码管理'),icon:Gift}]:[])]:[]),...(owner.value&&state.value?.system.edition==='pro'&&state.value?.system.role==='controller'&&!getRemoteSite()?[{id:'fleet',label:t('群站管理'),icon:Globe2}]:[]),...(owner.value&&!getRemoteSite()?[{id:'pairing',label:t('配对令牌'),icon:KeyRound}]:[]),...(owner.value?[{id:'tasks',label:t('任务中心'),icon:Server},{id:'system',label:t('运维状态'),icon:Server},{id:'settings',label:t('系统设置'),icon:Settings2}]:[])]},
 ]);
 const navGroups = computed(() => {
   const hidePublic = simpleMode.value || !publicFeaturesEnabled.value;
   if (!hidePublic && !simpleMode.value) return allNavGroups.value;
   const allowed = new Set(owner.value
-    ? ["overview", "clients", "monitor", "users", "plans", "ips", "nodes", "subsite-nodes", "subscription", "settings", "wallet", "shop", "orders", "tickets", "redeem-codes", "messages", "pairing", "fleet"]
+    ? ["overview", "clients", "monitor", "users", "plans", "node-groups", "ips", "nodes", "subsite-nodes", "subscription", "settings", "wallet", "shop", "orders", "tickets", "redeem-codes", "messages", "pairing", "fleet", "tasks", "system"]
     : ["clients", "subscription", "wallet", "shop", "orders", "tickets", "messages"]);
   return allNavGroups.value
     .map(group => ({ ...group, items: group.items.filter(item => allowed.has(item.id)) }))
-    .filter(group => !hidePublic || group.id !== 'public')
     .filter(group => group.items.length);
 });
 const nav = computed(()=>navGroups.value.flatMap(group=>group.items));
