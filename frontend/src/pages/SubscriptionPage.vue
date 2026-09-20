@@ -6,6 +6,7 @@ import { Copy, Download, KeyRound, LoaderCircle, QrCode, RefreshCw } from "lucid
 import { t } from "../i18n";
 import UsageDetails from "../components/UsageDetails.vue";
 import NodeSubscriptionCards from "../NodeSubscriptionCards.vue";
+const queuedExpiry=(slot:{expires:number;paused_at:number})=>slot.expires?Math.floor(Date.now()/1000)+Math.max(0,slot.expires-slot.paused_at):0;
 </script>
 <template>
 <section v-if="state">
@@ -36,7 +37,7 @@ import NodeSubscriptionCards from "../NodeSubscriptionCards.vue";
                 <div>
                   <strong>{{ sub.user.username }}</strong
                   ><small>{{
-                    sub.user.entitlement?.name || t("独立配置")
+                    sub.user.entitlement?.name || t("暂无套餐")
                   }}</small>
                 </div>
               </div>
@@ -58,6 +59,8 @@ import NodeSubscriptionCards from "../NodeSubscriptionCards.vue";
                 ><strong>{{ date(sub.user.expires) }}</strong>
               </div>
             </div>
+            <div v-if="sub.user.entitlement" class="plan-meta"><span>{{t('套餐版本')}} · v{{sub.user.entitlement.version}}</span><span>{{t('节点组')}} · {{sub.user.entitlement.group_ids.length}}</span><span>{{t('单独节点')}} · {{sub.user.entitlement.node_ids?.length||0}}</span></div>
+            <div v-if="sub.user.plan_queue?.length" class="plan-queue"><strong>{{t('套餐队列')}}</strong><span v-for="slot in [...sub.user.plan_queue].reverse()" :key="slot.entitlement.revision">{{slot.entitlement.name}} · {{slot.expires?date(queuedExpiry(slot)):t('不限')}}</span></div>
             <div class="quota-detail"><span>{{t("实际周期流量")}} · {{bytes(rawPeriodUsed(sub.user))}}</span><span>{{t("下次重置")}} · {{sub.user.meter?.end?date(sub.user.meter.end):t("不自动重置")}}</span><span>{{t("所有订阅来源共用账号配额")}}</span></div>
  <UsageDetails :user="sub.user"/><div class="section-head">
               <h2>{{ t("订阅配置") }}</h2>
@@ -151,5 +154,5 @@ import NodeSubscriptionCards from "../NodeSubscriptionCards.vue";
 </template>
 
 <style scoped>
-.quota-detail{display:flex;flex-wrap:wrap;gap:12px 24px;color:var(--muted);font-size:12px;padding:0 0 20px}.quota-detail span{line-height:1.7}
+.plan-meta,.plan-queue{display:flex;flex-wrap:wrap;gap:8px 18px;color:var(--muted);font-size:12px;padding:12px 0 0}.plan-queue{padding:10px 12px;border:1px solid var(--border);border-radius:9px;background:var(--surface-hover)}.plan-queue strong{color:var(--text)}.quota-detail{display:flex;flex-wrap:wrap;gap:12px 24px;color:var(--muted);font-size:12px;padding:0 0 20px}.quota-detail span{line-height:1.7}
 </style>

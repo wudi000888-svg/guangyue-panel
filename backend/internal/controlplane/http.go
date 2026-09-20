@@ -746,27 +746,27 @@ func (a *App) createUser(w http.ResponseWriter, r *http.Request, actor Record) {
 		failure(w, 500, "读取节点失败")
 		return
 	}
-	record := Record{User: User{Username: input.Username, Role: "user", Enabled: input.Enabled, VLESS: input.VLESS, HY2: input.HY2, Expires: input.Expires, Quota: input.Quota, Created: time.Now().Unix()}, Credentials: Credentials{HY2: randomToken(24), Token: randomToken(32), VLESS: map[string]string{}}, Password: hash}
+	record := Record{User: User{Username: input.Username, Role: "user", Enabled: input.Enabled, Created: time.Now().Unix()}, Credentials: Credentials{HY2: randomToken(24), Token: randomToken(32), VLESS: map[string]string{}}, Password: hash}
 	record.InitMeter("period-"+randomToken(12), record.Created)
 	planID := input.PlanID
-	// New members start with the safe, zero-cost demo package. The explicit
-	// "independent" value keeps the administrator's advanced manual mode.
+	// New members always receive a package.  Omitting one selects the safe,
+	// zero-cost demo package; independent account configuration is removed.
 	if planID == "" {
 		planID = defaultDemoPlan
 	}
-	if planID != "independent" {
-		p, e := a.store.plan(planID)
-		if e != nil && input.PlanID == "" {
-			// Legacy/test stores that predate the bootstrap catalog keep the
-			// original independent-account behavior.
-			planID = "independent"
-		} else if e != nil || p.Archived {
-			failure(w, 400, "套餐不存在或已归档")
-			return
-		} else {
-			assignPlan(&record, p, time.Now().Unix())
+	p, e := a.store.plan(planID)
+	if e != nil && input.PlanID == "" {
+		// Test stores and imported empty sites may not have run the bootstrap
+		// seed yet.  Seed the catalog, then apply the same demo package.
+		if seedErr := a.store.initDefaultPlans(); seedErr == nil {
+			p, e = a.store.plan(planID)
 		}
 	}
+	if e != nil || p.Archived {
+		failure(w, 400, "套餐不存在或已归档")
+		return
+	}
+	assignPlan(&record, p, time.Now().Unix())
 	for _, n := range nodes {
 		if n.Protocol == "vless" {
 			record.Credentials.VLESS[n.ID] = uuid()

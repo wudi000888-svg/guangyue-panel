@@ -37,6 +37,7 @@ type Plan struct {
 	Cycle       string   `json:"cycle"`
 	Timezone    string   `json:"timezone"`
 	GroupIDs    []string `json:"group_ids"`
+	NodeIDs     []string `json:"node_ids"`
 	VLESS       bool     `json:"vless"`
 	HY2         bool     `json:"hy2"`
 	// System plans are seeded by the installation and retained as stable
@@ -314,7 +315,43 @@ func (s *Store) initDefaultPlans() error {
 			return e
 		}
 	}
-	return tx.Commit()
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+	return s.migrateUsersToPlans()
+}
+
+// Existing databases may contain accounts created before package-only access
+// was introduced.  Give those accounts the zero-cost demo package once, so
+// every account has one canonical entitlement and no independent mode remains.
+func (s *Store) migrateUsersToPlans() error {
+	demo, err := s.plan(defaultDemoPlan)
+	if err != nil {
+		return err
+	}
+	admin, err := s.plan(defaultAdminPlan)
+	if err != nil {
+		return err
+	}
+	users, err := s.records()
+	if err != nil {
+		return err
+	}
+	for i := range users {
+		if users[i].Mount != nil || users[i].Entitlement != nil {
+			continue
+		}
+		now := time.Now().Unix()
+		p := demo
+		if users[i].Role == "owner" {
+			p = admin
+		}
+		assignPlan(&users[i], p, now)
+		if err = s.save(&users[i]); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func userNodeGroupIDs(u User) []string {
@@ -358,6 +395,13 @@ func nodeGroupAllowed(r Record, n Node) bool {
 			}
 		}
 		return false
+	}
+	if r.Entitlement != nil {
+		for _, id := range r.Entitlement.NodeIDs {
+			if id == n.ID {
+				return true
+			}
+		}
 	}
 	ids := r.AllowedGroups
 	if !r.AccessResolved && r.CompiledGroups != nil {

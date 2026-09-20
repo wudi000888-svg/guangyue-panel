@@ -7,10 +7,87 @@ import (
 	"time"
 )
 
+func cloneEntitlement(e *domain.Entitlement) *domain.Entitlement {
+	if e == nil {
+		return nil
+	}
+	v := *e
+	v.GroupIDs = append([]string{}, e.GroupIDs...)
+	v.NodeIDs = append([]string{}, e.NodeIDs...)
+	return &v
+}
+
+func cloneMeter(m *domain.QuotaMeter) *domain.QuotaMeter {
+	if m == nil {
+		return nil
+	}
+	v := *m
+	return &v
+}
+
+// pauseCurrentPlan snapshots the complete active package before a purchase
+// switches the user to another package.  The absolute timestamps are kept for
+// auditability; PausedAt lets restoration turn them back into remaining time.
+func pauseCurrentPlan(r *Record, now int64) {
+	if r.Entitlement == nil || r.Expires != 0 && r.Expires <= now {
+		return
+	}
+	slot := domain.PlanSlot{
+		Entitlement: cloneEntitlement(r.Entitlement),
+		Quota:       r.Quota,
+		Expires:     r.Expires,
+		PausedAt:    now,
+		VLESS:       r.VLESS,
+		HY2:         r.HY2,
+		Meter:       cloneMeter(r.Meter),
+	}
+	r.PlanQueue = append(r.PlanQueue, slot)
+}
+
+func restorePreviousPlan(r *Record, now int64) bool {
+	if len(r.PlanQueue) == 0 {
+		return false
+	}
+	slot := r.PlanQueue[len(r.PlanQueue)-1]
+	r.PlanQueue = r.PlanQueue[:len(r.PlanQueue)-1]
+	r.Entitlement = cloneEntitlement(slot.Entitlement)
+	if r.Entitlement == nil {
+		return false
+	}
+	r.NodeGroupIDs = nil
+	r.Quota, r.VLESS, r.HY2 = slot.Quota, slot.VLESS, slot.HY2
+	if slot.Expires == 0 {
+		r.Expires = 0
+	} else {
+		remaining := slot.Expires - slot.PausedAt
+		if remaining < 0 {
+			remaining = 0
+		}
+		r.Expires = now + remaining
+	}
+	r.Meter = cloneMeter(slot.Meter)
+	if r.Meter == nil {
+		r.InitMeter("period-"+randomToken(12), now)
+	} else {
+		if slot.Meter.End > 0 {
+			remaining := slot.Meter.End - slot.PausedAt
+			if remaining < 0 {
+				remaining = 0
+			}
+			r.Meter.End = now + remaining
+		}
+		r.Meter.Start = now
+		r.Meter.PendingReset = false
+	}
+	// Any restoration is a new authorization revision for downstream sites.
+	r.Entitlement.Revision = randomToken(12)
+	return true
+}
+
 func assignPlan(r *Record, p Plan, now int64) {
 	r.NodeGroupIDs = nil
 	r.InitMeter("period-"+randomToken(12), now)
-	r.Entitlement = &domain.Entitlement{PlanID: p.ID, Version: p.Version, Name: p.Name, GroupIDs: append([]string{}, p.GroupIDs...), Cycle: p.Cycle, Timezone: p.Timezone, AssignedAt: now, Revision: randomToken(12)}
+	r.Entitlement = &domain.Entitlement{PlanID: p.ID, Version: p.Version, Name: p.Name, GroupIDs: append([]string{}, p.GroupIDs...), NodeIDs: append([]string{}, p.NodeIDs...), Cycle: p.Cycle, Timezone: p.Timezone, AssignedAt: now, Revision: randomToken(12)}
 	r.Quota, r.VLESS, r.HY2 = p.Quota, p.VLESS, p.HY2
 	r.Expires = 0
 	if p.ValidDays > 0 {

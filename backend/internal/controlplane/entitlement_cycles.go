@@ -48,6 +48,77 @@ func (a *App) advanceQuotaPeriods(now int64) error {
 		} else if pending {
 			continue
 		}
+		// A package purchase pauses the previous package.  Once the active
+		// package expires, revoke its downstream grants and restore the most
+		// recent paused slot before ordinary quota-cycle processing runs.
+		if len(u.PlanQueue) > 0 && u.Expires > 0 && now >= u.Expires {
+			if u.Meter == nil {
+				u.InitMeter("period-"+randomToken(12), now)
+			}
+			if !u.Meter.PendingReset {
+				u.Meter.PendingReset = true
+				if err = a.store.save(&u); err != nil {
+					return err
+				}
+				continue
+			}
+			waiting := false
+			for _, s := range sites {
+				_, issued := s.Issued[u.ID]
+				waiting = waiting || issued || s.IssuedUnlimited[u.ID]
+				for _, g := range s.SentGrants {
+					if g.UserID == u.ID {
+						waiting = true
+					}
+				}
+			}
+			if waiting {
+				continue
+			}
+			if err = a.reconcile(); err != nil {
+				return err
+			}
+			if err = a.collect(); err != nil {
+				return err
+			}
+			if err = a.settleHYRevocations(); err != nil {
+				return err
+			}
+			u, err = a.store.record(u.ID)
+			if err != nil {
+				return err
+			}
+			oldPeriod := ""
+			oldDocument, _ := json.Marshal(u.User)
+			if u.Meter != nil {
+				oldPeriod = u.Meter.PeriodID
+			}
+			if !restorePreviousPlan(&u, now) {
+				continue
+			}
+			tx, e := a.store.db.Begin()
+			if e != nil {
+				return e
+			}
+			if oldPeriod != "" {
+				if _, e = tx.Exec("INSERT INTO quota_periods(user_id,period_id,doc) VALUES(?,?,?) ON CONFLICT(user_id,period_id) DO NOTHING", u.ID, oldPeriod, oldDocument); e != nil {
+					tx.Rollback()
+					return e
+				}
+			}
+			b, _ := json.Marshal(u.User)
+			if _, e = tx.Exec("UPDATE users SET doc=? WHERE id=?", b, u.ID); e != nil {
+				tx.Rollback()
+				return e
+			}
+			if e = tx.Commit(); e != nil {
+				return e
+			}
+			if err = a.reconcile(); err != nil {
+				return err
+			}
+			continue
+		}
 		if u.Meter == nil {
 			continue
 		}

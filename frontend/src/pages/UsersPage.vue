@@ -11,10 +11,10 @@ import { usePagination } from "../composables/usePagination";
 import ListTable from "../components/ListTable.vue";
 const localUsers=computed(()=>(state.value?.users||[]).filter(u=>!u.mount_access));
 onMounted(()=>loadEntitlements());
-const groupLabel=(u:User)=>userNodeGroups(u).map(id=>nodeGroups.value.find(g=>g.id===id)?.name||id).join('、')||t('无节点权限');
+const groupLabel=(u:User)=>{const groups=userNodeGroups(u).map(id=>nodeGroups.value.find(g=>g.id===id)?.name||id);const nodes=(u.entitlement?.node_ids||[]).map(id=>state.value?.nodes.find(n=>n.id===id)?.name||id);return [...groups,...nodes].join('、')||t('无节点权限');};
 const selected=ref<number[]>([]),entitlementUsers=ref<User[]>([]),planFilter=ref('all');
 const planOptions=computed(()=>[...new Map(localUsers.value.filter(u=>u.entitlement).map(u=>[u.entitlement!.plan_id,u.entitlement!.name])).entries()]);
-const visibleUsers=computed(()=>users.value.filter(u=>planFilter.value==='all'||(planFilter.value==='independent'?!u.entitlement:u.entitlement?.plan_id===planFilter.value)));
+const visibleUsers=computed(()=>users.value.filter(u=>planFilter.value==='all'||u.entitlement?.plan_id===planFilter.value));
 const {page:listPage,pages:listPages,rows:listRows}=usePagination(visibleUsers);
 const allSelected=computed(()=>!!visibleUsers.value.length&&visibleUsers.value.every(u=>selected.value.includes(u.id)));
 function toggleAll(){selected.value=allSelected.value?[]:visibleUsers.value.filter(u=>!u.archived).map(u=>u.id);}
@@ -67,7 +67,7 @@ function editEntitlements(){entitlementUsers.value=localUsers.value.filter(u=>!u
               <option value="all">{{ t("全部角色") }}</option>
               <option value="owner">{{ t("管理员") }}</option>
               <option value="user">{{ t("企业成员") }}</option></select
-            ><select v-model="planFilter" :aria-label="t('套餐筛选')"><option value="all">{{t("全部套餐")}}</option><option value="independent">{{t("独立配置")}}</option><option v-for="[id,name] in planOptions" :key="id" :value="id">{{name}}</option></select><span class="spacer"></span
+            ><select v-model="planFilter" :aria-label="t('套餐筛选')"><option value="all">{{t("全部套餐")}}</option><option v-for="[id,name] in planOptions" :key="id" :value="id">{{name}}</option></select><span class="spacer"></span
             ><span class="muted">{{ visibleUsers.length }}{{ t("位成员") }}</span>
           </div>
           <div v-if="selected.length" class="batch-toolbar"><strong>{{t("已选择")}} {{selected.length}}</strong><button class="primary" :disabled="busy" @click="editEntitlements"><Package :size="15"/>{{t("批量设置权益")}}</button><button @click="selected=[]">{{t("清空选择")}}</button></div>
@@ -100,7 +100,7 @@ function editEntitlements(){entitlementUsers.value=localUsers.value.filter(u=>!u
                       </div>
                     </div>
                   </td>
-                  <td :data-label="t('套餐与节点')"><strong>{{u.entitlement?.name||t("独立配置")}}</strong><small v-if="u.entitlement">v{{u.entitlement.version}}</small><small class="user-groups">{{groupLabel(u)}}</small><small v-if="u.meter?.end">{{t("下次重置")}} · {{date(u.meter.end)}}</small></td>
+                  <td :data-label="t('套餐与节点')"><strong>{{u.entitlement?.name||t("暂无套餐")}}</strong><small v-if="u.entitlement">v{{u.entitlement.version}}</small><small class="user-groups">{{groupLabel(u)}}</small><small v-if="u.meter?.end">{{t("下次重置")}} · {{date(u.meter.end)}}</small><small v-if="u.plan_queue?.length">{{t("排队套餐")}} · {{u.plan_queue.length}}</small></td>
  <td :data-label="t('状态')">
                     <span
                       :class="['badge', active(u) ? 'success' : 'danger']"
