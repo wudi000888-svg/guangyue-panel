@@ -36,6 +36,7 @@ type User struct {
 	CompiledGroups *[]string    `json:"compiled_groups,omitempty"`
 	Meter          *QuotaMeter  `json:"meter,omitempty"`
 	Entitlement    *Entitlement `json:"entitlement,omitempty"`
+	PlanQueue      []PlanSlot   `json:"plan_queue,omitempty"`
 }
 
 func (u User) Active() bool {

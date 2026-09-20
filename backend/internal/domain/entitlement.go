@@ -31,10 +31,25 @@ type Entitlement struct {
 	Version    int      `json:"version"`
 	Name       string   `json:"name"`
 	GroupIDs   []string `json:"group_ids"`
+	NodeIDs    []string `json:"node_ids"`
 	Cycle      string   `json:"cycle"`
 	Timezone   string   `json:"timezone"`
 	AssignedAt int64    `json:"assigned_at"`
 	Revision   string   `json:"revision"`
+}
+
+// PlanSlot is a paused entitlement.  Purchasing another package activates it
+// immediately while preserving the exact remaining lifetime, quota baseline,
+// protocol permissions and node selection of the previous package.  Slots are
+// restored in LIFO order, so A -> B -> C returns to B and then A.
+type PlanSlot struct {
+	Entitlement *Entitlement `json:"entitlement"`
+	Quota       int64        `json:"quota"`
+	Expires     int64        `json:"expires"`
+	PausedAt    int64        `json:"paused_at"`
+	VLESS       bool         `json:"vless"`
+	HY2         bool         `json:"hy2"`
+	Meter       *QuotaMeter  `json:"meter,omitempty"`
 }
 
 func (u User) QuotaUpload() int64 {

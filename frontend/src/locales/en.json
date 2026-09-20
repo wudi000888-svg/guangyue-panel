@@ -2298,5 +2298,14 @@
   "本地节点出口地区": "Local node exit regions",
   "本地订阅节点质量": "Local subscription node quality",
   "暂无已授权的本地节点": "No authorized local nodes",
-  "本站本地节点": "This site's local nodes"
+  "本站本地节点": "This site's local nodes",
+  "暂无套餐": "No plan",
+  "排队套餐": "Queued plans",
+  "套餐队列": "Plan queue",
+  "单独节点": "Individual nodes",
+  "暂无可选节点": "No selectable nodes",
+  "按套餐自动授权": "Automatic plan authorization",
+  "节点组和单独节点共同决定订阅内容": "Node groups and individual nodes define the subscription together",
+  "套餐统一决定账号额度、有效期和节点组，也可以精确选择单独节点。": "Plans define account quota, validity, and node groups, with optional individual node selection.",
+  "更换套餐会立即启用新套餐；当前套餐剩余时间和节点权益会排队，当前套餐到期后自动恢复。": "The new plan starts immediately; the current plan's remaining time and node access are queued and restored when the new plan ends."
 }

@@ -569,7 +569,7 @@ function editUser(u?: User) {
  void loadEntitlements();
   editingID.value = u?.id || 0;
   Object.assign(userForm, {
- plan_id:u?.entitlement?.plan_id||"",
+ plan_id:u?.entitlement?.plan_id||plans.value.find(p=>p.kind==='demo'&&!p.archived)?.id||"",
     username: u?.username || "",
     password: "",
     enabled: u?.enabled ?? true,

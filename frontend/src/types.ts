@@ -3,16 +3,18 @@ import type { SubscriptionNode } from "./NodeSubscriptionCards.vue";
 import type { SiteSettings } from "./PanelSettings.vue";
 
 export type QuotaMeter = {period_id:string;start:number;end:number;pending_reset:boolean;upload:number;download:number;base_upload:number;base_download:number;raw_base_upload:number;raw_base_download:number};
-export type Entitlement = {plan_id:string;version:number;name:string;group_ids:string[];cycle:string;timezone:string;assigned_at:number;revision:string};
-export type Plan = {id:string;version:number;name:string;description:string;category:string;notes:string;archived:boolean;sort:number;quota:number;valid_days:number;cycle:string;timezone:string;group_ids:string[];vless:boolean;hy2:boolean;price?:string;system?:boolean;kind?:string};
+export type Entitlement = {plan_id:string;version:number;name:string;group_ids:string[];node_ids:string[];cycle:string;timezone:string;assigned_at:number;revision:string};
+export type PlanSlot = {entitlement:Entitlement;quota:number;expires:number;paused_at:number;vless:boolean;hy2:boolean;meter?:QuotaMeter};
+export type Plan = {id:string;version:number;name:string;description:string;category:string;notes:string;archived:boolean;sort:number;quota:number;valid_days:number;cycle:string;timezone:string;group_ids:string[];node_ids:string[];vless:boolean;hy2:boolean;price?:string;system?:boolean;kind?:string};
 export type NodeGroup = {id:string;name:string;description:string;scope:'private'|'public'|'subsite';enabled:boolean;sort:number;revision:string};
 export type GroupMember = {site_id:string;site_name?:string;source?:'local'|'public'|'mounted'|'business';node_id:string;name:string;protocol:string;entry_host?:string;entry_port?:number;exit_ip?:string;enabled?:boolean;status?:'ready'|'disabled'|'pending';rate_milli?:number};
 export type User = {
  node_group_ids?:string[];
  mount_access?: {token_id:string;user_id:number};
  archived?: boolean;
-  meter?:QuotaMeter;
+ meter?:QuotaMeter;
   entitlement?:Entitlement;
+  plan_queue?:PlanSlot[];
   id: number;
   username: string;
   role: string;

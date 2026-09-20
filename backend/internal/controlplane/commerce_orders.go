@@ -73,6 +73,9 @@ func userCommerceVersion(u Record) string {
 		period = u.Meter.PeriodID
 	}
 	v := object{"entitlement": u.Entitlement, "quota": u.Quota, "expires": u.Expires, "enabled": u.Enabled, "vless": u.VLESS, "hy2": u.HY2, "period": period}
+	if len(u.PlanQueue) > 0 {
+		v["plan_queue"] = u.PlanQueue
+	}
 	if u.NodeGroupIDs != nil {
 		v["node_group_ids"] = u.NodeGroupIDs
 	}
@@ -273,11 +276,7 @@ func (a *App) createOrder(w http.ResponseWriter, r *http.Request, actor Record) 
 	}
 	now := time.Now().Unix()
 	action := "purchase"
-	replaceableSystemEntitlement := actor.Entitlement != nil && (actor.Entitlement.PlanID == defaultDemoPlan || actor.Entitlement.PlanID == defaultAdminPlan)
-	if actor.Entitlement != nil && !replaceableSystemEntitlement && (actor.Expires == 0 || actor.Expires > now) {
-		if actor.Entitlement.PlanID != offer.Plan.ID || actor.Entitlement.Version != offer.Plan.Version {
-			return commerceFail(409, "首版仅支持当前套餐同版本续费")
-		}
+	if actor.Entitlement != nil && (actor.Expires == 0 || actor.Expires > now) && actor.Entitlement.PlanID == offer.Plan.ID && actor.Entitlement.Version == offer.Plan.Version {
 		if actor.Expires == 0 || offer.Plan.ValidDays == 0 {
 			return commerceFail(409, "永久权益无需续费")
 		}
@@ -662,6 +661,7 @@ func (a *App) fulfilOrder(o Order, now int64) error {
 		} else {
 			oldDoc := jsonBytes(u.User)
 			oldPeriod := u.Meter.PeriodID
+			pauseCurrentPlan(&u, now)
 			assignPlan(&u, o.Offer.Plan, now)
 			m := u.Meter
 			m.PeriodID = serial("GYCYCLE")
@@ -794,9 +794,13 @@ func cloneCommerceUser(u Record) Record {
 		m := *u.Meter
 		u.Meter = &m
 	}
-	if u.Entitlement != nil {
-		p := *u.Entitlement
-		u.Entitlement = &p
+	u.Entitlement = cloneEntitlement(u.Entitlement)
+	if len(u.PlanQueue) > 0 {
+		u.PlanQueue = append([]domain.PlanSlot{}, u.PlanQueue...)
+		for i := range u.PlanQueue {
+			u.PlanQueue[i].Entitlement = cloneEntitlement(u.PlanQueue[i].Entitlement)
+			u.PlanQueue[i].Meter = cloneMeter(u.PlanQueue[i].Meter)
+		}
 	}
 	return u
 }

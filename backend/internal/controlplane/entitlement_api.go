@@ -239,8 +239,8 @@ func (a *App) validatePlan(p *Plan) error {
 	if p.Cycle == "" {
 		p.Cycle = "none"
 	}
-	if p.Sort < 0 || p.Sort > 9999 || p.Name == "" || len(p.Name) > 100 || len(p.Description) > 2000 || len(p.Category) > 100 || len(p.Notes) > 2000 || p.Quota < 0 || p.Quota > 1<<60 || p.Price < 0 || p.Price > moneyLimit || p.ValidDays < 0 || p.ValidDays > 36500 || !p.VLESS && !p.HY2 || len(p.GroupIDs) == 0 {
-		return errors.New("请填写有效的套餐名称、额度、有效期、协议和节点组")
+	if p.Sort < 0 || p.Sort > 9999 || p.Name == "" || len(p.Name) > 100 || len(p.Description) > 2000 || len(p.Category) > 100 || len(p.Notes) > 2000 || p.Quota < 0 || p.Quota > 1<<60 || p.Price < 0 || p.Price > moneyLimit || p.ValidDays < 0 || p.ValidDays > 36500 || !p.VLESS && !p.HY2 || len(p.GroupIDs) == 0 && len(p.NodeIDs) == 0 {
+		return errors.New("请填写有效的套餐名称、额度、有效期、协议和节点权限")
 	}
 	if _, err := domain.NextPeriod(time.Now().Unix(), p.Cycle, p.Timezone); err != nil {
 		return errors.New("配额周期或时区无效")
@@ -261,6 +261,22 @@ func (a *App) validatePlan(p *Plan) error {
 		seen[id] = true
 	}
 	sort.Strings(p.GroupIDs)
+	nodes, err := a.store.nodes()
+	if err != nil {
+		return err
+	}
+	knownNodes := map[string]bool{}
+	for _, n := range nodes {
+		knownNodes[n.ID] = true
+	}
+	seenNodes := map[string]bool{}
+	for _, id := range p.NodeIDs {
+		if !knownNodes[id] || seenNodes[id] {
+			return errors.New("套餐单独节点不存在或重复")
+		}
+		seenNodes[id] = true
+	}
+	sort.Strings(p.NodeIDs)
 	return nil
 }
 
@@ -285,7 +301,7 @@ func (a *App) entitlementBatch(w http.ResponseWriter, r *http.Request, actor Rec
 	if !decode(w, r, &in) {
 		return
 	}
-	if len(in.IDs) == 0 || len(in.IDs) > 100 || in.Action != "groups" && in.Action != "assign" && in.Action != "renew" && in.Action != "reset" && in.Action != "independent" && in.Action != "disable" {
+	if len(in.IDs) == 0 || len(in.IDs) > 100 || in.Action != "groups" && in.Action != "assign" && in.Action != "renew" && in.Action != "reset" && in.Action != "disable" {
 		failure(w, 400, "请选择用户和有效的权益操作")
 		return
 	}
@@ -421,7 +437,7 @@ func (a *App) entitlementBatch(w http.ResponseWriter, r *http.Request, actor Rec
 			u.NodeGroupIDs = &ids
 		case "assign":
 			u.NodeGroupIDs = nil
-			u.Entitlement = &domain.Entitlement{PlanID: plan.ID, Version: plan.Version, Name: plan.Name, GroupIDs: append([]string{}, plan.GroupIDs...), Cycle: plan.Cycle, Timezone: plan.Timezone, AssignedAt: time.Now().Unix(), Revision: randomToken(12)}
+			u.Entitlement = &domain.Entitlement{PlanID: plan.ID, Version: plan.Version, Name: plan.Name, GroupIDs: append([]string{}, plan.GroupIDs...), NodeIDs: append([]string{}, plan.NodeIDs...), Cycle: plan.Cycle, Timezone: plan.Timezone, AssignedAt: time.Now().Unix(), Revision: randomToken(12)}
 			u.Quota, u.VLESS, u.HY2 = plan.Quota, plan.VLESS, plan.HY2
 			u.Expires = 0
 			if plan.ValidDays > 0 {
@@ -436,10 +452,6 @@ func (a *App) entitlementBatch(w http.ResponseWriter, r *http.Request, actor Rec
 			u.Expires = max(time.Now().Unix(), u.Expires) + int64(in.Days)*86400
 		case "reset":
 			u.Meter.PendingReset = true
-		case "independent":
-			u.NodeGroupIDs = nil
-			u.Entitlement = nil
-			u.Meter.End = 0
 		case "disable":
 			u.Enabled = false
 		}
