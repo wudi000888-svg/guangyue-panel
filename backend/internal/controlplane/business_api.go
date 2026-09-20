@@ -41,6 +41,11 @@ func (a *App) businessAPI(w http.ResponseWriter, r *http.Request, actor Record) 
 		a.importSubsite(w, r, actor)
 		return
 	}
+	parts := strings.Split(strings.TrimPrefix(path, "/"), "/")
+	if len(parts) == 2 && parts[0] != "" && parts[1] == "egress-pool" {
+		a.subsiteEgressAPI(w, r, actor, parts[0])
+		return
+	}
 	if a.directSiteAPI(w, r, actor, path) {
 		return
 	}
@@ -111,7 +116,6 @@ func (a *App) businessAPI(w http.ResponseWriter, r *http.Request, actor Record) 
 		jsonResponse(w, 201, object{"site": v.public(), "connection": connection, "enrollment": object{"site_id": v.ID, "controller_url": a.cfg.PublicURL, "enrollment_token": token}, "expires": v.EnrollmentExpires})
 		return
 	}
-	parts := strings.Split(strings.TrimPrefix(path, "/"), "/")
 	if len(parts) < 1 || parts[0] == "" {
 		failure(w, 404, "业务站不存在")
 		return

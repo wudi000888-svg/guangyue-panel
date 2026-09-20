@@ -23,7 +23,7 @@ onMounted(()=>{void load();poll.start();});onUnmounted(()=>{disposed=true;poll.s
 </script>
 <template>
 <section class="subsite-pools">
- <div class="resource-section-heading"><div><h2>{{t('子站 IP 池')}}</h2><p>{{t('把子站节点分配给主站用户，客户端直接连接子站。无需先创建套餐。')}}</p></div><div class="pool-actions"><button @click="load"><RefreshCw :size="15"/>{{t('刷新')}}</button><button class="primary" @click="adding=true"><Plus :size="15"/>{{t('导入子站令牌')}}</button></div></div>
+ <div class="resource-section-heading"><div><h2>{{t('子站节点池')}}</h2><p>{{t('挂载后客户端直接连接子站，流量不经过主站。子站节点与子站 IP 池是两种独立的出口方式。')}}</p></div><div class="pool-actions"><button @click="load"><RefreshCw :size="15"/>{{t('刷新')}}</button><button class="primary" @click="adding=true"><Plus :size="15"/>{{t('导入子站令牌')}}</button></div></div>
  <ol class="pool-steps"><li>{{t('导入子站令牌')}}</li><li>{{t('勾选需要的节点')}}</li><li>{{t('保存并分配用户')}}</li></ol>
  <p v-if="error&&!adding" class="error" role="alert">{{t(error)}}</p>
  <div class="pool-links"><button @click="go('users')">{{t('用户管理')}}</button><button @click="go('plans?tab=groups')">{{t('查看节点分组')}}</button><button @click="go('subscription')">{{t('订阅管理')}}</button><button @click="go('fleet')">{{t('子站管理与调度')}}</button></div>

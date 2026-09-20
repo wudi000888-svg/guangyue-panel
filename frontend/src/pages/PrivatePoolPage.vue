@@ -3,7 +3,7 @@ import { usePanelContext } from "../composables/panelContext";
 const { canMountSubsites,state, busy, speedRunning, qualityRunning, qualityTest, importReport, openImport, speedTest, ipSearch, ipType, ipState, privateTab, privateSourcesReady, privateSourcesLoading, privateSourcesError, receivePrivateSources, loadPrivateSources, isSubscribedResource, privateTabs, sourceLabel, selectPrivateTab, viewSourceResources, sourceChanged, poolStats, ipStatus, ipBadge, sourceFilter, filteredIPs, detecting, date, exitName, go, editIP, detectIP, deleteIP, selectedIPIDs, selectAll, batchAction } = usePanelContext();
 import { ArrowUpRight, Download, Gauge, LoaderCircle, Database, Pencil, Plus, RefreshCw, Search, Trash2, X } from "lucide-vue-next";
 import { t } from "../i18n";
-import SubsitePoolOverview from "../components/SubsitePoolOverview.vue";
+import SubsiteIPPoolOverview from "../components/SubsiteIPPoolOverview.vue";
 import ImportSources from "../ImportSources.vue";
 import ResourceTabs from "../ResourceTabs.vue";
 import CountryMark from "../CountryMark.vue";
@@ -16,7 +16,7 @@ const {page:listPage,pages:listPages,rows:listRows}=usePagination(filteredIPs);
 <template>
 <section v-if="state" class="private-pool-page">
           <div class="page-heading">
-            <div><h1>{{ t("私有 IP 池") }}</h1><p class="resource-page-description">{{t("按来源管理企业出口，统一检测与分配")}}</p></div>
+            <div><h1>{{ t("本地 IP 池") }}</h1><p class="resource-page-description">{{t("按来源管理本地主机出口，统一检测与分配")}}</p></div>
             <div v-if="privateTab!=='subsites'" class="heading-actions">
               <button @click="openImport()">
                 <Download :size="17" />{{ t("导入订阅 / 节点") }}</button
@@ -41,7 +41,7 @@ const {page:listPage,pages:listPages,rows:listRows}=usePagination(filteredIPs);
           </div>
           <ResourceTabs id="private-pool" :model-value="privateTab" :items="privateTabs" :label="t('私有 IP 池分类')" @update:model-value="selectPrivateTab"/>
           <div id="private-pool-panel" role="tabpanel" :aria-labelledby="'private-pool-tab-' + privateTab">
-          <SubsitePoolOverview v-if="privateTab==='subsites'&&canMountSubsites"/>
+          <SubsiteIPPoolOverview v-if="privateTab==='subsites'&&canMountSubsites"/>
           <ImportSources v-else-if="privateTab === 'sources'" embedded @refresh="sourceChanged" @resources="viewSourceResources" @loaded="receivePrivateSources"/>
           <div v-else-if="!privateSourcesReady" class="resource-membership-state" :aria-busy="privateSourcesLoading" role="status"><LoaderCircle v-if="privateSourcesLoading" :size="23" class="spin"/><Database v-else :size="23"/><h2>{{privateSourcesLoading ? t('正在确认出口来源…') : t('暂时无法确认出口分类')}}</h2><p>{{privateSourcesLoading ? t('读取订阅关联后展示出口分类，避免将订阅出口误列为独立出口。') : t(privateSourcesError)}}</p><button v-if="!privateSourcesLoading" @click="loadPrivateSources"><RefreshCw :size="14"/>{{t('重新读取来源')}}</button><button class="text-button" @click="selectPrivateTab('sources')">{{t('管理订阅来源')}}</button></div>
           <template v-else>

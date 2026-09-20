@@ -106,6 +106,47 @@ func (a *App) mountGateway(w http.ResponseWriter, r *http.Request, actor Record,
 		jsonResponse(w, 200, catalog)
 		return
 	}
+	if r.Method == "POST" && r.URL.Path == "/api/node-pool/egress" {
+		var in struct {
+			NodeID string `json:"node_id"`
+		}
+		if !decodeBusiness(w, r, &in) || in.NodeID == "" {
+			return
+		}
+		n, ok := mountSource(catalog, in.NodeID)
+		if !ok || !shareAllowsNode(catalog, in.NodeID) || !n.Enabled {
+			failure(w, 404, "子站出口节点不存在或未共享")
+			return
+		}
+		// The child owner is used only as a transport identity. Its panel
+		// permissions and local account remain unchanged; the returned proxy
+		// object is stored encrypted on the master as a normal subscription
+		// egress resource.
+		owner, err := a.store.record(actor.ID)
+		if err != nil || owner.Role != "owner" {
+			failure(w, 403, "子站管理员身份无效")
+			return
+		}
+		owner.AccessResolved = true
+		owner.AllowedGroups = append([]string{}, n.GroupIDs...)
+		if owner.Credentials.VLESS == nil {
+			owner.Credentials.VLESS = map[string]string{}
+		}
+		if n.Protocol == "vless" && owner.Credentials.VLESS[n.ID] == "" {
+			owner.Credentials.VLESS[n.ID] = uuid()
+			if err = a.store.save(&owner); err != nil {
+				failure(w, 500, "保存子站出口身份失败")
+				return
+			}
+		}
+		entries := subscriptionEntries(a.cfg, owner, []Node{n}, n.Protocol)
+		if len(entries) != 1 || entries[0].proxy == nil {
+			failure(w, 409, "子站节点暂时无法生成中转出口")
+			return
+		}
+		jsonResponse(w, 200, object{"node_id": n.ID, "name": n.Name, "protocol": n.Protocol, "probe_ip": n.ProbeIP, "country": n.Country, "country_code": n.CountryCode, "proxy": entries[0].proxy})
+		return
+	}
 	if r.Method != "POST" || r.URL.Path != "/api/node-mounts/sync" {
 		failure(w, 404, "接口不存在")
 		return
@@ -120,6 +161,15 @@ func (a *App) mountGateway(w http.ResponseWriter, r *http.Request, actor Record,
 		return
 	}
 	jsonResponse(w, 200, out)
+}
+
+func shareAllowsNode(catalog MountCatalog, nodeID string) bool {
+	for _, n := range catalog.Nodes {
+		if n.ID == nodeID {
+			return true
+		}
+	}
+	return false
 }
 func (a *App) applyMountSync(tokenID string, in MountSync, catalog MountCatalog) (MountResult, error) {
 	out := MountResult{Sequence: in.Sequence, Accounts: []MountAccount{}, Usage: map[int64]BusinessUsage{}, NodeUsage: []NodeUsage{}}

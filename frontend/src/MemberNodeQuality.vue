@@ -34,13 +34,13 @@ onUnmounted(()=>{mounted=false;request?.abort();clearTimeout(timer)});
 
 <template>
  <section class="member-quality" :aria-label="t('已授权节点质量')" :aria-busy="loading">
-  <header class="member-quality-heading"><div><span class="member-quality-eyebrow"><ShieldCheck :size="13"/>{{t('节点质量')}}</span><h2>{{t(pool==='public'?'公共订阅节点质量':'普通订阅节点质量')}}</h2><p>{{t('查看已授权节点的出口、风险标签和检测报告。')}}</p></div><button class="text-button" :disabled="loading" @click="load()"><RefreshCw :size="14" :class="{spin:loading}"/>{{t('刷新报告')}}</button></header>
+  <header class="member-quality-heading"><div><span class="member-quality-eyebrow"><ShieldCheck :size="13"/>{{t('节点质量')}}</span><h2>{{t(pool==='public'?'公共订阅节点质量':'本地订阅节点质量')}}</h2><p>{{t('查看已授权节点的出口、风险标签和检测报告。')}}</p></div><button class="text-button" :disabled="loading" @click="load()"><RefreshCw :size="14" :class="{spin:loading}"/>{{t('刷新报告')}}</button></header>
   <div class="member-quality-summary"><span>{{t('已授权节点')}}<strong>{{reports?.nodes.length??'—'}}</strong></span><span>{{t('已有报告')}}<strong>{{reports?completed:'—'}}</strong></span><span class="member-quality-readonly"><ShieldCheck :size="13"/>{{t('只读报告')}}</span></div>
   <div v-if="error" class="member-quality-empty" role="alert"><FileSearch :size="28"/><h3>{{t('暂时无法读取报告')}}</h3><p>{{t(error)}}</p><button @click="load()">{{t('重新读取')}}</button></div>
   <div v-else-if="!reports" class="member-quality-empty" role="status"><LoaderCircle :size="25" class="spin"/><p>{{t('正在读取节点质量…')}}</p></div>
   <template v-else>
    <div v-if="!reports.active" class="member-quality-empty"><ShieldCheck :size="30"/><h3>{{t('当前账号暂无可用节点')}}</h3><p>{{t('请检查账号有效期和流量额度，或联系管理员。')}}</p></div>
-   <div v-else-if="!reports.nodes.length" class="member-quality-empty"><FileSearch :size="30"/><h3>{{t(pool==='public'?'暂无已授权的公共节点':'暂无已授权的普通节点')}}</h3><p>{{t('可用节点更新后，质量报告会在这里显示。')}}</p></div>
+   <div v-else-if="!reports.nodes.length" class="member-quality-empty"><FileSearch :size="30"/><h3>{{t(pool==='public'?'暂无已授权的公共节点':'暂无已授权的本地节点')}}</h3><p>{{t('可用节点更新后，质量报告会在这里显示。')}}</p></div>
    <template v-else>
     <label v-if="reports.nodes.length>3" class="member-quality-search"><span>{{t('筛选节点')}}</span><input v-model="search" type="search" :placeholder="t('搜索名称、IP、国家或协议')"/></label>
     <div class="member-quality-grid"><article v-for="node in visibleNodes" :key="node.id" class="member-quality-card"><header><CountryMark :code="node.country_code" :country="node.country"/><div><h3>{{node.name}}</h3><p>{{node.probe_ip||t('出口待确认')}}</p></div><span class="badge neutral">{{node.protocol==='hy2'?'HY2':'VLESS'}}</span></header><QualityTags :value="node.quality||undefined" :name="node.name" read-only/><footer><Clock3 :size="12"/><span>{{t('报告时间')}} · {{date(node.quality?.at||0)}}</span></footer></article></div>

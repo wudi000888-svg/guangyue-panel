@@ -174,26 +174,82 @@ func (s *Store) initEntitlements() error {
 // disabled group, recreate an intentionally deleted one, or widen user access.
 func (s *Store) initSubsiteGroup() error {
 	done, err := s.readMeta("subsite_group_v1")
-	if err != nil || done == "1" {
-		return err
-	}
-	tx, err := s.db.Begin()
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
-	g := NodeGroup{ID: defaultSubsiteGroup, Name: "默认子站节点组", Description: "挂载子站节点后，将本组分配给用户或套餐即可使用。", Scope: "subsite", Enabled: true, Sort: 2, Revision: "1"}
-	b, err := json.Marshal(g)
+	if done != "1" {
+		tx, err := s.db.Begin()
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+		g := NodeGroup{ID: defaultSubsiteGroup, Name: "默认子站节点组", Description: "挂载子站节点后，将本组分配给用户或套餐即可使用。", Scope: "subsite", Enabled: true, Sort: 2, Revision: "1"}
+		b, err := json.Marshal(g)
+		if err != nil {
+			return err
+		}
+		if _, err = tx.Exec("INSERT INTO node_groups(id,doc) VALUES(?,?) ON CONFLICT(id) DO NOTHING", g.ID, b); err != nil {
+			return err
+		}
+		if _, err = tx.Exec("INSERT INTO meta(key,value) VALUES('subsite_group_v1','1') ON CONFLICT(key) DO UPDATE SET value=excluded.value"); err != nil {
+			return err
+		}
+		if err = tx.Commit(); err != nil {
+			return err
+		}
+	}
+	return s.repairMountedGroupScopes()
+}
+
+// Mounted nodes used to accept private/public groups. On upgrade, move those
+// memberships into the dedicated default child group so a local entitlement
+// can no longer authorize a direct child endpoint. The migration is idempotent
+// and leaves an intentionally ungrouped mount ungrouped.
+func (s *Store) repairMountedGroupScopes() error {
+	sites, err := s.businessSites()
 	if err != nil {
 		return err
 	}
-	if _, err = tx.Exec("INSERT INTO node_groups(id,doc) VALUES(?,?) ON CONFLICT(id) DO NOTHING", g.ID, b); err != nil {
+	groups, err := s.nodeGroups()
+	if err != nil {
 		return err
 	}
-	if _, err = tx.Exec("INSERT INTO meta(key,value) VALUES('subsite_group_v1','1') ON CONFLICT(key) DO UPDATE SET value=excluded.value"); err != nil {
-		return err
+	for i := range sites {
+		v := sites[i]
+		if v.Connection == nil || v.Mount == nil || v.Removed {
+			continue
+		}
+		changed := false
+		for j := range v.Mount.Nodes {
+			before := append([]string{}, v.Mount.Nodes[j].GroupIDs...)
+			filtered := subsiteGroupIDs(before, groups)
+			if len(filtered) == 0 && len(before) > 0 {
+				filtered = []string{defaultSubsiteGroup}
+			}
+			if !sameStrings(before, filtered) {
+				v.Mount.Nodes[j].GroupIDs = filtered
+				changed = true
+			}
+		}
+		if changed {
+			if err = s.saveBusinessSite(v); err != nil {
+				return err
+			}
+		}
 	}
-	return tx.Commit()
+	return nil
+}
+
+func sameStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // initDefaultPlans is intentionally run from bootstrap rather than the

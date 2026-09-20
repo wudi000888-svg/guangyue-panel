@@ -49,6 +49,9 @@ func AllowedGateway(method, path, scope string) bool {
 	if method == "GET" && u.Path == "/api/node-pool" || method == "POST" && u.Path == "/api/node-mounts/sync" {
 		return true
 	}
+	if method == "POST" && u.Path == "/api/node-pool/egress" {
+		return true
+	}
 	if method == "POST" && u.Path == "/api/adopt" {
 		return true
 	}
