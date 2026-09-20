@@ -2307,5 +2307,20 @@
   "按套餐自动授权": "Automatic plan authorization",
   "节点组和单独节点共同决定订阅内容": "Node groups and individual nodes define the subscription together",
   "套餐统一决定账号额度、有效期和节点组，也可以精确选择单独节点。": "Plans define account quota, validity, and node groups, with optional individual node selection.",
-  "更换套餐会立即启用新套餐；当前套餐剩余时间和节点权益会排队，当前套餐到期后自动恢复。": "The new plan starts immediately; the current plan's remaining time and node access are queued and restored when the new plan ends."
+  "更换套餐会立即启用新套餐；当前套餐剩余时间和节点权益会排队，当前套餐到期后自动恢复。": "The new plan starts immediately; the current plan's remaining time and node access are queued and restored when the new plan ends.",
+  "用户与套餐": "Users & plans",
+  "节点与出口": "Nodes & egress",
+  "系统与服务": "System & services",
+  "节点组管理": "Node group management",
+  "独立维护节点分组，套餐只引用节点组和单独节点。": "Maintain node groups separately; plans only reference groups and individual nodes.",
+  "套餐统一决定账号额度、有效期和节点权限。": "Plans define account quota, validity, and node access.",
+  "删除套餐": "Delete plan",
+  "系统预置套餐不能删除。": "System plans cannot be deleted.",
+  "删除无引用套餐会移除套餐和版本记录；存在用户、商品或订单引用时会自动归档并保留历史。": "An unreferenced plan and its versions are removed; referenced plans are archived to preserve history.",
+  "删除节点组": "Delete node group",
+  "只有未被套餐、用户、节点或子站挂载引用的节点组可以删除，请先移除引用。": "Only node groups with no plan, user, node, or child-site mount references can be deleted. Remove references first.",
+  "一个节点可以加入多个组。套餐引用中的节点组不能直接删除，先移除套餐引用再删除。": "A node can belong to multiple groups. Remove plan references before deleting a group.",
+  "删除会立即移除套餐、版本和商品引用；已有用户权益与订单快照不会回滚。": "The plan, versions, and linked offers are removed immediately; issued user access and order snapshots are not rolled back.",
+  "删除会立即移除节点组，套餐、用户和节点中的旧引用将失效，请确认这是有意的破坏性操作。": "The node group is removed immediately; old references in plans, users, and nodes become invalid. Confirm this destructive action.",
+  "删除节点组会立即使旧引用失效，默认系统节点组仍受保护。": "Deleting a node group immediately invalidates old references. Default system groups remain protected."
 }

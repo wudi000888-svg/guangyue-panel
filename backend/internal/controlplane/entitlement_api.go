@@ -19,6 +19,14 @@ func (a *App) entitlementAPI(w http.ResponseWriter, r *http.Request, actor Recor
 		return
 	}
 	path := r.URL.Path
+	if r.Method == "DELETE" && strings.HasPrefix(path, "/api/plans/") {
+		a.deletePlan(w, r, actor, strings.TrimPrefix(path, "/api/plans/"))
+		return
+	}
+	if r.Method == "DELETE" && strings.HasPrefix(path, "/api/node-groups/") {
+		a.deleteNodeGroup(w, r, actor, strings.TrimPrefix(path, "/api/node-groups/"))
+		return
+	}
 	if path == "/api/nodes/policy" {
 		a.nodePolicyAPI(w, r, actor)
 		return
@@ -228,7 +236,101 @@ func (a *App) entitlementAPI(w http.ResponseWriter, r *http.Request, actor Recor
 		jsonResponse(w, 200, p)
 		return
 	}
-	failure(w, 405, "方法不支持；套餐和节点组通过归档或停用保留历史引用")
+	failure(w, 405, "方法不支持")
+}
+
+// deletePlan intentionally performs a destructive catalog delete. Issued user
+// entitlements and order history are snapshots and remain untouched; active
+// offers for the removed plan are removed so the shop cannot sell a dangling
+// catalog entry. System plans remain protected because bootstrap depends on
+// their stable IDs.
+func (a *App) deletePlan(w http.ResponseWriter, _ *http.Request, actor Record, id string) {
+	id = strings.TrimSpace(id)
+	if id == "" || strings.Contains(id, "/") {
+		failure(w, 400, "套餐 ID 无效")
+		return
+	}
+	p, err := a.store.plan(id)
+	if err != nil {
+		failure(w, 404, "套餐不存在")
+		return
+	}
+	if p.System || id == defaultAdminPlan || id == defaultDemoPlan {
+		failure(w, 400, "系统预置套餐不能删除")
+		return
+	}
+	offers, err := readDocuments[Offer](a.store, "commerce_offers")
+	if err != nil {
+		failure(w, 500, "读取商品失败")
+		return
+	}
+	tx, err := a.store.db.Begin()
+	if err != nil {
+		failure(w, 500, "删除套餐失败")
+		return
+	}
+	defer tx.Rollback()
+	for _, offer := range offers {
+		if offer.Plan.ID == id {
+			if _, err = tx.Exec("DELETE FROM commerce_offers WHERE id=?", offer.ID); err != nil {
+				break
+			}
+		}
+	}
+	if err == nil {
+		_, err = tx.Exec("DELETE FROM plan_versions WHERE plan_id=?", id)
+	}
+	if err == nil {
+		_, err = tx.Exec("DELETE FROM plans WHERE id=?", id)
+	}
+	if err == nil {
+		err = tx.Commit()
+	}
+	if err != nil {
+		failure(w, 500, "删除套餐失败")
+		return
+	}
+	a.store.audit(actor.Username, "delete_plan", id)
+	a.status = "pending"
+	jsonResponse(w, 200, object{"ok": true, "deleted": true, "archived": false, "id": id, "destructive": true})
+}
+
+// deleteNodeGroup intentionally does not inspect or rewrite references. Any
+// issued entitlement or node policy that still names this group becomes
+// unresolved until the administrator assigns a replacement group.
+func (a *App) deleteNodeGroup(w http.ResponseWriter, _ *http.Request, actor Record, id string) {
+	id = strings.TrimSpace(id)
+	if id == "" || strings.Contains(id, "/") {
+		failure(w, 400, "节点组 ID 无效")
+		return
+	}
+	if id == legacyPrivateGroup || id == legacyPublicGroup || id == defaultSubsiteGroup {
+		failure(w, 400, "系统默认节点组不能删除")
+		return
+	}
+	groups, err := a.store.nodeGroups()
+	if err != nil {
+		failure(w, 500, "检查节点组失败")
+		return
+	}
+	found := false
+	for _, g := range groups {
+		if g.ID == id {
+			found = true
+			break
+		}
+	}
+	if !found {
+		failure(w, 404, "节点组不存在")
+		return
+	}
+	if _, err = a.store.db.Exec("DELETE FROM node_groups WHERE id=?", id); err != nil {
+		failure(w, 500, "删除节点组失败")
+		return
+	}
+	a.status = "pending"
+	a.store.audit(actor.Username, "delete_node_group", id)
+	jsonResponse(w, 200, object{"ok": true, "deleted": true, "id": id})
 }
 
 func (a *App) validatePlan(p *Plan) error {
