@@ -6,10 +6,10 @@ import {groupSources} from '../lib/nodeGroups';
 import GroupNodeList from './GroupNodeList.vue';
 import {t} from '../i18n';
 const model=defineModel<string[]>({default:()=>[]});
-const props=defineProps<{groups:NodeGroup[];members?:Record<string,GroupMember[]>;scope?:'private'|'public';hidePublic?:boolean}>();
+const props=defineProps<{groups:NodeGroup[];members?:Record<string,GroupMember[]>;scope?:'private'|'public'|'subsite';hidePublic?:boolean}>();
 const panel=inject(panelKey,null),rows=computed(()=>props.members??panel?.groupMembers.value??{});
 const hidePublic=computed(()=>!!props.hidePublic||!!panel?.simpleMode.value||panel?.publicFeaturesEnabled.value===false);
-const visibleGroups=computed(()=>props.groups.filter(g=>!hidePublic.value||g.scope!=='public'));
+const visibleGroups=computed(()=>props.groups.filter(g=>(!props.scope||g.scope===props.scope)&&(!hidePublic.value||g.scope!=='public')));
 </script>
 <template>
 <div class="group-picker"><fieldset><legend>{{t('节点组')}}</legend>

@@ -18,6 +18,7 @@ export const router = createRouter({
     { path: '/users', component: () => import('./pages/UsersPage.vue'), meta: { owner: true } },
     { path: '/ips/:tab?', component: () => import('./pages/PrivatePoolPage.vue'), meta: { owner: true } },
     { path: '/nodes', component: () => import('./pages/NodesPage.vue'), meta: { owner: true } },
+    { path: '/subsite-nodes', component: () => import('./pages/SubsiteNodesPage.vue'), meta: { owner: true, pro: true } },
     { path: '/subscription', component: () => import('./pages/SubscriptionPage.vue') },
     { path: '/public/:tab?', component: () => import('./pages/PublicPoolPage.vue'), meta: { owner: true, professional: true, publicFeatures: true } },
     { path: '/public-nodes', component: () => import('./pages/NodesPage.vue'), meta: { owner: true, professional: true, publicFeatures: true } },

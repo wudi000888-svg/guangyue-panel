@@ -246,6 +246,7 @@ function sourceLabel(p: IPResource) {
   return names.join(' · ') || (p.subscription_id ? t('订阅来源') : t('独立添加'));
 }
 function selectPrivateTab(value: string) {
+  if (value === 'subsite-egress') value = 'subsites';
   if (!['subscriptions','manual','sources','subsites'].includes(value)) return;
   if (value === 'subsites' && !canMountSubsites.value) value = 'subscriptions';
   privateTab.value = value;
@@ -379,7 +380,8 @@ const titles: Record<string, string> = {
  users: "用户管理",
   ips: "私有 IP 池",
   public: "公共 IP 池",
-  nodes: "普通节点",
+  nodes: "本地节点",
+  "subsite-nodes": "子站节点",
   "public-nodes": "公共节点",
   "public-subscription": "订阅管理",
   subscription: "订阅管理",
@@ -399,7 +401,8 @@ const pageDescriptions: Record<string, string> = {
  users: "管理成员访问权限、流量配额与有效期",
   ips: "集中维护出口资源，按需分配给接入节点",
   public: "自动发现、筛选和维护全球公开代理出口",
-  nodes: "管理普通接入节点、出口代理与公网地址",
+  nodes: "管理本地主机接入节点、出口代理与公网地址",
+  "subsite-nodes": "管理直接挂载的子站节点，客户端流量直接进入子站",
   "public-nodes": "独立管理自动公共节点，随代理质量筛选而更新",
   "public-subscription": "独立公共订阅，仅分发当前合格的自动节点",
   subscription: "分发成员连接配置，管理订阅与访问凭据",
@@ -415,7 +418,7 @@ const allNavGroups = computed(() => [
   {id:'workspace',label:t('工作台'),items:[{id:'overview',label:t('仪表盘'),icon:LayoutDashboard},{id:'clients',label:t('客户端中心'),icon:Package},...(owner.value?[{id:'monitor',label:t('实时监控'),icon:RadioTower}]:[])]},
  {id:'access',label:t('成员与权益'),items:[...(owner.value?[{id:'users',label:t('用户管理'),icon:Users},{id:'plans',label:t('套餐管理'),icon:Package}]:[]),{id:'messages',label:t('站内信'),icon:Mail}]},
   ...(!selectedSite.value?[{id:'commerce',label:t('账户与服务'),items:[{id:'wallet',label:t('账户余额'),icon:Wallet},{id:'shop',label:t('购买套餐'),icon:ShoppingBag},{id:'orders',label:t('订单管理'),icon:Receipt},{id:'tickets',label:t('工单中心'),icon:Ticket},...(owner.value?[{id:'redeem-codes',label:t('兑换码管理'),icon:Gift}]:[])]}]:[]),
-  {id:'business',label:t('业务资源'),items:[...(owner.value?[{id:'ips',label:t('私有 IP 池'),icon:Database},{id:'nodes',label:t('普通节点'),icon:RadioTower}]:[]),{id:'subscription',label:t('订阅管理'),icon:QrCode}]},
+  {id:'business',label:t('业务资源'),items:[...(owner.value?[{id:'ips',label:t('本地 IP 池'),icon:Database},{id:'nodes',label:t('本地节点'),icon:RadioTower},{id:'subsite-nodes',label:t('子站节点'),icon:Globe2}]:[]),{id:'subscription',label:t('订阅管理'),icon:QrCode}]},
   {id:'public',label:t('公共代理'),items:[...(owner.value?[{id:'public',label:t('公共 IP 池'),icon:Database},{id:'public-nodes',label:t('公共节点'),icon:Globe2},{id:'public-subscription',label:t('公共订阅'),icon:QrCode}]:[])]},
   ...(owner.value?[{id:'admin',label:t('系统管理'),items:[...(state.value?.system.edition==='pro'&&state.value?.system.role==='controller'&&!getRemoteSite()?[{id:'fleet',label:t('群站管理'),icon:Globe2}]:[]),...(!getRemoteSite()?[{id:'pairing',label:t('配对令牌'),icon:KeyRound}]:[]),{id:'tasks',label:t('任务中心'),icon:Server},{id:'system',label:t('运维状态'),icon:Server},{id:'settings',label:t('系统设置'),icon:Settings2}]}]:[]),
 ]);
@@ -423,7 +426,7 @@ const navGroups = computed(() => {
   const hidePublic = simpleMode.value || !publicFeaturesEnabled.value;
   if (!hidePublic && !simpleMode.value) return allNavGroups.value;
   const allowed = new Set(owner.value
-    ? ["overview", "clients", "monitor", "users", "plans", "ips", "nodes", "subscription", "settings", "wallet", "shop", "orders", "tickets", "redeem-codes", "messages", "pairing", "fleet"]
+    ? ["overview", "clients", "monitor", "users", "plans", "ips", "nodes", "subsite-nodes", "subscription", "settings", "wallet", "shop", "orders", "tickets", "redeem-codes", "messages", "pairing", "fleet"]
     : ["clients", "subscription", "wallet", "shop", "orders", "tickets", "messages"]);
   return allNavGroups.value
     .map(group => ({ ...group, items: group.items.filter(item => allowed.has(item.id)) }))
@@ -554,7 +557,7 @@ function go(id: string) {
   const [section, nested] = target.split("/");
   id = section;
   if (!nav.value.some(item=>item.id===id)) id = owner.value ? "overview" : "subscription";
-  if (id === "ips" && ["subscriptions", "manual", "sources", "subsites"].includes(nested)) selectPrivateTab(nested);
+  if (id === "ips" && ["subscriptions", "manual", "sources", "subsites", "subsite-egress"].includes(nested)) selectPrivateTab(nested);
   if (id === "public") publicTab.value = ["resources", "sources", "policy"].includes(nested) ? nested : "resources";
   page.value = id;
   void router.replace("/"+id+(id === "ips" ? "/"+privateTab.value : id === "public" && publicTab.value !== "resources" ? "/"+publicTab.value : id === "fleet" && nested === "independent" ? "/independent" : "")+(id===section?query:""));

@@ -46,7 +46,8 @@ func (a *App) subscriptionCatalogSource(record Record, source, protocol string) 
 	selected := []Node{}
 	for _, n := range nodes {
 		local := n.ManagedBy != publicManager && !isSubsiteNode(n)
-		if source == "all" || source == "mixed" || source == "local" && local || source == "private" && local || source == "legacy-private" && n.ManagedBy != publicManager || source == "public" && n.ManagedBy == publicManager {
+		mixed := !isSubsiteNode(n)
+		if source == "all" && mixed || source == "mixed" && mixed || source == "local" && local || source == "private" && local || source == "legacy-private" && local || source == "public" && n.ManagedBy == publicManager && mixed {
 			selected = append(selected, n)
 		}
 	}
@@ -171,6 +172,10 @@ func (a *App) mountedSubscriptionEntries(record Record, site BusinessSite, proto
 		}
 		remote := record
 		remote.Credentials = account.Credentials
+		groups, err := a.store.nodeGroups()
+		if err != nil {
+			return nil
+		}
 		nodes := []Node{}
 		for _, mount := range m.Nodes {
 			n, ok := mountSource(m.Catalog, mount.NodeID)
@@ -190,6 +195,7 @@ func (a *App) mountedSubscriptionEntries(record Record, site BusinessSite, proto
 		}
 		out := subscriptionEntries(businessConfig(m.Catalog.Info), remote, nodes, protocol)
 		for i := range out {
+			out[i].node.GroupIDs = subsiteGroupIDs(out[i].node.GroupIDs, groups)
 			out[i].siteID = site.ID
 			out[i].siteName = site.Name
 			out[i].mounted = true

@@ -117,7 +117,7 @@ func (a *App) fleetGateway(w http.ResponseWriter, r *http.Request) {
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("X-Requested-With", "guangyue")
 	buffer := &httpapi.BufferResponse{}
-	if request.URL.Path == "/api/node-pool" || request.URL.Path == "/api/node-mounts/sync" {
+	if request.URL.Path == "/api/node-pool" || request.URL.Path == "/api/node-pool/egress" || request.URL.Path == "/api/node-mounts/sync" {
 		a.mountGateway(buffer, request, actor, id)
 	} else {
 		a.dispatchAuthenticated(buffer, request, actor)

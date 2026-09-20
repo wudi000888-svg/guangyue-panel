@@ -167,6 +167,36 @@ func TestMountedNodeIsolationAndSubscriptions(t *testing.T) {
 		t.Fatal("remote group access retained")
 	}
 }
+
+func TestSubsiteEgressPoolUsesDedicatedRelayPath(t *testing.T) {
+	f := newMountFixture(t)
+	w := req(t, f.master, f.owner, "POST", "/api/business-sites/"+f.site.ID+"/egress-pool", object{"node_id": "vless-main"})
+	if w.Code != 201 {
+		t.Fatalf("sub-site egress: %d %s", w.Code, w.Body.String())
+	}
+	var pool IPResource
+	if err := json.Unmarshal(w.Body.Bytes(), &pool); err != nil {
+		t.Fatal(err)
+	}
+	if pool.PoolGroup != "subsite" || pool.Source != f.site.ID || pool.Exit != "subscription" {
+		t.Fatalf("invalid sub-site relay resource: %+v", pool)
+	}
+	stored, err := f.master.store.pool(pool.ID)
+	if err != nil || stored.Upstream == nil || stored.UpstreamType == "" {
+		t.Fatalf("relay credentials were not stored privately: %v", err)
+	}
+	if !strings.Contains(pool.Notes, "主站中转，子站 IP 出口") {
+		t.Fatalf("relay resource is not labelled as a sub-site exit: %q", pool.Notes)
+	}
+	w = req(t, f.master, f.owner, "POST", "/api/business-sites/"+f.site.ID+"/egress-pool", object{"node_id": "hy2-main"})
+	if w.Code != 201 {
+		t.Fatalf("second protocol relay: %d %s", w.Code, w.Body.String())
+	}
+	pools, err := f.master.store.pools()
+	if err != nil || len(pools) != 2 {
+		t.Fatalf("sub-site relay resources were not persisted: %d %v", len(pools), err)
+	}
+}
 func TestMountedAccountingRevocationAndPeriods(t *testing.T) {
 	f := newMountFixture(t)
 	ns, _ := f.child.store.nodes()

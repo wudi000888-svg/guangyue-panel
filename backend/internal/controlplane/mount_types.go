@@ -2,6 +2,8 @@ package controlplane
 
 import (
 	"encoding/json"
+	"sort"
+
 	"github.com/wudi000888-svg/guangyue-panel/backend/internal/domain"
 )
 
@@ -105,6 +107,49 @@ func mountNodePolicy(m MountedNode, source Node) Node {
 		source.Name = m.Name
 	}
 	return source
+}
+
+// Mounted nodes belong to the master site's sub-site groups. Keeping a local
+// group on a mounted node makes it eligible for the normal subscription too.
+func subsiteGroupIDs(ids []string, groups []NodeGroup) []string {
+	allowed := map[string]bool{}
+	for _, g := range groups {
+		if g.Scope == "subsite" {
+			allowed[g.ID] = true
+		}
+	}
+	out := make([]string, 0, len(ids))
+	seen := map[string]bool{}
+	for _, id := range ids {
+		if allowed[id] && !seen[id] {
+			seen[id] = true
+			out = append(out, id)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// Repair configurations written before mounted nodes were restricted to
+// sub-site groups. The caller persists the containing site and resynchronizes
+// authorizations when this returns true.
+func normalizeMountedNodeGroups(nodes []MountedNode, groups []NodeGroup) bool {
+	changed := false
+	for i := range nodes {
+		filtered := subsiteGroupIDs(nodes[i].GroupIDs, groups)
+		if len(filtered) != len(nodes[i].GroupIDs) {
+			changed = true
+		} else {
+			for j, id := range filtered {
+				if nodes[i].GroupIDs[j] != id {
+					changed = true
+					break
+				}
+			}
+		}
+		nodes[i].GroupIDs = filtered
+	}
+	return changed
 }
 func mountSource(c MountCatalog, id string) (Node, bool) {
 	for _, n := range c.Nodes {

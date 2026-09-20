@@ -24,7 +24,7 @@ onMounted(loadEntitlements);
           <div class="page-heading">
             <div>
               <div class="eyebrow">ROUTING</div>
-              <h1>{{publicNodePage ? t("公共节点") : t("普通节点")}}</h1>
+              <h1>{{publicNodePage ? t("公共节点") : t("本地节点")}}</h1>
             </div>
             <div v-if="!publicNodePage" class="node-create-actions">
               <button @click="editNode(undefined, 'vless')">
