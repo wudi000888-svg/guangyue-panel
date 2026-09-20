@@ -11,7 +11,7 @@ const sub = ref<Sub | null>(null),
   subUser = ref(0),
   format = ref("mihomo"),
   subProtocol = ref(""),
-  subSource = ref<Sub["pool"]>(publicSubPage.value?"public":"local"),
+  subSource = ref<Sub["pool"]>(publicSubPage.value?"public":"mixed"),
   qr = ref(""),
   qrError = ref(""),
   subLoading = ref(false),
@@ -86,7 +86,7 @@ watch([() => {
 }, () => JSON.stringify(state.value?.nodes.map(n => [n.id, n.checked_at, n.quality?.at]))], ([authorization], [previousAuthorization]) => {
   if (page.value === 'subscription' || page.value === 'public-subscription') loadSub(authorization !== previousAuthorization);
 });
-watch(page,()=>{subSource.value=publicSubPage.value?"public":"local";},{flush:"sync"});
+watch(page,()=>{subSource.value=publicSubPage.value?"public":"mixed";},{flush:"sync"});
 watch([page, subUser, subProtocol,subSource], () => { loadSub(true); }, { flush: 'sync' });
 let subscriptionQRSequence = 0;
 watch(subURL, async (v) => {

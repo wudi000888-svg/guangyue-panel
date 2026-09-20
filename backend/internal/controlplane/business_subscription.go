@@ -46,7 +46,7 @@ func (a *App) subscriptionCatalogSource(record Record, source, protocol string) 
 	selected := []Node{}
 	for _, n := range nodes {
 		local := n.ManagedBy != publicManager && !isSubsiteNode(n)
-		if source == "all" || source == "local" && local || source == "private" && local || source == "legacy-private" && n.ManagedBy != publicManager || source == "public" && n.ManagedBy == publicManager {
+		if source == "all" || source == "mixed" || source == "local" && local || source == "private" && local || source == "legacy-private" && n.ManagedBy != publicManager || source == "public" && n.ManagedBy == publicManager {
 			selected = append(selected, n)
 		}
 	}
@@ -70,7 +70,7 @@ func (a *App) subscriptionCatalogSource(record Record, source, protocol string) 
 	}
 	for _, site := range sites {
 		if site.Connection != nil {
-			if source == "all" || source == "mounted" || source == "subsite" {
+			if source == "all" || source == "mixed" || source == "mounted" || source == "subsite" {
 				entries = append(entries, a.mountedSubscriptionEntries(record, site, protocol)...)
 			}
 			continue
@@ -107,7 +107,7 @@ func (a *App) subscriptionCatalogSource(record Record, source, protocol string) 
 		remote := businessRecord(record, site.ID, site.SentNodes)
 		selected = nil
 		for _, n := range site.SentNodes {
-			if source != "all" && (n.ManagedBy == publicManager) != (source == "public") {
+			if source != "all" && source != "mixed" && (n.ManagedBy == publicManager) != (source == "public") {
 				continue
 			}
 			for _, reported := range site.Reports {

@@ -87,6 +87,7 @@ func (a *App) mountSiteAPI(w http.ResponseWriter, r *http.Request, actor Record,
 			Assignment      string          `json:"assignment"`
 			Revision        string          `json:"revision"`
 			CatalogRevision string          `json:"catalog_revision"`
+			MonthlyBudget   int64           `json:"monthly_budget"`
 			Nodes           []MountedNode   `json:"nodes"`
 			Grants          []BusinessGrant `json:"grants"`
 		}
@@ -100,7 +101,14 @@ func (a *App) mountSiteAPI(w http.ResponseWriter, r *http.Request, actor Record,
 			failure(w, 409, "节点池已变化，请刷新后重试")
 			return
 		}
+		if in.MonthlyBudget < 0 || in.MonthlyBudget > 1<<60 {
+			a.mu.Unlock()
+			failure(w, 400, "子站月度资源预算无效")
+			return
+		}
 		previousGrants := append([]BusinessGrant{}, current.Grants...)
+		current.MonthlyBudget = in.MonthlyBudget
+		current.refreshMonthlyBudget(time.Now().Unix())
 		current.Mount.Assignment = in.Assignment
 		current.Mount.Nodes = in.Nodes
 		current.Grants = in.Grants
@@ -289,7 +297,11 @@ func (a *App) syncMountSiteLocked(ctx context.Context, id string) (resultErr err
 	}
 	request := MountSync{UsageFloor: v.Usage, UsageAck: v.Mount.UsageAck, MasterID: masterID, Sequence: v.Mount.Sequence + 1, CatalogRevision: catalog.Revision, Users: []MountUser{}}
 	grants := []BusinessGrant{}
+	v.refreshMonthlyBudget(time.Now().Unix())
 	for _, u := range users {
+		if !v.monthlyBudgetAvailable() {
+			break
+		}
 		if u.Mount != nil || !u.Active() || !v.Enabled || v.Removed || catalog.Paused || !a.businessOwnerEnabled(v) {
 			continue
 		}

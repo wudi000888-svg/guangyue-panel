@@ -63,40 +63,58 @@ type BusinessCommand struct {
 	State   string `json:"state"`
 }
 type BusinessSite struct {
-	Mount             *SiteMount              `json:"mount,omitempty"`
-	Connection        *SiteConnection         `json:"connection,omitempty"`
-	Removed           bool                    `json:"removed,omitempty"`
-	DefaultNodes      []Node                  `json:"default_nodes,omitempty"`
-	RateRules         map[string]int64        `json:"rate_rules,omitempty"`
-	PeriodRules       map[string]bool         `json:"period_rules,omitempty"`
-	UsageBaseline     map[int64]BusinessUsage `json:"usage_baseline,omitempty"`
-	NodeUsage         []NodeUsage             `json:"-"`
-	Commands          []BusinessCommand       `json:"commands,omitempty"`
-	ID                string                  `json:"id"`
-	Name              string                  `json:"name"`
-	Group             string                  `json:"group"`
-	Enabled           bool                    `json:"enabled"`
-	OwnerID           int64                   `json:"owner_id"`
-	Created           int64                   `json:"created"`
-	EnrollmentExpires int64                   `json:"enrollment_expires"`
-	PendingToken      string                  `json:"pending_token,omitempty"`
-	Info              *BusinessInfo           `json:"info,omitempty"`
-	Nodes             []Node                  `json:"nodes"`
-	Grants            []BusinessGrant         `json:"grants"`
-	Exclusive         bool                    `json:"exclusive"`
-	Revision          string                  `json:"revision"`
-	LastSeen          int64                   `json:"last_seen"`
-	Applied           string                  `json:"applied"`
-	Desired           string                  `json:"desired"`
-	LeaseUntil        int64                   `json:"lease_until"`
-	Error             string                  `json:"error"`
-	Reports           []Node                  `json:"reports,omitempty"`
-	Usage             map[int64]BusinessUsage `json:"usage,omitempty"`
-	Issued            map[int64]int64         `json:"issued,omitempty"`
-	IssuedUnlimited   map[int64]bool          `json:"issued_unlimited,omitempty"`
-	SentGrants        []BusinessGrant         `json:"sent_grants,omitempty"`
-	IssuedNodes       []Node                  `json:"issued_nodes,omitempty"`
-	SentNodes         []Node                  `json:"sent_nodes,omitempty"`
+	Mount         *SiteMount              `json:"mount,omitempty"`
+	Connection    *SiteConnection         `json:"connection,omitempty"`
+	Removed       bool                    `json:"removed,omitempty"`
+	DefaultNodes  []Node                  `json:"default_nodes,omitempty"`
+	RateRules     map[string]int64        `json:"rate_rules,omitempty"`
+	PeriodRules   map[string]bool         `json:"period_rules,omitempty"`
+	UsageBaseline map[int64]BusinessUsage `json:"usage_baseline,omitempty"`
+	// MonthlyBudget is the master site's aggregate child-site traffic ceiling in
+	// bytes. Zero keeps the site unlimited. The usage window is UTC calendar
+	// month based so every controller and child applies the same boundary.
+	MonthlyBudget       int64                   `json:"monthly_budget,omitempty"`
+	MonthlyUsage        int64                   `json:"monthly_usage,omitempty"`
+	MonthlyBudgetPeriod string                  `json:"monthly_budget_period,omitempty"`
+	NodeUsage           []NodeUsage             `json:"-"`
+	Commands            []BusinessCommand       `json:"commands,omitempty"`
+	ID                  string                  `json:"id"`
+	Name                string                  `json:"name"`
+	Group               string                  `json:"group"`
+	Enabled             bool                    `json:"enabled"`
+	OwnerID             int64                   `json:"owner_id"`
+	Created             int64                   `json:"created"`
+	EnrollmentExpires   int64                   `json:"enrollment_expires"`
+	PendingToken        string                  `json:"pending_token,omitempty"`
+	Info                *BusinessInfo           `json:"info,omitempty"`
+	Nodes               []Node                  `json:"nodes"`
+	Grants              []BusinessGrant         `json:"grants"`
+	Exclusive           bool                    `json:"exclusive"`
+	Revision            string                  `json:"revision"`
+	LastSeen            int64                   `json:"last_seen"`
+	Applied             string                  `json:"applied"`
+	Desired             string                  `json:"desired"`
+	LeaseUntil          int64                   `json:"lease_until"`
+	Error               string                  `json:"error"`
+	Reports             []Node                  `json:"reports,omitempty"`
+	Usage               map[int64]BusinessUsage `json:"usage,omitempty"`
+	Issued              map[int64]int64         `json:"issued,omitempty"`
+	IssuedUnlimited     map[int64]bool          `json:"issued_unlimited,omitempty"`
+	SentGrants          []BusinessGrant         `json:"sent_grants,omitempty"`
+	IssuedNodes         []Node                  `json:"issued_nodes,omitempty"`
+	SentNodes           []Node                  `json:"sent_nodes,omitempty"`
+}
+
+func (v *BusinessSite) refreshMonthlyBudget(now int64) {
+	period := time.Unix(now, 0).UTC().Format("2006-01")
+	if v.MonthlyBudgetPeriod != period {
+		v.MonthlyBudgetPeriod = period
+		v.MonthlyUsage = 0
+	}
+}
+
+func (v BusinessSite) monthlyBudgetAvailable() bool {
+	return v.MonthlyBudget <= 0 || v.MonthlyUsage < v.MonthlyBudget
 }
 
 func (v *BusinessSite) defaults() {

@@ -24,7 +24,7 @@ export type SubscriptionNode = {
   checked_at: number;
   quality: IPQuality | null;
 };
-const props = defineProps<{ nodes: SubscriptionNode[]; active: boolean; pool: 'private' | 'public' | 'all' | 'local' | 'mounted' | 'subsite'; loading?: boolean }>();
+const props = defineProps<{ nodes: SubscriptionNode[]; active: boolean; pool: 'private' | 'public' | 'all' | 'local' | 'mounted' | 'subsite' | 'mixed'; loading?: boolean }>();
 const emit = defineEmits<{ refresh: [] }>();
 const search = ref(''), copied = ref(''), copyError = ref('');
 const availableNodes = computed(() => props.active ? props.nodes.filter(node => !!node.id && !!node.uri) : []);

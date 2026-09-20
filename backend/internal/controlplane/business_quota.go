@@ -153,6 +153,7 @@ func (a *App) coreRecords() ([]Record, error) {
 // Persist counters and the acknowledged allocation in one transaction. Replayed
 // or out-of-order totals never lower a watermark or count the same bytes twice.
 func (a *App) acceptBusinessUsage(v *BusinessSite, in BusinessHeartbeat) error {
+	v.refreshMonthlyBudget(time.Now().Unix())
 	if err := a.verifyBusinessMeter(v, in); err != nil {
 		return err
 	}
@@ -191,6 +192,16 @@ func (a *App) acceptBusinessUsage(v *BusinessSite, in BusinessHeartbeat) error {
 			return errors.New("business counters moved backwards; restore requires reconciliation")
 		}
 		du, dd, dv, dh := next.Upload-previous.Upload, next.Download-previous.Download, next.VLESS-previous.VLESS, next.HY2-previous.HY2
+		if du > 0 || dd > 0 {
+			var e error
+			v.MonthlyUsage, e = domain.AddCounter(v.MonthlyUsage, du)
+			if e == nil {
+				v.MonthlyUsage, e = domain.AddCounter(v.MonthlyUsage, dd)
+			}
+			if e != nil {
+				return e
+			}
+		}
 		if du == 0 && dd == 0 {
 			v.Usage[id] = next
 			continue

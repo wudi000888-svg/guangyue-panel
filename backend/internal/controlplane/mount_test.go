@@ -239,6 +239,37 @@ func TestMountedAccountingRevocationAndPeriods(t *testing.T) {
 		t.Fatal("local autonomy lost")
 	}
 }
+
+func TestMountedMonthlyBudgetStopsNewAuthorizations(t *testing.T) {
+	f := newMountFixture(t)
+	s, _ := f.master.store.businessSite(f.site.ID)
+	w := req(t, f.master, f.owner, "PUT", "/api/business-sites/"+s.ID+"/node-pool", object{
+		"revision": s.Revision, "catalog_revision": s.Mount.Catalog.Revision,
+		"monthly_budget": 1, "nodes": []MountedNode{{NodeID: "vless-main", Enabled: true, GroupIDs: []string{legacyPrivateGroup}}},
+		"assignment": "manual", "grants": []BusinessGrant{{UserID: f.user.ID, Budget: 600}},
+	})
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	shadow := f.delegated(t)
+	if err := f.child.store.account([]Counter{{Key: "budget", Generation: "one", UserID: shadow.ID, NodeID: "vless-main", Protocol: "vless", Direction: "up", Value: 2}}); err != nil {
+		t.Fatal(err)
+	}
+	f.sync(t)
+	f.sync(t)
+	s, _ = f.master.store.businessSite(f.site.ID)
+	if s.MonthlyUsage != 2 {
+		t.Fatalf("monthly usage was not accumulated: %d", s.MonthlyUsage)
+	}
+	shadow = f.delegated(t)
+	if len(shadow.Mount.NodeIDs) != 0 {
+		t.Fatal("monthly budget did not revoke new authorization after exhaustion")
+	}
+	if s.MonthlyBudget != 1 || s.MonthlyBudgetPeriod == "" {
+		t.Fatal("monthly budget setting was not persisted")
+	}
+}
+
 func TestMountedTokenSharingAndLease(t *testing.T) {
 	f := newMountFixture(t)
 	mounts := []MountedNode{{NodeID: "hy2-main", Enabled: true, GroupIDs: []string{legacyPrivateGroup}}}

@@ -6,15 +6,17 @@ import (
 	"github.com/wudi000888-svg/guangyue-panel/backend/internal/domain"
 	"github.com/wudi000888-svg/guangyue-panel/backend/internal/persistence"
 	"net/http"
+	"strings"
 	"time"
 )
 
 type Offer struct {
-	ID      string `json:"id"`
-	Version int    `json:"version"`
-	Enabled bool   `json:"enabled"`
-	Price   int64  `json:"price,string"`
-	Plan    Plan   `json:"plan"`
+	ID            string `json:"id"`
+	Version       int    `json:"version"`
+	Enabled       bool   `json:"enabled"`
+	Price         int64  `json:"price,string"`
+	PurchaseLimit int    `json:"purchase_limit,omitempty"`
+	Plan          Plan   `json:"plan"`
 }
 type Order struct {
 	ID              string `json:"id"`
@@ -97,19 +99,27 @@ func (a *App) saveOffer(w http.ResponseWriter, r *http.Request, actor Record) er
 		return commerceFail(403, "需要管理员权限")
 	}
 	var in struct {
-		ID          string `json:"id"`
-		Version     int    `json:"version"`
-		PlanID      string `json:"plan_id"`
-		PlanVersion int    `json:"plan_version"`
-		Price       string `json:"price"`
-		Enabled     bool   `json:"enabled"`
+		ID            string `json:"id"`
+		Version       int    `json:"version"`
+		PlanID        string `json:"plan_id"`
+		PlanVersion   int    `json:"plan_version"`
+		Price         string `json:"price"`
+		Enabled       bool   `json:"enabled"`
+		PurchaseLimit int    `json:"purchase_limit"`
 	}
 	if !decode(w, r, &in) {
 		return nil
 	}
-	price, e := moneyValue(in.Price)
-	if e != nil {
-		return e
+	var e error
+	price := int64(0)
+	if strings.TrimSpace(in.Price) != "0" {
+		price, e = moneyValue(in.Price)
+		if e != nil {
+			return e
+		}
+	}
+	if in.PurchaseLimit < 0 || in.PurchaseLimit > 100000 {
+		return commerceFail(400, "限购次数应为 0–100000，0 表示不限购")
 	}
 	p, e := a.store.plan(in.PlanID)
 	if e != nil || p.Archived || p.Version != in.PlanVersion {
@@ -119,7 +129,7 @@ func (a *App) saveOffer(w http.ResponseWriter, r *http.Request, actor Record) er
 		return e
 	}
 	p.Notes = ""
-	o := Offer{ID: in.ID, Version: in.Version + 1, Enabled: in.Enabled, Price: price, Plan: p}
+	o := Offer{ID: in.ID, Version: in.Version + 1, Enabled: in.Enabled, Price: price, PurchaseLimit: in.PurchaseLimit, Plan: p}
 	if in.ID == "" {
 		var n int
 		if e = a.store.db.QueryRow("SELECT COUNT(*) FROM commerce_offers").Scan(&n); e != nil {
@@ -146,6 +156,37 @@ func (a *App) saveOffer(w http.ResponseWriter, r *http.Request, actor Record) er
 	}
 	jsonResponse(w, 200, o)
 	return nil
+}
+
+// countOfferPurchases counts orders that already reserve or have consumed a
+// purchase slot. Cancelled, expired, failed and refunded orders release it.
+// The commerce API serializes these checks with order creation and confirmation
+// so two browser tabs cannot race past a per-user limit.
+func (a *App) countOfferPurchases(user int64, offerID, exclude string) (int, error) {
+	rows, err := a.store.db.Query("SELECT id,state,doc FROM commerce_orders WHERE user_id=?", user)
+	if err != nil {
+		return 0, err
+	}
+	defer rows.Close()
+	count := 0
+	for rows.Next() {
+		var id, state string
+		var b []byte
+		if err = rows.Scan(&id, &state, &b); err != nil {
+			return 0, err
+		}
+		if id == exclude || state != "pending" && state != "provisioning" && state != "completed" && state != "refunding" {
+			continue
+		}
+		var order Order
+		if err = json.Unmarshal(b, &order); err != nil {
+			return 0, err
+		}
+		if order.Offer.ID == offerID {
+			count++
+		}
+	}
+	return count, rows.Err()
 }
 func boolInt(b bool) int {
 	if b {
@@ -217,6 +258,15 @@ func (a *App) createOrder(w http.ResponseWriter, r *http.Request, actor Record) 
 	p, e := a.store.plan(offer.Plan.ID)
 	if e != nil || p.Archived {
 		return commerceFail(409, "套餐已归档")
+	}
+	if offer.PurchaseLimit > 0 {
+		count, e := a.countOfferPurchases(actor.ID, offer.ID, "")
+		if e != nil {
+			return e
+		}
+		if count >= offer.PurchaseLimit {
+			return commerceFail(409, "该套餐已达到你的限购次数")
+		}
 	}
 	if actor.Meter != nil && actor.Meter.PendingReset {
 		return commerceFail(409, "旧周期正在结算，请稍后重试")
@@ -315,6 +365,15 @@ func (a *App) orderAction(w http.ResponseWriter, r *http.Request, actor Record) 
 		if !settings.Sales || e != nil || !offer.Enabled || pe != nil || p.Archived {
 			return commerceFail(409, "商品已暂停销售")
 		}
+		if offer.PurchaseLimit > 0 {
+			count, ce := a.countOfferPurchases(u.ID, offer.ID, o.ID)
+			if ce != nil {
+				return ce
+			}
+			if count >= offer.PurchaseLimit {
+				return commerceFail(409, "该套餐已达到你的限购次数")
+			}
+		}
 		if o.State != "pending" || o.Expires <= now || !u.Enabled || o.Expected != userCommerceVersion(u) || u.Meter != nil && u.Meter.PendingReset {
 			return commerceFail(409, "订单或权益已变化，请取消后重新下单")
 		}
@@ -377,7 +436,7 @@ func (a *App) orderAction(w http.ResponseWriter, r *http.Request, actor Record) 
 		return e
 	}
 	defer tx.Rollback()
-	if kind != "" {
+	if kind != "" && o.Offer.Price > 0 {
 		if _, e = a.store.postMoney(tx, u.ID, actor.ID, kind+":"+o.ID, kind, o.ID, o.Message, deltaAvailable, deltaHeld); e != nil {
 			return e
 		}
@@ -490,8 +549,10 @@ func (a *App) failProvisioning(o Order, message string) error {
 		return e
 	}
 	defer tx.Rollback()
-	if _, e = a.store.postMoney(tx, u.ID, 0, "release:"+o.ID, "release", o.ID, message, o.Offer.Price, -o.Offer.Price); e != nil {
-		return e
+	if o.Offer.Price > 0 {
+		if _, e = a.store.postMoney(tx, u.ID, 0, "release:"+o.ID, "release", o.ID, message, o.Offer.Price, -o.Offer.Price); e != nil {
+			return e
+		}
 	}
 	if u.Meter != nil && o.Action == "purchase" {
 		u.Meter.PendingReset = false
@@ -575,7 +636,9 @@ func (a *App) fulfilOrder(o Order, now int64) error {
 		if u.Meter != nil {
 			u.Meter.PendingReset = false
 		}
-		_, e = a.store.postMoney(tx, u.ID, 0, "release:"+o.ID, "release", o.ID, o.Message, o.Offer.Price, -o.Offer.Price)
+		if o.Offer.Price > 0 {
+			_, e = a.store.postMoney(tx, u.ID, 0, "release:"+o.ID, "release", o.ID, o.Message, o.Offer.Price, -o.Offer.Price)
+		}
 	} else if oldState == "refunding" {
 		if u.Entitlement == nil || u.Entitlement.Revision != o.AppliedRevision {
 			return commerceFail(409, "退款权益版本不匹配")
@@ -589,7 +652,9 @@ func (a *App) fulfilOrder(o Order, now int64) error {
 		}
 		o.State = "refunded"
 		o.Message = "已退回站内余额"
-		_, e = a.store.postMoney(tx, u.ID, 0, "refund:"+o.ID, "refund", o.ID, o.Message, o.Offer.Price, 0)
+		if o.Offer.Price > 0 {
+			_, e = a.store.postMoney(tx, u.ID, 0, "refund:"+o.ID, "refund", o.ID, o.Message, o.Offer.Price, 0)
+		}
 	} else {
 		if o.Action == "renew" {
 			u.Expires = max(now, u.Expires) + int64(o.Offer.Plan.ValidDays)*86400
@@ -651,7 +716,9 @@ func (a *App) fulfilOrder(o Order, now int64) error {
 			o.AppliedRevision = u.Entitlement.Revision
 			o.State = "completed"
 			o.Message = "权益已开通，业务站按同步状态生效"
-			_, e = a.store.postMoney(tx, u.ID, 0, "capture:"+o.ID, "purchase", o.ID, o.Message, 0, -o.Offer.Price)
+			if o.Offer.Price > 0 {
+				_, e = a.store.postMoney(tx, u.ID, 0, "capture:"+o.ID, "purchase", o.ID, o.Message, 0, -o.Offer.Price)
+			}
 		}
 	}
 	if e == nil {

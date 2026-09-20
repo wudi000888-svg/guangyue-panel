@@ -137,11 +137,22 @@ func (a *App) supportGet(w http.ResponseWriter, r *http.Request, actor Record, p
 		jsonResponse(w, 200, object{"items": out})
 		return nil
 	case "tickets":
-		query := "SELECT doc FROM support_tickets WHERE id<?"
-		args := []any{pageCursor(r)}
+		query := "SELECT doc FROM support_tickets"
+		args := []any{}
+		clauses := []string{}
+		// The first page must not depend on a sentinel value. Ticket IDs are
+		// opaque text and database collations differ between SQLite and
+		// PostgreSQL, so an artificial upper bound can hide every ticket.
+		if before := strings.TrimSpace(r.URL.Query().Get("before")); before != "" {
+			clauses = append(clauses, "id<?")
+			args = append(args, before)
+		}
 		if actor.Role != "owner" {
-			query += " AND user_id=?"
+			clauses = append(clauses, "user_id=?")
 			args = append(args, actor.ID)
+		}
+		if len(clauses) > 0 {
+			query += " WHERE " + strings.Join(clauses, " AND ")
 		}
 		query += " ORDER BY id DESC LIMIT 50"
 		rows, e := a.store.db.Query(query, args...)
@@ -170,8 +181,12 @@ func (a *App) supportGet(w http.ResponseWriter, r *http.Request, actor Record, p
 		if e != nil {
 			return e
 		}
-		query := "SELECT doc FROM support_replies WHERE ticket_id=? AND id<?"
-		args := []any{t.ID, pageCursor(r)}
+		query := "SELECT doc FROM support_replies WHERE ticket_id=?"
+		args := []any{t.ID}
+		if before := strings.TrimSpace(r.URL.Query().Get("before")); before != "" {
+			query += " AND id<?"
+			args = append(args, before)
+		}
 		if actor.Role != "owner" {
 			query += " AND internal=0"
 		}

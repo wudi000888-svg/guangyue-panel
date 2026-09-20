@@ -19,6 +19,7 @@ func TestPrivateAndPublicSubscriptionsHaveIndependentURLsContentsAndRotation(t *
 	}
 	member, _ = a.store.record(member.ID)
 	private := "/sub/" + member.Credentials.Token
+	mixed := private
 	public := "/public-sub/" + strconv.FormatInt(member.ID, 10) + "/" + member.Credentials.PublicToken
 	if member.Credentials.PublicToken == member.Credentials.Token || len(member.Credentials.PublicToken) != 43 {
 		t.Fatal("public credential is not independent")
@@ -28,7 +29,11 @@ func TestPrivateAndPublicSubscriptionsHaveIndependentURLsContentsAndRotation(t *
 			path   string
 			public bool
 		}{{private, false}, {public, true}} {
-			w := req(t, a, Record{}, "GET", v.path+"?format="+format, nil)
+			separator := "?"
+			if strings.Contains(v.path, "?") {
+				separator = "&"
+			}
+			w := req(t, a, Record{}, "GET", v.path+separator+"format="+format, nil)
 			if w.Code != 200 {
 				t.Fatal("subscription unavailable")
 			}
@@ -44,21 +49,35 @@ func TestPrivateAndPublicSubscriptionsHaveIndependentURLsContentsAndRotation(t *
 				var doc struct {
 					Proxies []object `yaml:"proxies"`
 				}
-				if yaml.Unmarshal(body, &doc) != nil || len(doc.Proxies) != 2 {
+				wantNodes := 4
+				if v.public {
+					wantNodes = 2
+				}
+				if yaml.Unmarshal(body, &doc) != nil || len(doc.Proxies) != wantNodes {
 					t.Fatal("wrong YAML membership")
 				}
+				hasPublic, hasLocal := false, false
 				for _, p := range doc.Proxies {
-					if strings.Contains(str(p["name"]), "公共") != v.public {
-						t.Fatal("mixed YAML subscription")
+					if strings.Contains(str(p["name"]), "公共") {
+						hasPublic = true
+					} else {
+						hasLocal = true
 					}
+				}
+				if !hasPublic || v.public && hasLocal || !v.public && !hasLocal {
+					t.Fatal("mixed YAML subscription")
 				}
 			} else {
 				lines := strings.Split(strings.TrimSpace(string(body)), "\n")
-				if len(lines) != 2 {
-					t.Fatal("wrong URI count")
+				wantLines := 4
+				if v.public {
+					wantLines = 2
 				}
-				if strings.Contains(string(body), "%E5%85%AC%E5%85%B1") != v.public {
-					t.Fatal("mixed URI subscription")
+				if len(lines) != wantLines {
+					t.Fatalf("wrong URI count format=%s public=%v want=%d got=%d body=%q", format, v.public, wantLines, len(lines), string(body))
+				}
+				if !strings.Contains(string(body), "%E5%85%AC%E5%85%B1") {
+					t.Fatal("authorized public node missing from canonical subscription")
 				}
 			}
 			want := "6"
@@ -70,6 +89,9 @@ func TestPrivateAndPublicSubscriptionsHaveIndependentURLsContentsAndRotation(t *
 			}
 		}
 	}
+	if w := req(t, a, Record{}, "GET", mixed+"?format=raw", nil); w.Code != 200 || len(strings.Split(strings.TrimSpace(w.Body.String()), "\n")) != 4 {
+		t.Fatalf("mixed subscription did not use all authorized groups: %d %s", w.Code, w.Body.String())
+	}
 	if req(t, a, Record{}, "GET", "/sub/"+member.Credentials.PublicToken, nil).Code != 404 {
 		t.Fatal("public token can access private subscription")
 	}
@@ -80,9 +102,12 @@ func TestPrivateAndPublicSubscriptionsHaveIndependentURLsContentsAndRotation(t *
 		w := req(t, a, member, "GET", "/api/subscription?pool="+pool, nil)
 		var info object
 		_ = json.Unmarshal(w.Body.Bytes(), &info)
-		if w.Code != 200 || str(info["pool"]) != pool {
+		if w.Code != 200 || str(info["pool"]) != "mixed" {
 			t.Fatal("subscription info scope missing")
 		}
+	}
+	if w := req(t, a, member, "GET", private, nil); w.Code != 200 || len(strings.Split(strings.TrimSpace(w.Body.String()), "\n")) != 4 {
+		t.Fatal("member source override was not forced to mixed")
 	}
 	if req(t, a, owner, "POST", "/api/users/"+strconv.FormatInt(member.ID, 10)+"/rotate-public-sub", object{}).Code != 200 {
 		t.Fatal("public rotation failed")

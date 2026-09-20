@@ -8,8 +8,8 @@ export type SiteTemplate={policy_version?:number;rate_milli?:number;group_ids?:s
 export type MountedNode={node_id:string;name:string;enabled:boolean;group_ids:string[]};
 export type SiteMount={assignment?:'groups'|'manual';catalog:{info:{vless_host:string;hy2_host:string};nodes:Node[];groups:NodeGroup[];revision:string;paused:boolean};nodes:MountedNode[];sequence:number;lease_until:number;last_sync:number;error:string};
 export type ManagedSite={
- mount?:SiteMount;
- id:string;name:string;group:string;enabled:boolean;exclusive:boolean;revision:string;last_seen:number;applied:string;desired:string;lease_until:number;error:string;
+	 mount?:SiteMount;
+	 id:string;name:string;group:string;enabled:boolean;exclusive:boolean;monthly_budget?:number;monthly_usage?:number;monthly_budget_period?:string;revision:string;last_seen:number;applied:string;desired:string;lease_until:number;error:string;
  connection?:{url:string;site_id:string;scope:string;status?:SiteStatus};
  info?:{edition?:'lite'|'pro';version:string;vless_host:string;hy2_host:string};
  default_nodes?:SiteTemplate[];nodes:SiteTemplate[];grants:{user_id:number;quota:number;budget?:number}[];
