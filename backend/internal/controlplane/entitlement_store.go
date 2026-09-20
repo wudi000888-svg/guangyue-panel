@@ -198,7 +198,35 @@ func (s *Store) initSubsiteGroup() error {
 			return err
 		}
 	}
+	if err = s.ensureDefaultSubsiteScope(); err != nil {
+		return err
+	}
 	return s.repairMountedGroupScopes()
+}
+
+// default-subsite was shipped with a private scope by an older migration. It
+// is a reserved system group, so correct only its scope while preserving any
+// administrator rename, description, enabled state, and sort order.
+func (s *Store) ensureDefaultSubsiteScope() error {
+	groups, err := s.nodeGroups()
+	if err != nil {
+		return err
+	}
+	for _, g := range groups {
+		if g.ID != defaultSubsiteGroup || g.Scope == "subsite" {
+			continue
+		}
+		g.Scope = "subsite"
+		g.Revision = randomToken(12)
+		b, err := json.Marshal(g)
+		if err != nil {
+			return err
+		}
+		if _, err = s.db.Exec("UPDATE node_groups SET doc=? WHERE id=?", b, g.ID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Mounted nodes used to accept private/public groups. On upgrade, move those

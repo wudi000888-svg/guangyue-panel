@@ -23,6 +23,21 @@ func TestSubsiteGroupInstallUpgradeAndCustomization(t *testing.T) {
 	if seeded.Name != "默认子站节点组" || !seeded.Enabled {
 		t.Fatal("missing installation default")
 	}
+	seeded.Scope = "private"
+	wrongScope, _ := json.Marshal(seeded)
+	if _, err = a.store.db.Exec("UPDATE node_groups SET doc=? WHERE id=?", wrongScope, seeded.ID); err != nil {
+		t.Fatal(err)
+	}
+	if err = a.store.initEntitlements(); err != nil {
+		t.Fatal(err)
+	}
+	groups, _ = a.store.nodeGroups()
+	for _, g := range groups {
+		if g.ID == defaultSubsiteGroup && g.Scope != "subsite" {
+			t.Fatal("reserved child group scope was not repaired")
+		}
+	}
+	seeded.Scope = "subsite"
 	records := []Record{u}
 	if err = a.store.resolveAccess(records); err != nil {
 		t.Fatal(err)
