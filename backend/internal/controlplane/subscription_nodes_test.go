@@ -21,12 +21,21 @@ func TestSubscriptionCardsUseAuthorizedEntriesForSelectedAccount(t *testing.T) {
 	a, owner, member := memberQualityFixture(t)
 	for _, actor := range []Record{owner, member} {
 		for _, pool := range []string{"private", "public"} {
+			requestPool := pool
+			if actor.Role != "owner" {
+				requestPool = "mixed"
+			}
 			for _, protocol := range []string{"", "hy2", "vless"} {
-				path := "/api/subscription?user_id=" + strconv.FormatInt(member.ID, 10) + "&pool=" + pool + "&protocol=" + protocol
+				path := "/api/subscription?user_id=" + strconv.FormatInt(member.ID, 10) + "&pool=" + requestPool + "&protocol=" + protocol
 				w := req(t, a, actor, "GET", path, nil)
 				got := decoded[subscriptionNodeResponse](t, w, 200)
 				nodes, _ := a.store.nodes()
-				want, _, _ := scopedSubscription(a.cfg, member, nodes, "raw", protocol, pool == "public")
+				var want []byte
+				if requestPool == "mixed" {
+					want, _, _ = renderSubscription(a.cfg, member, nodes, "raw", protocol, false)
+				} else {
+					want, _, _ = scopedSubscription(a.cfg, member, nodes, "raw", protocol, requestPool == "public")
+				}
 				lines := []string{}
 				seen := map[string]bool{}
 				for _, n := range got.Nodes {
@@ -81,15 +90,15 @@ func TestSubscriptionCardsPairDuplicateNamesByNodeIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := decoded[subscriptionNodeResponse](t, req(t, a, owner, "GET", "/api/subscription?user_id="+strconv.FormatInt(member.ID, 10)+"&protocol=vless", nil), 200)
-	if len(got.Nodes) != 2 {
-		t.Fatalf("want two authorized VLESS cards, got %d", len(got.Nodes))
+	if len(got.Nodes) != 3 {
+		t.Fatalf("want three authorized VLESS cards, got %d", len(got.Nodes))
 	}
 	if got.Nodes[0].Name == got.Nodes[1].Name {
 		t.Fatal("duplicate displayed subscription names")
 	}
 	for _, n := range got.Nodes {
 		u, _ := url.Parse(n.URI)
-		if u.User.Username() != member.Credentials.VLESS[n.ID] || n.Quality == nil || n.Quality.IP != n.ProbeIP {
+		if u.User.Username() != member.Credentials.VLESS[n.ID] || n.ProbeIP != "" && (n.Quality == nil || n.Quality.IP != n.ProbeIP) {
 			t.Fatal("link/report joined to another node")
 		}
 	}

@@ -6,7 +6,7 @@ export interface Wallet {user_id:number;available:string;held:string;currency:st
 // A successful money operation invalidates the header's read of our own wallet.
 export const walletRevision = ref(0);
 export interface MoneyTransaction {id:string;kind:string;amount:string;available:string;held:string;reason:string;reference:string;created:number}
-export interface Offer {id:string;version:number;enabled:boolean;price:string;plan:Plan}
+export interface Offer {id:string;version:number;enabled:boolean;price:string;purchase_limit?:number;plan:Plan}
 export interface Order {id:string;user_id:number;state:string;created:number;updated:number;expires:number;offer:Offer;action:string;before_expiry:number;message:string}
 export interface Redemption {id:string;batch_id:string;suffix:string;amount:string;expires:number;state:string;redeemed_by:number;redeemed_at:number;note:string;has_secret?:boolean}
 export interface Ticket {id:string;user_id:number;title:string;category:string;state:string;priority:string;order_id:string;site_id:string;node_id:string;resource:string;created:number;updated:number;closed:number;revision:string}

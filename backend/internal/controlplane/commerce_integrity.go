@@ -62,7 +62,7 @@ func (s *Store) validateCommerce(deep bool) error {
 			rows.Close()
 			return e
 		}
-		if o.ID != id || o.UserID != user || o.State != state || o.Offer.Price <= 0 || o.Offer.Price > moneyLimit {
+		if o.ID != id || o.UserID != user || o.State != state || o.Offer.Price < 0 || o.Offer.Price > moneyLimit {
 			rows.Close()
 			return errors.New("order snapshot integrity failed")
 		}

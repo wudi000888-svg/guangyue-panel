@@ -126,6 +126,10 @@ func testBusinessLifecycle(t *testing.T, edition string) {
 	if err != nil || len(subsiteOnly) != 2 {
 		t.Fatalf("subsite subscription did not include child nodes: %d %v", len(subsiteOnly), err)
 	}
+	mixed, err := master.subscriptionCatalogSource(user, "mixed", "")
+	if err != nil || len(mixed) != 4 {
+		t.Fatalf("mixed subscription did not combine authorized local and child nodes: %d %v", len(mixed), err)
+	}
 	foreign, _ := master.subscriptionCatalog(other, false, "")
 	if len(foreign) != 2 {
 		t.Fatal("unassigned user received business nodes")
@@ -291,6 +295,31 @@ func TestBusinessAllocationsAndCounterRollback(t *testing.T) {
 		t.Fatal("cross-site exclusive binding accepted")
 	}
 	_ = nodes
+}
+
+func TestBusinessMonthlyBudgetStopsNewAuthorizations(t *testing.T) {
+	a := testApp(t)
+	a.cfg.Edition = "pro"
+	owner := testUser(t, a, "owner", "owner")
+	u := testUser(t, a, "alice", "user")
+	site, _ := createBusinessTest(t, a, owner, "budgeted")
+	site.Grants = []BusinessGrant{{UserID: u.ID, Quota: 0}}
+	site.MonthlyBudget = 200 * 1024 * 1024 * 1024
+	site.MonthlyBudgetPeriod = time.Now().UTC().Format("2006-01")
+	site.MonthlyUsage = site.MonthlyBudget
+	if err := a.validateBusinessPolicy(site); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := a.businessSnapshot(&site)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snapshot.Users) != 0 {
+		t.Fatal("exhausted child monthly budget still issued users")
+	}
+	if site.MonthlyUsage != site.MonthlyBudget {
+		t.Fatal("monthly budget usage changed while building snapshot")
+	}
 }
 func TestDirectQualitySharedAcrossProtocols(t *testing.T) {
 	a := testApp(t)

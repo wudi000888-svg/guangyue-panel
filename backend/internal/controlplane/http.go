@@ -394,12 +394,18 @@ func (a *App) subscriptionInfo(w http.ResponseWriter, r *http.Request, actor Rec
 		return
 	}
 	pool := r.URL.Query().Get("pool")
-	if pool != "" && pool != "private" && pool != "public" && pool != "all" && pool != "local" && pool != "mounted" && pool != "subsite" {
+	if pool != "" && pool != "private" && pool != "public" && pool != "all" && pool != "local" && pool != "mounted" && pool != "subsite" && pool != "mixed" {
 		failure(w, 400, "订阅池不存在")
 		return
 	}
 	if pool == "" {
-		pool = "local"
+		pool = "mixed"
+	}
+	// Members have one canonical subscription. Source-specific pools remain an
+	// administrator diagnostic view and cannot be selected through a member
+	// session or by changing the query string.
+	if actor.Role != "owner" {
+		pool = "mixed"
 	}
 	public := pool == "public"
 	protocol := r.URL.Query().Get("protocol")
@@ -441,8 +447,12 @@ func (a *App) subscriptionInfo(w http.ResponseWriter, r *http.Request, actor Rec
 	if public {
 		address = a.cfg.PublicURL + "/public-sub/" + strconv.FormatInt(record.ID, 10) + "/" + record.Credentials.PublicToken
 	}
-	if !public && pool != "private" && pool != "local" {
-		address += "?source=" + pool
+	if !public && pool != "mixed" {
+		source := pool
+		if source == "private" {
+			source = "local"
+		}
+		address += "?source=" + source
 	}
 	jsonResponse(w, 200, object{"url": address, "pool": pool, "raw": raw, "nodes": views, "protocol": protocol, "active": record.Active() && (len(views) > 0 || public), "user": record.User})
 }
@@ -480,9 +490,12 @@ func (a *App) serveSubscription(w http.ResponseWriter, r *http.Request) {
 	if public {
 		source = "public"
 	} else if source == "" {
-		source = "local"
+		source = "mixed"
 	}
-	if source != "private" && source != "public" && source != "all" && source != "local" && source != "mounted" && source != "subsite" {
+	if !public && record.Role != "owner" {
+		source = "mixed"
+	}
+	if source != "private" && source != "public" && source != "all" && source != "local" && source != "mounted" && source != "subsite" && source != "mixed" {
 		failure(w, 400, "订阅来源无效")
 		return
 	}

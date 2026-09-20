@@ -67,6 +67,7 @@ func (a *App) materializeBusinessNodes(v BusinessSite) ([]Node, error) {
 	return out, nil
 }
 func (a *App) businessSnapshot(v *BusinessSite) (BusinessSnapshot, error) {
+	v.refreshMonthlyBudget(time.Now().Unix())
 	nodes, err := a.materializeBusinessNodes(*v)
 	if err != nil {
 		return BusinessSnapshot{}, err
@@ -81,6 +82,9 @@ func (a *App) businessSnapshot(v *BusinessSite) (BusinessSnapshot, error) {
 	}
 	grants := []BusinessGrant{}
 	for _, r := range users {
+		if !v.monthlyBudgetAvailable() {
+			break
+		}
 		if !v.Enabled || !a.businessOwnerEnabled(*v) || !r.Active() {
 			continue
 		}
@@ -160,6 +164,9 @@ func (a *App) businessSnapshot(v *BusinessSite) (BusinessSnapshot, error) {
 func (a *App) validateBusinessPolicy(v BusinessSite) error {
 	if len(v.Nodes) > 14 || len(v.Grants) > 256 {
 		return errors.New("每站点最多 14 个附加节点和 256 位成员")
+	}
+	if v.MonthlyBudget < 0 || v.MonthlyBudget > 1<<60 {
+		return errors.New("子站月度资源预算无效")
 	}
 	users, err := a.store.records()
 	if err != nil {

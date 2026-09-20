@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"image"
 	"image/png"
 	"net/http"
@@ -248,6 +249,34 @@ func TestCommerceOrderCaptureResetAndRefund(t *testing.T) {
 	}
 	assertLedger(t, a)
 }
+
+func TestFreeOfferAndPerUserPurchaseLimit(t *testing.T) {
+	a := testApp(t)
+	owner := testUser(t, a, "owner", "owner")
+	user := testUser(t, a, "member", "user")
+	enableSales(t, a)
+	p := Plan{Name: "Demo free", Quota: 1 << 30, ValidDays: 30, Cycle: "30d", Timezone: "UTC", GroupIDs: []string{legacyPrivateGroup}, VLESS: true, HY2: true}
+	p = decoded[Plan](t, req(t, a, owner, "POST", "/api/plans", p), 200)
+	o := decoded[Offer](t, req(t, a, owner, "POST", "/api/commerce/offers", object{"plan_id": p.ID, "plan_version": p.Version, "price": "0", "enabled": true, "purchase_limit": 1}), 200)
+	if o.Price != 0 || o.PurchaseLimit != 1 {
+		t.Fatal("free offer settings were not saved")
+	}
+	order := newOrder(t, a, user, o)
+	orderDo(t, a, user, order, "confirm")
+	if e := a.commerceWork(time.Now().Unix()); e != nil {
+		t.Fatal(e)
+	}
+	completed, _ := a.store.order(order.ID)
+	if completed.State != "completed" {
+		t.Fatalf("free order did not complete: %s", completed.State)
+	}
+	if w := req(t, a, user, "POST", "/api/commerce/orders", object{"offer_id": o.ID, "offer_version": o.Version, "operation_id": randomToken(24)}); w.Code != 409 {
+		t.Fatalf("purchase limit was not enforced: %d %s", w.Code, w.Body.String())
+	}
+	if e := a.store.validateCommerce(true); e != nil {
+		t.Fatal(e)
+	}
+}
 func TestCommerceCancellationIsolationAndExpiry(t *testing.T) {
 	a := testApp(t)
 	owner := testUser(t, a, "owner", "owner")
@@ -332,6 +361,39 @@ func TestSupportTicketImagesAndOwnership(t *testing.T) {
 	var n int
 	if e := a.store.db.QueryRow("SELECT COUNT(*) FROM money_transactions").Scan(&n); e != nil || n != 0 {
 		t.Fatal("ticket wrote money", e)
+	}
+}
+
+func TestSupportTicketListIncludesMemberTicketsForOwner(t *testing.T) {
+	a := testApp(t)
+	owner := testUser(t, a, "owner", "owner")
+	member := testUser(t, a, "member", "user")
+	ticket := decoded[Ticket](t, req(t, a, member, "POST", "/api/support/tickets", object{
+		"title": "List me", "category": "other", "body": "The ticket list should show this", "operation_id": randomToken(24),
+	}), 201)
+	var ownerList struct {
+		Items []Ticket `json:"items"`
+	}
+	w := req(t, a, owner, "GET", "/api/support/tickets", nil)
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &ownerList) != nil {
+		t.Fatalf("owner ticket list failed: %d %s", w.Code, w.Body.String())
+	}
+	found := false
+	for _, item := range ownerList.Items {
+		if item.ID == ticket.ID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("owner ticket center omitted member ticket")
+	}
+	var memberList struct {
+		Items []Ticket `json:"items"`
+	}
+	w = req(t, a, member, "GET", "/api/support/tickets", nil)
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &memberList) != nil || len(memberList.Items) != 1 || memberList.Items[0].ID != ticket.ID {
+		t.Fatalf("member ticket isolation failed: %d %s", w.Code, w.Body.String())
 	}
 }
 func TestCommerceMoneyValidation(t *testing.T) {
