@@ -39,7 +39,7 @@ func mayUseMountNodes(u Record, nodes []Node) bool {
 // Issued reservations survive shrinking, withdrawal and offline children until
 // the existing acknowledgement transaction accepts the final watermarks.
 func (a *App) refreshMountGrants(v *BusinessSite) error {
-	if v.Mount == nil || v.Mount.Assignment != "groups" {
+	if v.Mount == nil {
 		return nil
 	}
 	users, err := a.store.records()
@@ -63,7 +63,7 @@ func (a *App) refreshMountGrants(v *BusinessSite) error {
 	}
 	otherNodes := map[string][]Node{}
 	for _, s := range sites {
-		if s.ID != v.ID && s.Mount != nil && s.Mount.Assignment == "groups" && a.businessOwnerEnabled(s) {
+		if s.ID != v.ID && s.Mount != nil && a.businessOwnerEnabled(s) {
 			otherNodes[s.ID] = mountedPolicyNodes(s)
 		}
 	}
@@ -73,6 +73,14 @@ func (a *App) refreshMountGrants(v *BusinessSite) error {
 	}
 	grants := []BusinessGrant{}
 	for _, u := range users {
+		// Plans always drive authorization, including on mounts saved with the
+		// old manual selector. Preserve only independent accounts' legacy limits.
+		if v.Mount.Assignment != "groups" && u.Entitlement == nil {
+			if old, ok := previous[u.ID]; ok {
+				grants = append(grants, old)
+			}
+			continue
+		}
 		if !mayUseMountNodes(u, candidateNodes) {
 			continue
 		}
@@ -98,7 +106,7 @@ func (a *App) refreshMountGrants(v *BusinessSite) error {
 				if s.IssuedUnlimited[u.ID] {
 					available = 0
 				}
-				if mayUseMountNodes(u, otherNodes[s.ID]) {
+				if (u.Entitlement != nil || s.Mount != nil && s.Mount.Assignment == "groups") && mayUseMountNodes(u, otherNodes[s.ID]) {
 					shares++
 				}
 			}

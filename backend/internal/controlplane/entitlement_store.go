@@ -318,11 +318,12 @@ func (s *Store) initDefaultPlans() error {
 }
 
 func userNodeGroupIDs(u User) []string {
-	if u.NodeGroupIDs != nil {
-		return *u.NodeGroupIDs
-	}
 	if u.Entitlement != nil {
 		return u.Entitlement.GroupIDs
+	}
+	// Individual grants from older installations cannot override a plan.
+	if u.NodeGroupIDs != nil {
+		return *u.NodeGroupIDs
 	}
 	return []string{legacyPrivateGroup, legacyPublicGroup}
 }

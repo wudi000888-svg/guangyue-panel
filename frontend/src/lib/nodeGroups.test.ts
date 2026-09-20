@@ -1,14 +1,18 @@
 import {expect,it} from 'vitest';
 import {filterGroupMembers,groupMemberKey,groupSources,userNodeGroups} from './nodeGroups';
 import type {User,GroupMember} from '../types';
-it('retains exact explicit permissions, including denial, before plan or defaults',()=>{
+it('uses plan groups even when legacy individual overrides exist',()=>{
  const u={} as User;
  expect(userNodeGroups(u)).toEqual(['legacy-private','legacy-public']);
  u.entitlement={group_ids:['plan']} as User['entitlement'];
  expect(userNodeGroups(u)).toEqual(['plan']);
  u.node_group_ids=[];
- expect(userNodeGroups(u)).toEqual([]);
+ expect(userNodeGroups(u)).toEqual(['plan']);
  u.node_group_ids=['child'];
+ expect(userNodeGroups(u)).toEqual(['plan']);
+ u.entitlement!.group_ids=[];
+ expect(userNodeGroups(u)).toEqual([]);
+ delete u.entitlement;
  expect(userNodeGroups(u)).toEqual(['child']);
 });
 it('distinguishes repeated node names and IDs across sites and protocols',()=>{

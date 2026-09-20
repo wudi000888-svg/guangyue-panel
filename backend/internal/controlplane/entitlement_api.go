@@ -382,6 +382,10 @@ func (a *App) entitlementBatch(w http.ResponseWriter, r *http.Request, actor Rec
 			failure(w, 409, "账号已归档，历史记录只读")
 			return
 		}
+		if in.Action == "groups" && u.Entitlement != nil {
+			failure(w, 409, "用户节点权限由套餐决定，请通过套餐与权益调整")
+			return
+		}
 		if u.Meter != nil && u.Meter.PendingReset {
 			failure(w, 409, "用户正在等待旧周期业务站授权撤回")
 			return

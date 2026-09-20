@@ -256,3 +256,93 @@ func TestAutomaticMountManualCompatibilityAndInactiveUsers(t *testing.T) {
 		t.Fatal("disabled user retained access")
 	}
 }
+
+// A saved mount has no second user-selection gate for subscribers, including
+// when the site was configured with the pre-upgrade manual selector.
+func TestPlanMountAccessWithoutUserAssignment(t *testing.T) {
+	for _, assignment := range []string{"groups", "manual"} {
+		t.Run(assignment, func(t *testing.T) {
+			f := newMountFixture(t)
+			plan := createTestPlan(t, f.master, f.owner)
+			plan.GroupIDs = []string{defaultSubsiteGroup}
+			w := req(t, f.master, f.owner, "POST", "/api/plans", plan)
+			if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &plan) != nil {
+				t.Fatal("save plan", w.Code)
+			}
+			applyTestEntitlement(t, f.master, f.owner, entitlementRequest{IDs: []int64{f.user.ID}, Action: "assign", PlanID: plan.ID})
+			user, _ := f.master.store.record(f.user.ID)
+			empty := []string{}
+			user.NodeGroupIDs = &empty // A pre-upgrade denial must not suppress plan access.
+			if err := f.master.store.save(&user); err != nil {
+				t.Fatal(err)
+			}
+			before := user
+			nodes := []MountedNode{{NodeID: "vless-main", Enabled: true, GroupIDs: []string{defaultSubsiteGroup}}, {NodeID: "hy2-main", Enabled: true, GroupIDs: []string{defaultSubsiteGroup}}}
+			w = req(t, f.master, f.owner, "PUT", "/api/business-sites/"+f.site.ID+"/node-pool", object{"revision": f.site.Revision, "catalog_revision": f.site.Mount.Catalog.Revision, "assignment": assignment, "nodes": nodes})
+			if w.Code != 200 {
+				t.Fatal("save without user selection", w.Code, w.Body.String())
+			}
+			shadow := f.delegated(t)
+			if len(shadow.Mount.NodeIDs) != 2 || shadow.Quota != plan.Quota {
+				t.Fatal("plan did not authorize both child protocols")
+			}
+			entries, err := f.master.subscriptionCatalogSource(user, "mixed", "")
+			if err != nil || len(entries) != 2 {
+				t.Fatal("mixed subscription missing child nodes", err, len(entries))
+			}
+			for _, entry := range entries {
+				if !entry.mounted {
+					t.Fatal("child-only plan acquired local nodes")
+				}
+			}
+			stored, _ := f.master.store.record(user.ID)
+			if !reflect.DeepEqual(before, stored) {
+				t.Fatal("mount changed account terms or credentials")
+			}
+			if err := f.child.store.account([]Counter{{Key: "plan-auto", Generation: "one", UserID: shadow.ID, NodeID: "vless-main", Protocol: "vless", Direction: "up", Value: 100}}); err != nil {
+				t.Fatal(err)
+			}
+			f.sync(t)
+			f.sync(t)
+			stored, _ = f.master.store.record(user.ID)
+			if stored.QuotaUsed() != 100 {
+				t.Fatal("plan mount usage not settled")
+			}
+			local := createTestPlan(t, f.master, f.owner)
+			applyTestEntitlement(t, f.master, f.owner, entitlementRequest{IDs: []int64{user.ID}, Action: "assign", PlanID: local.ID})
+			stored, _ = f.master.store.record(user.ID)
+			override := []string{defaultSubsiteGroup}
+			stored.NodeGroupIDs = &override // Nor may an old grant widen a local-only plan.
+			f.master.store.save(&stored)
+			entries, err = f.master.subscriptionCatalogSource(stored, "mixed", "")
+			if err != nil {
+				t.Fatal("local plan subscription", err)
+			}
+			for _, entry := range entries {
+				if entry.mounted {
+					t.Fatal("cached mounted subscription survived plan change")
+				}
+			}
+			f.sync(t)
+			if len(f.delegated(t).Mount.NodeIDs) != 0 {
+				t.Fatal("child retained revoked plan access")
+			}
+			site, _ := f.master.store.businessSite(f.site.ID)
+			if len(site.Grants) != 0 || siteReservation(site, user.ID) != 0 {
+				t.Fatal("revoked plan retained grants or settled reservation")
+			}
+			stored, _ = f.master.store.record(user.ID)
+			entries, err = f.master.subscriptionCatalogSource(stored, "mixed", "")
+			if err != nil || len(entries) != 2 {
+				t.Fatal("local access not restored after child settlement", err, len(entries))
+			}
+			if stored.QuotaUsed() != 100 || stored.Meter.PeriodID != before.Meter.PeriodID || !reflect.DeepEqual(stored.Credentials, before.Credentials) {
+				t.Fatal("plan change reset usage or credentials")
+			}
+			childLocal, _ := f.child.store.record(f.local.ID)
+			if !reflect.DeepEqual(childLocal, f.local) {
+				t.Fatal("changed child independent account")
+			}
+		})
+	}
+}

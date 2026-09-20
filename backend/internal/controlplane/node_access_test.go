@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func TestDirectNodeAccessPreservesAccountAndPlan(t *testing.T) {
+func TestIndependentNodeAccessAndPlanAuthority(t *testing.T) {
 	a := testApp(t)
 	owner, u := testUser(t, a, "owner", "owner"), testUser(t, a, "member", "user")
 	u.Quota, u.Upload, u.Expires = 10000, 123, time.Now().Unix()+86400
@@ -57,15 +57,42 @@ func TestDirectNodeAccessPreservesAccountAndPlan(t *testing.T) {
 	p := createTestPlan(t, a, owner)
 	applyTestEntitlement(t, a, owner, entitlementRequest{IDs: []int64{u.ID}, Action: "assign", PlanID: p.ID})
 	baseline, _ = a.store.record(u.ID)
-	got = apply("add", defaultSubsiteGroup)
-	if !reflect.DeepEqual(*got.NodeGroupIDs, []string{defaultSubsiteGroup, legacyPrivateGroup}) {
-		t.Fatal("plan was not used as append baseline")
+	for _, mode := range []string{"add", "replace", "inherit"} {
+		groups := []string{defaultSubsiteGroup}
+		if mode == "inherit" {
+			groups = nil
+		}
+		w := req(t, a, owner, "POST", "/api/entitlements/batch", entitlementRequest{IDs: []int64{u.ID}, Action: "groups", GroupMode: mode, GroupIDs: groups, Preview: true})
+		if w.Code != 409 {
+			t.Fatal("plan permissions could be overridden", mode, w.Code)
+		}
 	}
-	got = apply("inherit")
-	if !reflect.DeepEqual(userNodeGroupIDs(got.User), p.GroupIDs) {
-		t.Fatal("plan permissions not restored")
+	for _, override := range [][]string{{}, {defaultSubsiteGroup, legacyPublicGroup}} {
+		got = baseline
+		got.NodeGroupIDs = &override
+		if err := a.store.save(&got); err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(userNodeGroupIDs(got.User), p.GroupIDs) {
+			t.Fatal("legacy override replaced plan groups")
+		}
+		resolved := []Record{got}
+		if err := a.store.resolveAccess(resolved); err != nil {
+			t.Fatal(err)
+		}
+		if !nodeGroupAllowed(resolved[0], Node{PolicyVersion: 1, GroupIDs: p.GroupIDs}) || nodeGroupAllowed(resolved[0], Node{PolicyVersion: 1, GroupIDs: []string{defaultSubsiteGroup}}) {
+			t.Fatal("resolved policy bypassed plan")
+		}
+		entries, err := a.subscriptionCatalogSource(got, "all", "")
+		if err != nil || len(entries) != 2 {
+			t.Fatal("plan subscription incorrectly filtered", err, len(entries))
+		}
+		stored, _ := a.store.record(got.ID)
+		stored.NodeGroupIDs = baseline.NodeGroupIDs
+		if !reflect.DeepEqual(stored, baseline) {
+			t.Fatal("authorization changed quota, expiry, usage or credentials")
+		}
 	}
-	got = apply("replace")
 	applyTestEntitlement(t, a, owner, entitlementRequest{IDs: []int64{u.ID}, Action: "assign", PlanID: p.ID})
 	got, _ = a.store.record(u.ID)
 	if got.NodeGroupIDs != nil {
