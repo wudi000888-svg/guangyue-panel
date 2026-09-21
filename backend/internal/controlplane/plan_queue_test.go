@@ -8,7 +8,7 @@ import (
 func TestPlanCanAuthorizeAnIndividualNode(t *testing.T) {
 	a := testApp(t)
 	owner, user := testUser(t, a, "owner", "owner"), testUser(t, a, "member", "user")
-	p := Plan{Name: "Single node", Quota: 1024, ValidDays: 30, Cycle: "30d", Timezone: "UTC", NodeIDs: []string{"vless-main"}, VLESS: true}
+	p := Plan{Name: "Single node", Quota: 1024, ValidDays: 30, Cycle: "30d", Timezone: "UTC", GroupIDs: []string{legacyPrivateGroup}, NodeIDs: []string{"vless-main"}, VLESS: true}
 	p = decoded[Plan](t, req(t, a, owner, "POST", "/api/plans", p), 200)
 	applyTestEntitlement(t, a, owner, entitlementRequest{IDs: []int64{user.ID}, Action: "assign", PlanID: p.ID})
 	user, _ = a.store.record(user.ID)
@@ -20,6 +20,17 @@ func TestPlanCanAuthorizeAnIndividualNode(t *testing.T) {
 	}
 	if memberMayUseNode(user, Node{ID: "hy2-main", Protocol: "hy2", Enabled: true}) {
 		t.Fatal("unselected node leaked into authorization")
+	}
+}
+
+func TestPlanIndividualNodeMustBelongToSelectedGroup(t *testing.T) {
+	a := testApp(t)
+	owner := testUser(t, a, "owner", "owner")
+	for _, groups := range [][]string{nil, {legacyPublicGroup}} {
+		p := Plan{Name: "Invalid node scope", Quota: 1024, ValidDays: 30, Cycle: "30d", Timezone: "UTC", GroupIDs: groups, NodeIDs: []string{"vless-main"}, VLESS: true}
+		if w := req(t, a, owner, "POST", "/api/plans", p); w.Code != 400 {
+			t.Fatalf("node scope %v accepted: %d %s", groups, w.Code, w.Body.String())
+		}
 	}
 }
 

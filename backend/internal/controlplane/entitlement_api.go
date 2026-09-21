@@ -341,8 +341,11 @@ func (a *App) validatePlan(p *Plan) error {
 	if p.Cycle == "" {
 		p.Cycle = "none"
 	}
-	if p.Sort < 0 || p.Sort > 9999 || p.Name == "" || len(p.Name) > 100 || len(p.Description) > 2000 || len(p.Category) > 100 || len(p.Notes) > 2000 || p.Quota < 0 || p.Quota > 1<<60 || p.Price < 0 || p.Price > moneyLimit || p.ValidDays < 0 || p.ValidDays > 36500 || !p.VLESS && !p.HY2 || len(p.GroupIDs) == 0 && len(p.NodeIDs) == 0 {
+	if p.Sort < 0 || p.Sort > 9999 || p.Name == "" || len(p.Description) > 2000 || len(p.Category) > 100 || len(p.Notes) > 2000 || p.Quota < 0 || p.Quota > 1<<60 || p.Price < 0 || p.Price > moneyLimit || p.ValidDays < 0 || p.ValidDays > 36500 || !p.VLESS && !p.HY2 || len(p.GroupIDs) == 0 && len(p.NodeIDs) == 0 {
 		return errors.New("请填写有效的套餐名称、额度、有效期、协议和节点权限")
+	}
+	if len(p.NodeIDs) > 0 && len(p.GroupIDs) == 0 {
+		return errors.New("套餐单独节点必须先选择所属节点组")
 	}
 	if _, err := domain.NextPeriod(time.Now().Unix(), p.Cycle, p.Timezone); err != nil {
 		return errors.New("配额周期或时区无效")
@@ -368,13 +371,30 @@ func (a *App) validatePlan(p *Plan) error {
 		return err
 	}
 	knownNodes := map[string]bool{}
+	nodesByID := map[string]Node{}
 	for _, n := range nodes {
 		knownNodes[n.ID] = true
+		nodesByID[n.ID] = normalizeNodePolicy(n)
 	}
 	seenNodes := map[string]bool{}
+	selectedGroups := map[string]bool{}
+	for _, id := range p.GroupIDs {
+		selectedGroups[id] = true
+	}
 	for _, id := range p.NodeIDs {
 		if !knownNodes[id] || seenNodes[id] {
 			return errors.New("套餐单独节点不存在或重复")
+		}
+		node := nodesByID[id]
+		belongsToSelectedGroup := false
+		for _, groupID := range node.GroupIDs {
+			if selectedGroups[groupID] {
+				belongsToSelectedGroup = true
+				break
+			}
+		}
+		if !belongsToSelectedGroup {
+			return errors.New("套餐单独节点必须属于已选择的节点组")
 		}
 		seenNodes[id] = true
 	}
