@@ -21,9 +21,9 @@ export const router = createRouter({
     { path: '/nodes', component: () => import('./pages/NodesPage.vue'), meta: { owner: true } },
     { path: '/subsite-nodes', component: () => import('./pages/SubsiteNodesPage.vue'), meta: { owner: true, pro: true } },
     { path: '/subscription', component: () => import('./pages/SubscriptionPage.vue') },
-    { path: '/public/:tab?', component: () => import('./pages/PublicPoolPage.vue'), meta: { owner: true, professional: true, publicFeatures: true } },
-    { path: '/public-nodes', component: () => import('./pages/NodesPage.vue'), meta: { owner: true, professional: true, publicFeatures: true } },
-    { path: '/public-subscription', component: () => import('./pages/SubscriptionPage.vue'), meta: { owner: true, professional: true, publicFeatures: true } },
+    { path: '/public/:tab?', component: () => import('./pages/PublicPoolPage.vue'), meta: { owner: true, publicFeatures: true } },
+    { path: '/public-nodes', component: () => import('./pages/NodesPage.vue'), meta: { owner: true, publicFeatures: true } },
+    { path: '/public-subscription', component: () => import('./pages/SubscriptionPage.vue'), meta: { owner: true, publicFeatures: true } },
     { path: '/wallet', component: () => import('./pages/WalletPage.vue') },
     { path: '/shop', component: () => import('./pages/ShopPage.vue') },
     { path: '/orders', component: () => import('./pages/OrdersPage.vue') },
@@ -44,6 +44,6 @@ export const router = createRouter({
 router.beforeEach(to=>{
   const access=useAccessStore(),preferences=usePreferencesStore();
   if(!access.role) return true; // The shell withholds page content until authentication.
-  if(!allowedRoute(to.meta,{role:access.role,edition:access.edition,simple:preferences.simpleMode,publicFeatures:preferences.publicFeaturesEnabled})) return access.role==='owner'?'/overview':'/subscription';
+  if(!allowedRoute(to.meta,{role:access.role,edition:access.edition,publicFeatures:preferences.publicFeaturesEnabled})) return access.role==='owner'?'/overview':'/subscription';
   return true;
 });

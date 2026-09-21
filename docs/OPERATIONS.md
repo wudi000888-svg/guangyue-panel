@@ -78,7 +78,7 @@ sudo systemctl start guangyue guangyue-xray guangyue-hy2
 4. VLESS 使用 Vision；确认客户端没有丢失 `flow=xtls-rprx-vision`。Nginx stream 应仅分流，不应转成 HTTP WebSocket 链路。
 5. Linux TCP 查看 `sysctl net.ipv4.tcp_congestion_control net.core.default_qdisc`；BBR 是否有利取决于内核与路径。HY2 的 QUIC 拥塞控制不等同于 Linux TCP BBR。
 6. 本机同时运行 TUN、Fake-IP DNS 或另一个代理时，先排除二次代理、SNI 嗅探重定向和路由回环。可让测试客户端使用服务器真实 IP，并绑定实际联网网卡做对照（Xray `streamSettings.sockopt.interface`）；网卡名必须以本机实际配置为准。仅改服务器地址不能保证绕过 TUN。SSH 转发适合隔离协议问题，但不能代替公网直连验收。
-7. 网络优化的开关和实际状态见 **系统设置 → 网络优化**，简易和专业模式均可使用。IPv4/IPv6 的 TCP 共用系统拥塞算法，HY2 使用独立 QUIC 算法；优化不改变节点 DNS 或 IPv6 安全策略。
+7. 网络优化的开关和实际状态见 **系统设置 → 网络优化**，统一面板均可使用。IPv4/IPv6 的 TCP 共用系统拥塞算法，HY2 使用独立 QUIC 算法；优化不改变节点 DNS 或 IPv6 安全策略。
 
 ### BBR 与 HY2 优化
 
