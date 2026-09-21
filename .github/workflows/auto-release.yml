@@ -1,74 +1,36 @@
-name: Prepare release PR
+name: Commit release
 
 on:
-  push:
-    branches: [main]
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main, 'codex/auto-release-*']
 
 permissions:
   contents: write
   pull-requests: write
-  actions: read
+  actions: write
 
 concurrency:
   group: commit-release-main
   cancel-in-progress: false
 
 jobs:
-  release-pr:
-    # A release commit is merged by the PR created below. It must not create
-    # another release PR for itself.
-    if: ${{ !contains(github.event.head_commit.message, '[skip release]') }}
+  release:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
-          token: ${{ github.token }}
-
-      - name: Require successful full CI for the source commit
+      - name: Prepare, merge or publish the tested version
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          run_id=''
-          for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
-            run_id=$(gh run list --workflow ci.yml --commit "$GITHUB_SHA" --limit 20 --json databaseId --jq '.[0].databaseId // empty')
-            test -n "$run_id" && break
-            sleep 10
-          done
-          test -n "$run_id"
-          gh run watch "$run_id" --exit-status --interval 15
-
-      - name: Increment patch version
-        id: version
-        run: echo "version=$(python3 scripts/bump-version.py)" >> "$GITHUB_OUTPUT"
-
-      - name: Create or update the protected-main release PR
-        env:
-          GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          branch="automation/release-v${VERSION}"
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git switch -c "$branch"
-          git add VERSION backend/internal/controlplane/config.go frontend/package.json frontend/package-lock.json README.md CHANGELOG.md
-          # Keep CI enabled for the release PR; only suppress a second release
-          # PR after this change reaches protected main.
-          git commit -m "release: v${VERSION} [skip release]"
-          git push --force-with-lease origin "HEAD:refs/heads/${branch}"
-
-          pr=$(gh pr list --head "$branch" --base main --state open --json number --jq '.[0].number // empty')
-          if test -z "$pr"; then
-            body=$(mktemp)
-            cat > "$body" <<EOF
-          Automated version bump for v${VERSION}.
-
-          The PR is created because main is protected. Its required CI includes the full Lite/Pro installation matrix. Once merged, the release tag and GitHub Release are created automatically.
-          EOF
-            pr=$(gh pr create --base main --head "$branch" --title "release: v${VERSION} [skip release]" --body-file "$body")
-          fi
-
-          # Auto-merge is enabled when repository rules permit it. If an
-          # administrator requires a manual merge, the PR remains available.
-          gh pr merge "$pr" --auto --squash || echo "Automatic merge is unavailable; waiting for a maintainer to merge $pr."
+          TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
+          TESTED_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          TESTED_EVENT: ${{ github.event.workflow_run.event }}
+        run: bash scripts/auto-release.sh

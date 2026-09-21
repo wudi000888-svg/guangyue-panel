@@ -24,13 +24,14 @@
 
 ### 主分支自动发布
 
-`.github/workflows/auto-release.yml` 在每次提交进入 `main` 后自动创建版本 PR；主分支保护允许合并后，`.github/workflows/release-on-merge.yml` 自动完成打标签并触发发布：
+`.github/workflows/auto-release.yml` 在完整 CI 成功后继续发布，兼容受保护的 `main`，不绕过分支保护：
 
-1. 等待源提交完整 CI（含独立安装、Lite/Pro 子站与升级测试）成功，再将 `VERSION` 的补丁号递增，并同步 Go、Vue、README 和变更记录。
-2. 版本 PR 使用同一套完整 CI，包含前端生产构建、Go 构建、HY2/Xray 核心测试和 Lite/Pro 安装矩阵。
-3. PR 合并后创建对应 `vX.Y.Z` tag，并由 `Publish version` 上传和校验 Lite/Pro Linux amd64 安装包、`SHA256SUMS` 与 `SBOM.spdx.json`。
+1. 功能合并提交通过完整 CI 后，递增版本并创建版本 PR。
+2. 显式调度版本分支 CI，检查前端、Go、自定义核心及全部安装矩阵；成功后通过正常 PR 合并。
+3. 显式调度合并提交的完整 CI；成功后打标签并调度 `Publish version`。发布只使用此提交的已测试资产。
+4. 版本合并提交带有 `[skip release]`，不重复递增；已发布版本保持不可变。落后于当前 main 的任务跳过，避免覆盖较新的提交。
 
-版本合并提交带有 `[skip release]`，不会再次触发发布循环，同时保留完整 CI 检查。任一检查或构建失败时不会创建 tag 或 Release。自动合并不可用时，版本 PR 会保留给维护者手动合并。
+Actions 设置需要允许 GitHub Actions 创建 PR。工作流使用 `contents`、`pull-requests`、`actions` 写权限完成上述操作，无需保存个人访问令牌。因为默认 `GITHUB_TOKEN` 的写入不触发下一轮 push/PR 工作流，所以每个 CI 和发布转换都显式调用 `workflow_dispatch`。额外人工审批规则仍然生效，无法合并时工作流明确失败并保留版本 PR。
 
 1. 手动发布仍可更新 VERSION、后端常量、前端 package/lock、文档与 CHANGELOG。
 2. 运行 `scripts/check.sh`、HY2 补丁测试、许可证收集与打包；执行 `gitleaks dir` 及提交历史扫描。
