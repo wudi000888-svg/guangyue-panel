@@ -16,6 +16,8 @@ import (
 
 const businessLeaseSeconds = 900
 const businessMaxSites = 64
+const defaultBudgetCooldownSeconds int64 = 24 * 60 * 60
+const maxBudgetCooldownSeconds int64 = 365 * 24 * 60 * 60
 
 type BusinessInfo struct {
 	Edition       string `json:"edition,omitempty"`
@@ -76,6 +78,8 @@ type BusinessSite struct {
 	MonthlyBudget       int64                   `json:"monthly_budget,omitempty"`
 	MonthlyUsage        int64                   `json:"monthly_usage,omitempty"`
 	MonthlyBudgetPeriod string                  `json:"monthly_budget_period,omitempty"`
+	CooldownSeconds     int64                   `json:"cooldown_seconds,omitempty"`
+	BudgetCooldownUntil int64                   `json:"budget_cooldown_until,omitempty"`
 	NodeUsage           []NodeUsage             `json:"-"`
 	Commands            []BusinessCommand       `json:"commands,omitempty"`
 	ID                  string                  `json:"id"`
@@ -107,14 +111,35 @@ type BusinessSite struct {
 
 func (v *BusinessSite) refreshMonthlyBudget(now int64) {
 	period := time.Unix(now, 0).UTC().Format("2006-01")
-	if v.MonthlyBudgetPeriod != period {
+	if v.MonthlyBudgetPeriod != period || v.BudgetCooldownUntil > 0 && now >= v.BudgetCooldownUntil {
 		v.MonthlyBudgetPeriod = period
 		v.MonthlyUsage = 0
+		v.BudgetCooldownUntil = 0
+	}
+	if v.CooldownSeconds <= 0 || v.CooldownSeconds > maxBudgetCooldownSeconds {
+		v.CooldownSeconds = defaultBudgetCooldownSeconds
+	}
+	// A site may be loaded with an already exhausted counter (for example after
+	// a restart or a destructive upgrade). Start its configured cooldown once,
+	// instead of leaving the site paused forever waiting for another report.
+	if v.BudgetCooldownUntil == 0 && v.MonthlyBudget > 0 && v.MonthlyUsage >= v.MonthlyBudget {
+		v.markBudgetExhausted(now)
 	}
 }
 
 func (v BusinessSite) monthlyBudgetAvailable() bool {
-	return v.MonthlyBudget <= 0 || v.MonthlyUsage < v.MonthlyBudget
+	now := time.Now().Unix()
+	return v.MonthlyBudget <= 0 || (v.BudgetCooldownUntil <= now && v.MonthlyUsage < v.MonthlyBudget)
+}
+
+func (v *BusinessSite) markBudgetExhausted(now int64) {
+	if v.MonthlyBudget <= 0 || v.MonthlyUsage < v.MonthlyBudget {
+		return
+	}
+	if v.CooldownSeconds <= 0 || v.CooldownSeconds > maxBudgetCooldownSeconds {
+		v.CooldownSeconds = defaultBudgetCooldownSeconds
+	}
+	v.BudgetCooldownUntil = now + v.CooldownSeconds
 }
 
 func (v *BusinessSite) defaults() {
@@ -141,6 +166,9 @@ func (v *BusinessSite) defaults() {
 	}
 	if v.IssuedUnlimited == nil {
 		v.IssuedUnlimited = map[int64]bool{}
+	}
+	if v.CooldownSeconds <= 0 || v.CooldownSeconds > maxBudgetCooldownSeconds {
+		v.CooldownSeconds = defaultBudgetCooldownSeconds
 	}
 }
 func (v BusinessSite) public() BusinessSite {

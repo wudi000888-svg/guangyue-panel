@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -55,6 +56,26 @@ func newMountFixture(t *testing.T) *mountFixture {
 }
 func (f *mountFixture) policy(t *testing.T, nodes []MountedNode, grants []BusinessGrant) {
 	t.Helper()
+	// Manual mount tests must opt the synthetic user into the selected master
+	// groups explicitly. The production default remains the legacy local groups;
+	// mounted nodes are now forbidden from using that local group.
+	if len(grants) > 0 {
+		ids := []string{}
+		seen := map[string]bool{}
+		for _, n := range nodes {
+			for _, id := range n.GroupIDs {
+				if !seen[id] {
+					seen[id] = true
+					ids = append(ids, id)
+				}
+			}
+		}
+		f.user.Entitlement = nil
+		f.user.NodeGroupIDs = &ids
+		if err := f.master.store.save(&f.user); err != nil {
+			t.Fatal(err)
+		}
+	}
 	s, _ := f.master.store.businessSite(f.site.ID)
 	w := req(t, f.master, f.owner, "PUT", "/api/business-sites/"+s.ID+"/node-pool", object{"revision": s.Revision, "catalog_revision": s.Mount.Catalog.Revision, "nodes": nodes, "grants": grants})
 	if w.Code != 200 {
@@ -87,7 +108,7 @@ func TestMountedNodeIsolationAndSubscriptions(t *testing.T) {
 	if len(f.site.Mount.Nodes) != 0 {
 		t.Fatal("auto mounted")
 	}
-	mounts := []MountedNode{{NodeID: "vless-main", Enabled: true, GroupIDs: []string{legacyPrivateGroup}}}
+	mounts := []MountedNode{{NodeID: "vless-main", Enabled: true, GroupIDs: []string{defaultSubsiteGroup}}}
 	f.policy(t, mounts, []BusinessGrant{{UserID: f.user.ID, Budget: 600}})
 	shadow := f.delegated(t)
 	if shadow.ID == f.local.ID || shadow.Credentials.HY2 == f.local.Credentials.HY2 || shadow.Credentials.VLESS["vless-main"] == f.user.Credentials.VLESS["vless-main"] {
@@ -215,7 +236,7 @@ func TestMountedAccountingRevocationAndPeriods(t *testing.T) {
 	if w.Code != 200 {
 		t.Fatal(w.Body.String())
 	}
-	mounts := []MountedNode{{NodeID: n.ID, Enabled: true, GroupIDs: []string{legacyPrivateGroup}}}
+	mounts := []MountedNode{{NodeID: n.ID, Enabled: true, GroupIDs: []string{defaultSubsiteGroup}}}
 	f.policy(t, mounts, []BusinessGrant{{UserID: f.user.ID, Budget: 600}})
 	shadow := f.delegated(t)
 	account := func(value int64) {
@@ -272,10 +293,15 @@ func TestMountedAccountingRevocationAndPeriods(t *testing.T) {
 
 func TestMountedMonthlyBudgetStopsNewAuthorizations(t *testing.T) {
 	f := newMountFixture(t)
+	groupIDs := []string{defaultSubsiteGroup}
+	f.user.NodeGroupIDs = &groupIDs
+	if err := f.master.store.save(&f.user); err != nil {
+		t.Fatal(err)
+	}
 	s, _ := f.master.store.businessSite(f.site.ID)
 	w := req(t, f.master, f.owner, "PUT", "/api/business-sites/"+s.ID+"/node-pool", object{
 		"revision": s.Revision, "catalog_revision": s.Mount.Catalog.Revision,
-		"monthly_budget": 1, "nodes": []MountedNode{{NodeID: "vless-main", Enabled: true, GroupIDs: []string{legacyPrivateGroup}}},
+		"monthly_budget": 1, "nodes": []MountedNode{{NodeID: "vless-main", Enabled: true, GroupIDs: []string{defaultSubsiteGroup}}},
 		"assignment": "manual", "grants": []BusinessGrant{{UserID: f.user.ID, Budget: 600}},
 	})
 	if w.Code != 200 {
@@ -295,14 +321,74 @@ func TestMountedMonthlyBudgetStopsNewAuthorizations(t *testing.T) {
 	if len(shadow.Mount.NodeIDs) != 0 {
 		t.Fatal("monthly budget did not revoke new authorization after exhaustion")
 	}
+	entries, err := f.master.subscriptionCatalogSource(f.user, "mounted", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 0 {
+		t.Fatal("exhausted monthly budget still exposed mounted subscription")
+	}
 	if s.MonthlyBudget != 1 || s.MonthlyBudgetPeriod == "" {
 		t.Fatal("monthly budget setting was not persisted")
+	}
+	if len(s.Mount.Nodes) != 1 || len(s.Mount.Nodes[0].GroupIDs) != 1 || s.Mount.Nodes[0].GroupIDs[0] != defaultSubsiteGroup {
+		t.Fatal("budget exhaustion changed mounted node-group policy")
+	}
+	// Cooldown expiry resets the shared counter and makes the existing mount
+	// eligible again. The policy itself is deliberately retained.
+	s.BudgetCooldownUntil = time.Now().Unix() - 1
+	if err := f.master.store.saveBusinessSite(s); err != nil {
+		t.Fatal(err)
+	}
+	f.sync(t)
+	entries, err = f.master.subscriptionCatalogSource(f.user, "mounted", "")
+	if err != nil || len(entries) != 1 {
+		t.Fatal("cooldown did not restore mounted subscription", err, len(entries))
+	}
+	if len(s.Mount.Nodes) != 1 || s.Mount.Nodes[0].GroupIDs[0] != defaultSubsiteGroup {
+		t.Fatal("cooldown changed mounted node-group policy")
+	}
+}
+
+func TestMountedRejectsDefaultLocalGroupButAcceptsCustomGroups(t *testing.T) {
+	f := newMountFixture(t)
+	putGroup := func(scope, name string) NodeGroup {
+		t.Helper()
+		w := req(t, f.master, f.owner, "POST", "/api/node-groups", NodeGroup{Name: name, Scope: scope, Enabled: true})
+		if w.Code != 200 {
+			t.Fatal("create node group", w.Code, w.Body.String())
+		}
+		var g NodeGroup
+		if err := json.Unmarshal(w.Body.Bytes(), &g); err != nil {
+			t.Fatal(err)
+		}
+		return g
+	}
+	groups := []NodeGroup{putGroup("private", "挂载私有组"), putGroup("public", "挂载公共组"), putGroup("subsite", "挂载子站组")}
+	s, _ := f.master.store.businessSite(f.site.ID)
+	request := func(ids []string) *httptest.ResponseRecorder {
+		return req(t, f.master, f.owner, "PUT", "/api/business-sites/"+s.ID+"/node-pool", object{
+			"revision": s.Revision, "catalog_revision": s.Mount.Catalog.Revision,
+			"assignment": "manual", "nodes": []MountedNode{{NodeID: "vless-main", Enabled: true, GroupIDs: ids}},
+		})
+	}
+	if w := request([]string{legacyPrivateGroup}); w.Code != 400 {
+		t.Fatalf("default local group was accepted: %d %s", w.Code, w.Body.String())
+	}
+	ids := []string{groups[0].ID, groups[1].ID, groups[2].ID}
+	sort.Strings(ids)
+	if w := request(ids); w.Code != 200 {
+		t.Fatalf("custom mounted groups were rejected: %d %s", w.Code, w.Body.String())
+	}
+	stored, err := f.master.store.businessSite(f.site.ID)
+	if err != nil || len(stored.Mount.Nodes) != 1 || !reflect.DeepEqual(stored.Mount.Nodes[0].GroupIDs, ids) {
+		t.Fatalf("custom mounted groups were not persisted: %v %+v", err, stored.Mount.Nodes)
 	}
 }
 
 func TestMountedTokenSharingAndLease(t *testing.T) {
 	f := newMountFixture(t)
-	mounts := []MountedNode{{NodeID: "hy2-main", Enabled: true, GroupIDs: []string{legacyPrivateGroup}}}
+	mounts := []MountedNode{{NodeID: "hy2-main", Enabled: true, GroupIDs: []string{defaultSubsiteGroup}}}
 	f.policy(t, mounts, []BusinessGrant{{UserID: f.user.ID, Budget: 600}})
 	shadow := f.delegated(t)
 	shadow.Mount.LeaseUntil = time.Now().Unix() - 1
@@ -390,7 +476,7 @@ func TestMountedGuardSeesGrantWithdrawnBetweenPolls(t *testing.T) {
 }
 func TestMountedPendingRemovalAndLocalBlock(t *testing.T) {
 	f := newMountFixture(t)
-	f.policy(t, []MountedNode{{NodeID: "vless-main", Enabled: true, GroupIDs: []string{legacyPrivateGroup}}}, []BusinessGrant{{UserID: f.user.ID, Budget: 600}})
+	f.policy(t, []MountedNode{{NodeID: "vless-main", Enabled: true, GroupIDs: []string{defaultSubsiteGroup}}}, []BusinessGrant{{UserID: f.user.ID, Budget: 600}})
 	shadow := f.delegated(t)
 	w := req(t, f.child, f.localOwner, "DELETE", "/api/users/"+businessUsageKey(shadow.ID), nil)
 	if w.Code != 200 {
@@ -418,7 +504,7 @@ func TestMountedPendingRemovalAndLocalBlock(t *testing.T) {
 }
 func TestUnifiedSubscriptionNeverExpandsPublicToken(t *testing.T) {
 	f := newMountFixture(t)
-	f.policy(t, []MountedNode{{NodeID: "vless-main", Enabled: true, GroupIDs: []string{legacyPrivateGroup}}}, []BusinessGrant{{UserID: f.user.ID, Budget: 600}})
+	f.policy(t, []MountedNode{{NodeID: "vless-main", Enabled: true, GroupIDs: []string{defaultSubsiteGroup}}}, []BusinessGrant{{UserID: f.user.ID, Budget: 600}})
 	path := "/public-sub/" + businessUsageKey(f.user.ID) + "/" + f.user.Credentials.PublicToken + "?source=all&format=mihomo"
 	w := req(t, f.master, Record{}, "GET", path, nil)
 	if w.Code != 200 || strings.Contains(w.Body.String(), "child-vless.example.com") {
@@ -463,7 +549,7 @@ func TestMountedBindingRetryAndAtomicFailure(t *testing.T) {
 }
 func TestMountedTokenReplacementRetainsLedger(t *testing.T) {
 	f := newMountFixture(t)
-	f.policy(t, []MountedNode{{NodeID: "vless-main", Enabled: true, GroupIDs: []string{legacyPrivateGroup}}}, []BusinessGrant{{UserID: f.user.ID, Budget: 600}})
+	f.policy(t, []MountedNode{{NodeID: "vless-main", Enabled: true, GroupIDs: []string{defaultSubsiteGroup}}}, []BusinessGrant{{UserID: f.user.ID, Budget: 600}})
 	_, token, _ := fleetTokenWithOptions(t, f.child, f.localOwner, "manage", true)
 	old, _ := f.master.store.businessSite(f.site.ID)
 	w := req(t, f.master, f.owner, "POST", "/api/business-sites/import", object{"token": token, "url": old.Connection.URL})
@@ -483,7 +569,7 @@ func TestMountedTokenReplacementRetainsLedger(t *testing.T) {
 
 func TestMountedRejectsRestoredCountersAndPreservesEditedBudget(t *testing.T) {
 	f := newMountFixture(t)
-	nodes := []MountedNode{{NodeID: "vless-main", Enabled: true, GroupIDs: []string{legacyPrivateGroup}}}
+	nodes := []MountedNode{{NodeID: "vless-main", Enabled: true, GroupIDs: []string{defaultSubsiteGroup}}}
 	f.policy(t, nodes, []BusinessGrant{{UserID: f.user.ID, Budget: 600}})
 	shadow := f.delegated(t)
 	if err := f.child.store.account([]Counter{{Key: "restore-test", Generation: "one", UserID: shadow.ID, NodeID: "vless-main", Protocol: "vless", Direction: "up", Value: 20}}); err != nil {

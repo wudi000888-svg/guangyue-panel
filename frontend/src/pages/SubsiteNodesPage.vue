@@ -18,7 +18,7 @@ void SubsitePoolOverview;
       </div>
       <button class="text-button" @click="go('ips/subsite-egress')"><ArrowRight :size="15" />{{ t('查看子站 IP 池') }}</button>
     </header>
-    <div class="subsite-node-note"><Globe2 :size="18" /><span>{{ t('子站节点只能加入子站节点组，不会进入本地节点组。') }}</span></div>
+    <div class="subsite-node-note"><Globe2 :size="18" /><span>{{ t('子站节点不能加入默认本地节点组；新建节点组均可用于分配。') }}</span></div>
     <SubsitePoolOverview />
   </section>
 </template>

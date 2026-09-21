@@ -109,12 +109,14 @@ func mountNodePolicy(m MountedNode, source Node) Node {
 	return source
 }
 
-// Mounted nodes belong to the master site's sub-site groups. Keeping a local
-// group on a mounted node makes it eligible for the normal subscription too.
-func subsiteGroupIDs(ids []string, groups []NodeGroup) []string {
+// Mounted nodes may use any administrator-created node group. The installation
+// default local group is deliberately excluded so a mounted endpoint can never
+// silently become part of the ordinary local subscription. Group scope remains
+// a plan concern; it does not decide whether a mounted node is valid.
+func mountedGroupIDs(ids []string, groups []NodeGroup) []string {
 	allowed := map[string]bool{}
 	for _, g := range groups {
-		if g.Scope == "subsite" {
+		if g.ID != legacyPrivateGroup {
 			allowed[g.ID] = true
 		}
 	}
@@ -136,7 +138,15 @@ func subsiteGroupIDs(ids []string, groups []NodeGroup) []string {
 func normalizeMountedNodeGroups(nodes []MountedNode, groups []NodeGroup) bool {
 	changed := false
 	for i := range nodes {
-		filtered := subsiteGroupIDs(nodes[i].GroupIDs, groups)
+		filtered := mountedGroupIDs(nodes[i].GroupIDs, groups)
+		if len(filtered) == 0 && len(nodes[i].GroupIDs) > 0 {
+			for _, g := range groups {
+				if g.ID == defaultSubsiteGroup && g.Enabled {
+					filtered = []string{defaultSubsiteGroup}
+					break
+				}
+			}
+		}
 		if len(filtered) != len(nodes[i].GroupIDs) {
 			changed = true
 		} else {
