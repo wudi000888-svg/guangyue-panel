@@ -153,7 +153,11 @@ func TestAutomaticMountFollowsMainGroupsAndRevokes(t *testing.T) {
 
 func TestAutomaticMountBudgetsRespectOtherSitesAndOfflineReservations(t *testing.T) {
 	f := newMountFixture(t)
-	autoMountPolicy(t, f, []string{legacyPrivateGroup})
+	f.user.Entitlement = &domain.Entitlement{GroupIDs: []string{legacyPrivateGroup, defaultSubsiteGroup}}
+	if err := f.master.store.save(&f.user); err != nil {
+		t.Fatal(err)
+	}
+	autoMountPolicy(t, f, []string{defaultSubsiteGroup})
 	s, _ := f.master.store.businessSite(f.site.ID)
 	if siteReservation(s, f.user.ID) != 500 {
 		t.Fatal("local quota not retained")
@@ -216,13 +220,17 @@ func TestAutomaticMountBudgetsRespectOtherSitesAndOfflineReservations(t *testing
 }
 func TestAutomaticMountManualCompatibilityAndInactiveUsers(t *testing.T) {
 	f := newMountFixture(t)
-	f.policy(t, []MountedNode{{NodeID: "vless-main", Enabled: true, GroupIDs: []string{legacyPrivateGroup}}}, []BusinessGrant{{UserID: f.user.ID, Budget: 600}})
+	f.policy(t, []MountedNode{{NodeID: "vless-main", Enabled: true, GroupIDs: []string{defaultSubsiteGroup}}}, []BusinessGrant{{UserID: f.user.ID, Budget: 600}})
 	s, _ := f.master.store.businessSite(f.site.ID)
 	before := append([]BusinessGrant{}, s.Grants...)
 	if err := f.master.refreshMountGrants(&s); err != nil || !reflect.DeepEqual(before, s.Grants) {
 		t.Fatal("legacy manual policy changed", err)
 	}
-	autoMountPolicy(t, f, []string{legacyPrivateGroup})
+	f.user.Entitlement = &domain.Entitlement{GroupIDs: []string{defaultSubsiteGroup}}
+	if err := f.master.store.save(&f.user); err != nil {
+		t.Fatal(err)
+	}
+	autoMountPolicy(t, f, []string{defaultSubsiteGroup})
 	f.user.VLESS = false
 	f.master.store.save(&f.user)
 	f.sync(t)

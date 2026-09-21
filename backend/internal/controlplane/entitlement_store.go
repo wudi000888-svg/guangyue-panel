@@ -251,7 +251,7 @@ func (s *Store) repairMountedGroupScopes() error {
 		changed := false
 		for j := range v.Mount.Nodes {
 			before := append([]string{}, v.Mount.Nodes[j].GroupIDs...)
-			filtered := subsiteGroupIDs(before, groups)
+			filtered := mountedGroupIDs(before, groups)
 			if len(filtered) == 0 && len(before) > 0 {
 				filtered = []string{defaultSubsiteGroup}
 			}

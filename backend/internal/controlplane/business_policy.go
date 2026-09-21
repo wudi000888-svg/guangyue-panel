@@ -22,7 +22,7 @@ func (a *App) materializeBusinessNodes(v BusinessSite) ([]Node, error) {
 		if v.Mount != nil && !v.Removed {
 			for _, m := range v.Mount.Nodes {
 				if n, ok := mountSource(v.Mount.Catalog, m.NodeID); ok {
-					m.GroupIDs = subsiteGroupIDs(m.GroupIDs, groups)
+					m.GroupIDs = mountedGroupIDs(m.GroupIDs, groups)
 					out = append(out, mountNodePolicy(m, n))
 				}
 			}

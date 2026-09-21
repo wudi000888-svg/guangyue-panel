@@ -88,6 +88,7 @@ func (a *App) mountSiteAPI(w http.ResponseWriter, r *http.Request, actor Record,
 			Revision        string          `json:"revision"`
 			CatalogRevision string          `json:"catalog_revision"`
 			MonthlyBudget   int64           `json:"monthly_budget"`
+			CooldownSeconds int64           `json:"cooldown_seconds"`
 			Nodes           []MountedNode   `json:"nodes"`
 			Grants          []BusinessGrant `json:"grants"`
 		}
@@ -101,13 +102,14 @@ func (a *App) mountSiteAPI(w http.ResponseWriter, r *http.Request, actor Record,
 			failure(w, 409, "节点池已变化，请刷新后重试")
 			return
 		}
-		if in.MonthlyBudget < 0 || in.MonthlyBudget > 1<<60 {
+		if in.MonthlyBudget < 0 || in.MonthlyBudget > 1<<60 || in.CooldownSeconds < 0 || in.CooldownSeconds > maxBudgetCooldownSeconds {
 			a.mu.Unlock()
 			failure(w, 400, "子站月度资源预算无效")
 			return
 		}
 		previousGrants := append([]BusinessGrant{}, current.Grants...)
 		current.MonthlyBudget = in.MonthlyBudget
+		current.CooldownSeconds = in.CooldownSeconds
 		current.refreshMonthlyBudget(time.Now().Unix())
 		current.Mount.Assignment = in.Assignment
 		current.Mount.Nodes = in.Nodes
@@ -191,6 +193,9 @@ func (a *App) validateMountPolicy(v *BusinessSite) error {
 		for _, id := range n.GroupIDs {
 			if !known[id] || gs[id] {
 				return errors.New("主站节点组不存在或重复")
+			}
+			if id == legacyPrivateGroup {
+				return errors.New("子站节点不能加入默认本地节点组，请先创建或选择其他节点组")
 			}
 			gs[id] = true
 		}

@@ -176,15 +176,16 @@ func (a *App) businessAPI(w http.ResponseWriter, r *http.Request, actor Record) 
 	}
 	if len(parts) == 1 && r.Method == "PUT" {
 		var in struct {
-			Name          string          `json:"name"`
-			Group         string          `json:"group"`
-			Enabled       bool            `json:"enabled"`
-			Exclusive     bool            `json:"exclusive"`
-			MonthlyBudget int64           `json:"monthly_budget"`
-			Revision      string          `json:"revision"`
-			Nodes         []Node          `json:"nodes"`
-			DefaultNodes  []Node          `json:"default_nodes"`
-			Grants        []BusinessGrant `json:"grants"`
+			Name            string          `json:"name"`
+			Group           string          `json:"group"`
+			Enabled         bool            `json:"enabled"`
+			Exclusive       bool            `json:"exclusive"`
+			MonthlyBudget   int64           `json:"monthly_budget"`
+			CooldownSeconds int64           `json:"cooldown_seconds"`
+			Revision        string          `json:"revision"`
+			Nodes           []Node          `json:"nodes"`
+			DefaultNodes    []Node          `json:"default_nodes"`
+			Grants          []BusinessGrant `json:"grants"`
 		}
 		if !decodeBusiness(w, r, &in) {
 			return
@@ -195,7 +196,7 @@ func (a *App) businessAPI(w http.ResponseWriter, r *http.Request, actor Record) 
 		}
 		in.Name = strings.TrimSpace(in.Name)
 		in.Group = strings.TrimSpace(in.Group)
-		if in.Name == "" || utf8.RuneCountInString(in.Name) > 64 || utf8.RuneCountInString(in.Group) > 40 || in.MonthlyBudget < 0 || in.MonthlyBudget > 1<<60 {
+		if in.Name == "" || utf8.RuneCountInString(in.Name) > 64 || utf8.RuneCountInString(in.Group) > 40 || in.MonthlyBudget < 0 || in.MonthlyBudget > 1<<60 || in.CooldownSeconds < 0 || in.CooldownSeconds > maxBudgetCooldownSeconds {
 			failure(w, 400, "站点名称或分组无效")
 			return
 		}
@@ -210,6 +211,7 @@ func (a *App) businessAPI(w http.ResponseWriter, r *http.Request, actor Record) 
 		v.Enabled = in.Enabled
 		v.Exclusive = in.Exclusive
 		v.MonthlyBudget = in.MonthlyBudget
+		v.CooldownSeconds = in.CooldownSeconds
 		v.refreshMonthlyBudget(time.Now().Unix())
 		for i := range in.Grants {
 			g := &in.Grants[i]

@@ -70,6 +70,7 @@ func (a *App) subscriptionCatalogSource(record Record, source, protocol string) 
 		return nil, err
 	}
 	for _, site := range sites {
+		site.refreshMonthlyBudget(time.Now().Unix())
 		if site.Connection != nil {
 			if source == "all" || source == "mixed" || source == "mounted" || source == "subsite" {
 				entries = append(entries, a.mountedSubscriptionEntries(record, site, protocol)...)
@@ -153,8 +154,14 @@ func (a *App) subscriptionCatalogSource(record Record, source, protocol string) 
 }
 
 func (a *App) mountedSubscriptionEntries(record Record, site BusinessSite, protocol string) []subscriptionEntry {
+	site.refreshMonthlyBudget(time.Now().Unix())
 	m := site.Mount
-	if m == nil || !site.Enabled || site.Removed || m.Catalog.Paused || m.LeaseUntil <= time.Now().Unix() || !a.businessOwnerEnabled(site) {
+	// A shared child-site budget is a hard subscription boundary. Once the
+	// budget is exhausted, remove every mounted endpoint immediately even if a
+	// previously issued child lease is still valid. The mount policy and its
+	// node-group assignments remain intact; the mount loop will re-issue the
+	// accounts after refreshMonthlyBudget clears the cooldown.
+	if m == nil || !site.Enabled || site.Removed || !site.monthlyBudgetAvailable() || m.Catalog.Paused || m.LeaseUntil <= time.Now().Unix() || !a.businessOwnerEnabled(site) {
 		return nil
 	}
 	granted := false
@@ -195,7 +202,7 @@ func (a *App) mountedSubscriptionEntries(record Record, site BusinessSite, proto
 		}
 		out := subscriptionEntries(businessConfig(m.Catalog.Info), remote, nodes, protocol)
 		for i := range out {
-			out[i].node.GroupIDs = subsiteGroupIDs(out[i].node.GroupIDs, groups)
+			out[i].node.GroupIDs = mountedGroupIDs(out[i].node.GroupIDs, groups)
 			out[i].siteID = site.ID
 			out[i].siteName = site.Name
 			out[i].mounted = true

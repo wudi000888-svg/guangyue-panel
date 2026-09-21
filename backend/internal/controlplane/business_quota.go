@@ -201,6 +201,7 @@ func (a *App) acceptBusinessUsage(v *BusinessSite, in BusinessHeartbeat) error {
 			if e != nil {
 				return e
 			}
+			v.markBudgetExhausted(time.Now().Unix())
 		}
 		if du == 0 && dd == 0 {
 			v.Usage[id] = next

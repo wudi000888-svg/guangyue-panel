@@ -87,6 +87,7 @@ func (a *App) entitlementAPI(w http.ResponseWriter, r *http.Request, actor Recor
 			if s.Removed {
 				continue
 			}
+			s.refreshMonthlyBudget(time.Now().Unix())
 			ns, e := a.materializeBusinessNodes(s)
 			if e != nil {
 				failure(w, 500, "读取业务节点失败")
@@ -105,7 +106,7 @@ func (a *App) entitlementAPI(w http.ResponseWriter, r *http.Request, actor Recor
 						host = info.HY2Host
 					}
 				}
-				if !n.Enabled || !s.Enabled || s.Mount != nil && s.Mount.Catalog.Paused {
+				if !n.Enabled || !s.Enabled || s.Mount != nil && (!s.monthlyBudgetAvailable() || s.Mount.Catalog.Paused) {
 					status = "disabled"
 				} else if s.Mount != nil && (s.Mount.LeaseUntil <= time.Now().Unix() || s.Mount.Error != "") {
 					status = "pending"
