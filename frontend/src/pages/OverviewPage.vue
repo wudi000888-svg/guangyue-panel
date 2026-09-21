@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { usePanelContext } from "../composables/panelContext";
-const { state, simpleMode, refresh, go } = usePanelContext();
+const { state, publicFeaturesEnabled, refresh, go } = usePanelContext();
 import Dashboard from "../Dashboard.vue";
 </script>
 <template>
-<Dashboard v-if="state" :state="state" :simple="simpleMode" @navigate="go" @refresh="refresh(true)"/>
+<Dashboard v-if="state" :state="state" :public-features-enabled="publicFeaturesEnabled" @navigate="go" @refresh="refresh(true)"/>
 </template>

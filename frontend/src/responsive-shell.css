@@ -30,7 +30,6 @@
  .mobile-tools-panel header{display:flex;justify-content:space-between;align-items:center;padding-bottom:16px;border-bottom:1px solid var(--border)}
  .mobile-tools-panel header strong{display:block;font-size:16px;overflow-wrap:anywhere}.mobile-tools-panel header small{display:block;font-size:12px;color:var(--muted);margin-top:5px}
  .mobile-tools-panel>button{display:flex;width:100%;justify-content:flex-start;padding:12px;border:0;background:transparent;font-size:14px;white-space:normal;text-align:left}.mobile-tools-panel>button svg{flex-shrink:0}
- .mobile-preference{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:16px 0;font-size:13px}.mobile-preference .view-mode-switch select{height:44px;min-height:44px;font-size:14px}
  .mobile-quick-nav{position:fixed;bottom:0;left:0;right:0;z-index:35;display:flex;flex-direction:row;justify-content:space-around;gap:0;padding:6px 8px calc(6px + env(safe-area-inset-bottom));background:var(--surface);border-top:1px solid var(--border);box-shadow:0 -4px 20px #00000005}
  .mobile-quick-nav button{height:auto;min-height:52px;flex:1;max-width:150px;gap:5px;padding:5px 2px;flex-direction:column;justify-content:center;font-size:11px;border-radius:10px;white-space:normal;text-align:center;line-height:1.25}
  .app-shell .content{padding-bottom:calc(80px + env(safe-area-inset-bottom))}

@@ -26,7 +26,7 @@ onMounted(()=>load());onBeforeUnmount(()=>{stopped=true;clearTimeout(timer);});
    </div>
    <p class="network-note">{{t('关闭时恢复面板接管前的系统参数；此前已开启 BBR 的机器可能仍使用 BBR。HY2 关闭后恢复核心默认策略。')}}</p>
    <p class="network-note">{{t('修改 HY2 策略会短暂重启面板与 HY2，客户端将重新连接。BBR 切换对新建 TCP 连接生效，现有网卡队列不会被强制替换。')}}</p>
-   <footer><span role="status"><LoaderCircle v-if="running" class="spin" :size="15"/><Check v-else-if="saved" :size="15"/>{{t(running?'正在应用并核对生效状态…':saved?'网络优化已生效':'网络优化独立于界面模式和日志模式')}}</span><button class="primary" :disabled="running||!changed">{{t('应用网络优化')}}</button></footer>
+   <footer><span role="status"><LoaderCircle v-if="running" class="spin" :size="15"/><Check v-else-if="saved" :size="15"/>{{t(running?'正在应用并核对生效状态…':saved?'网络优化已生效':'网络优化独立于日志模式')}}</span><button class="primary" :disabled="running||!changed">{{t('应用网络优化')}}</button></footer>
   </form>
   <p v-else-if="!error" class="field-help">{{t(state?'此部署尚未启用维护服务':'正在读取网络状态…')}}</p>
  </section>

@@ -19,7 +19,7 @@ onMounted(load);
 </script>
 <template>
  <section class="settings-card runtime-settings" aria-labelledby="runtime-title">
-  <header><ShieldCheck :size="20"/><div><h2 id="runtime-title">{{t('日志与运行模式')}}</h2><p>{{t('全站生效，与顶部简易／专业界面模式独立')}}</p></div><span v-if="current" class="runtime-badge" :class="{pending:!current.applied}"><Check v-if="current.applied" :size="12"/>{{t(current.applied?'已生效':'待生效')}}</span></header>
+  <header><ShieldCheck :size="20"/><div><h2 id="runtime-title">{{t('日志与运行模式')}}</h2><p>{{t('全站生效，控制日志、审计与流量记录')}}</p></div><span v-if="current" class="runtime-badge" :class="{pending:!current.applied}"><Check v-if="current.applied" :size="12"/>{{t(current.applied?'已生效':'待生效')}}</span></header>
   <p v-if="error" class="error" role="alert">{{t(error)}} <button type="button" :disabled="busy" @click="load">{{t('重新加载')}}</button></p>
   <form v-if="current" @submit.prevent="save">
    <div class="runtime-options" role="group" :aria-label="t('运行模式')">

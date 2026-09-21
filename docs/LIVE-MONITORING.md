@@ -2,7 +2,7 @@
 
 ## 客户端中心
 
-导航中的“客户端中心”对管理员和成员均可见，简易模式也可使用。先按系统筛选，再选择 CPU 架构。Apple Silicon 对应 ARM64；Intel/AMD 桌面设备通常对应 x64；Android 需核对设备架构。Linux 直链提供 DEB（Debian/Ubuntu），其他包格式打开官方发布页选择。
+导航中的“客户端中心”对管理员和成员均可见，管理员和成员均可按权限使用。先按系统筛选，再选择 CPU 架构。Apple Silicon 对应 ARM64；Intel/AMD 桌面设备通常对应 x64；Android 需核对设备架构。Linux 直链提供 DEB（Debian/Ubuntu），其他包格式打开官方发布页选择。
 
 提供 Clash Verge Rev、FlClash、v2rayN、v2rayNG、Clash Meta for Android、Shadowrocket。Mihomo 系客户端使用面板的 Mihomo 订阅；v2rayN/v2rayNG/Shadowrocket 使用 Base64/Raw。v2rayNG 仅标注 VLESS；v2rayN 使用 HY2 时需选择兼容核心。iOS/iPadOS 入口为 App Store，费用与地区可用性以商店为准。
 

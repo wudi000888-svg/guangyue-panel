@@ -23,7 +23,7 @@ const queuedExpiry=(slot:{expires:number;paused_at:number})=>slot.expires?Math.f
               </option>
             </select>
           </div>
-          <div class="pool-intro"><QrCode :size="21"/><div><strong>{{publicSubPage?t('公共订阅'):t('套餐订阅')}}</strong><p>{{publicSubPage?t('公共节点仅在高级模式开启后使用。'):t('混合订阅优先按套餐节点组分发本站、公共与挂载子站节点；也可单独查看某一来源。')}}</p></div></div>
+          <div class="pool-intro"><QrCode :size="21"/><div><strong>{{publicSubPage?t('公共订阅'):t('套餐订阅')}}</strong><p>{{publicSubPage?t('公共节点仅在系统设置开启公共功能后使用。'):t('混合订阅优先按套餐节点组分发本站、公共与挂载子站节点；也可单独查看某一来源。')}}</p></div></div>
           <label v-if="owner" class="sub-source">{{t('订阅包含范围')}}<select v-model="subSource"><option v-if="!publicSubPage" value="mixed">{{t('混合订阅（优先）')}}</option><option v-if="!publicSubPage" value="local">{{t('本站本地节点')}}</option><option v-if="!publicSubPage" value="subsite">{{t('子站节点池（挂载）')}}</option><option v-if="publicSubPage" value="public">{{t('公共节点')}}</option></select></label>
           <p class="field-help">{{t('套餐决定账号额度、有效期和节点组；混合订阅按节点组过滤全部已授权来源。')}}</p>
           <p v-if="subError" class="error" role="alert">{{ t(subError) }} <button :disabled="subLoading" @click="loadSub(true)"><RefreshCw :size="14"/>{{t('重试')}}</button></p>

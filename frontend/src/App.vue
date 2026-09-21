@@ -8,11 +8,10 @@ import PanelUpdater from "./components/PanelUpdater.vue";
 import HeaderBalance from "./components/HeaderBalance.vue";
 const panel=usePanel();
 provide(panelKey,panel);
-const { selectedSite, selectedSiteName, switchSite, api, state, ready, busy, error, page, mobileNav, site, login, modal, theme, sideCollapsed, viewMode, simpleMode, toggleTheme, confirmation, owner, pendingHY, titles, pageDescriptions, nav, navGroups, currentGroup, date, refresh, task, signIn, signOut, go } = panel;
+const { selectedSite, selectedSiteName, switchSite, api, state, ready, busy, error, page, mobileNav, site, login, modal, theme, sideCollapsed, toggleTheme, confirmation, owner, pendingHY, titles, pageDescriptions, nav, navGroups, currentGroup, date, refresh, task, signIn, signOut, go } = panel;
 import { Bell, ArrowUpRight, ChevronRight, KeyRound, LoaderCircle, LogOut, Menu, Moon, Sun, PanelLeftClose, PanelLeftOpen, Building2, RadioTower, RefreshCw, ShieldCheck, SlidersHorizontal, X } from "lucide-vue-next";
 import { t } from "./i18n";
 import LanguageSwitcher from "./LanguageSwitcher.vue";
-import ViewModeSwitcher from "./ViewModeSwitcher.vue";
 const isDesktop = ref(matchMedia('(min-width: 901px)').matches);
 const mobileTools = ref(false), drawer = ref<HTMLElement|null>(null), toolsDialog = ref<HTMLElement|null>(null);
 const quickNav = computed(() => (owner.value?['overview','ips','nodes','users','subscription']:['subscription','shop','wallet','orders','tickets']).flatMap(id => nav.value.filter(item => item.id === id)));
@@ -93,7 +92,7 @@ onBeforeUnmount(() => { closeMobile(); desktop?.removeEventListener('change', on
   </main>
   <div
     v-else
-    :class="['app-shell', { collapsed: sideCollapsed, 'simple-mode': simpleMode }]"
+    :class="['app-shell', { collapsed: sideCollapsed }]"
     :inert="!!modal || !!confirmation"
   >
     <div v-if="mobileNav" class="nav-shade" @click="mobileNav = false"></div>
@@ -184,9 +183,8 @@ onBeforeUnmount(() => { closeMobile(); desktop?.removeEventListener('change', on
         <div class="top-actions">
  <button v-if="selectedSite" class="site-switch desktop-action" @click="switchSite('')">{{selectedSiteName}} · {{t('返回本站')}}</button>
  <span v-else class="edition-badge desktop-action">{{state.system.edition==='pro'?'PRO':'LITE'}} · {{t(state.system.role==='controller'||!state.system.role&&state.system.edition==='pro'?'主站':state.system.role==='business'?'子站':'独立站')}}</span>
-          <ViewModeSwitcher v-if="isDesktop" class="desktop-action" v-model="viewMode"/>
           <LanguageSwitcher/>
-          <button v-if="!simpleMode" class="icon inbox-bell" :title="t('站内信')" :aria-label="t('站内信')" @click="go('messages')"><Bell :size="18"/><span v-if="state.unread_messages" class="bell-count">{{state.unread_messages>99?'99+':state.unread_messages}}</span></button>
+          <button class="icon inbox-bell" :title="t('站内信')" :aria-label="t('站内信')" @click="go('messages')"><Bell :size="18"/><span v-if="state.unread_messages" class="bell-count">{{state.unread_messages>99?'99+':state.unread_messages}}</span></button>
           <span class="live-label"
             ><span class="dot" />{{ date(state.system.applied_at, true) }}</span
           ><button class="icon desktop-action" :title="t('刷新')" @click="refresh()">
@@ -260,11 +258,10 @@ onBeforeUnmount(() => { closeMobile(); desktop?.removeEventListener('change', on
     <div v-if="!isDesktop && mobileTools && state" class="mobile-tools-shade" @click.self="closeMobile">
       <section id="mobile-tools" ref="toolsDialog" class="mobile-tools-panel" role="dialog" aria-modal="true" :aria-label="t('显示与账户')" tabindex="-1">
         <header><div><strong>{{state.me.username}}</strong><small>{{owner?t('管理员'):t('企业成员')}} · {{(state.system.edition||'lite').toUpperCase()}}</small></div><button class="icon" :aria-label="t('关闭')" @click="closeMobile"><X :size="20"/></button></header>
-        <div class="mobile-preference"><span>{{t('界面模式')}}</span><ViewModeSwitcher v-model="viewMode"/></div>
         <button v-if="selectedSite" @click="closeMobile();switchSite('')"><Building2 :size="18"/><span>{{selectedSiteName}} · {{t('返回本站')}}</span></button>
         <button @click="toggleTheme"><Sun v-if="theme==='dark'" :size="18"/><Moon v-else :size="18"/><span>{{theme==='dark'?t('切换浅色模式'):t('切换深色模式')}}</span></button>
         <button @click="closeMobile();modal='password'"><KeyRound :size="18"/><span>{{t('账户与密码')}}</span></button>
-        <button v-if="!simpleMode" @click="closeMobile();go('messages')"><Bell :size="18"/><span>{{t('站内信')}}</span><span v-if="state.unread_messages" class="badge">{{state.unread_messages}}</span></button>
+        <button @click="closeMobile();go('messages')"><Bell :size="18"/><span>{{t('站内信')}}</span><span v-if="state.unread_messages" class="badge">{{state.unread_messages}}</span></button>
         <button @click="closeMobile();refresh()"><RefreshCw :size="18"/><span>{{t('刷新')}}</span></button>
         <button class="danger-button" @click="closeMobile();signOut()"><LogOut :size="18"/><span>{{t('退出登录')}}</span></button>
       </section>
