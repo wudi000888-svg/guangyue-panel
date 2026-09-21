@@ -1,12 +1,15 @@
 name: Commit release
 
 on:
-  push:
-    branches: [main]
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main, 'codex/auto-release-*']
 
 permissions:
   contents: write
-  actions: read
+  pull-requests: write
+  actions: write
 
 concurrency:
   group: commit-release-main
@@ -14,56 +17,20 @@ concurrency:
 
 jobs:
   release:
-    # A commit to main produces the next patch release and its two install bundles.
-    if: ${{ !contains(github.event.head_commit.message, '[skip release]') }}
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
-          token: ${{ github.token }}
-      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
-        with:
-          go-version: '1.26.8'
-          cache-dependency-path: backend/go.sum
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: '24'
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-      - name: Require successful full CI for the source commit
+      - name: Prepare, merge or publish the tested version
         env:
           GH_TOKEN: ${{ github.token }}
-        run: |
-          run_id=''
-          for attempt in 1 2 3 4 5 6; do
-            run_id=$(gh run list --workflow ci.yml --commit "$GITHUB_SHA" --limit 20 --json databaseId --jq '.[0].databaseId // empty')
-            test -n "$run_id" && break
-            sleep 10
-          done
-          test -n "$run_id"
-          gh run watch "$run_id" --exit-status --interval 15
-      - name: Increment patch version
-        id: version
-        run: echo "version=$(python3 scripts/bump-version.py)" >> "$GITHUB_OUTPUT"
-      - name: Run checks and build install cores
-        run: bash scripts/check.sh && bash scripts/build.sh && bash scripts/build-hy2-core.sh --test && bash scripts/build-xray-core.sh --test
-      - name: Build notices and install bundles
-        run: python3 scripts/third-party.py && python3 scripts/package.py
-      - name: Commit version and tag
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add VERSION backend/internal/controlplane/config.go frontend/package.json frontend/package-lock.json README.md CHANGELOG.md
-          git commit -m "release: v${VERSION} [skip ci] [skip release]"
-          git tag -a "v${VERSION}" -m "广月面板 v${VERSION}"
-          git push --atomic origin HEAD:main "v${VERSION}"
-      - name: Create GitHub Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          bash scripts/publish-release.sh "v${VERSION}"
+          TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
+          TESTED_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          TESTED_EVENT: ${{ github.event.workflow_run.event }}
+        run: bash scripts/auto-release.sh
