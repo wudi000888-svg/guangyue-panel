@@ -1,0 +1,391 @@
+/*
+ * Guangyue Courtyard — Penpot visual system
+ *
+ * These tokens mirror docs/designs/penpot-courtyard-system.md.  The file is
+ * intentionally layered after the existing product styles so the redesign
+ * changes presentation without changing routes, data attributes, or business
+ * behaviour.  Every surface has a light and dark expression and the same
+ * spacing scale is used on desktop and touch layouts.
+ */
+:root {
+  --canvas: #f3eee5;
+  --surface: #fffaf2;
+  --surface-raised: #f8f1e6;
+  --surface-hover: #efe7da;
+  --text: #24373a;
+  --secondary: #53696a;
+  --muted: #8a918c;
+  --border: #e2d5c3;
+  --accent: #1e756a;
+  --accent-text: #18685f;
+  --accent-soft: #e0eee7;
+  --input: #fffdf8;
+  --input-border: #d7c7b3;
+  --green: #1e756a;
+  --red: #bb5b4f;
+  --gy-night: #10282d;
+  --gy-night-deep: #0b1d23;
+  --gy-moon: #f5dca5;
+  --gy-cinnabar: #bb614d;
+  --gy-jade: #8fc8a9;
+  --gy-gold: #bd8a4d;
+  --gy-shadow: 0 18px 45px rgba(57, 47, 32, .08);
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --canvas: #101b1f;
+  --surface: #17282c;
+  --surface-raised: #1d3336;
+  --surface-hover: #23403e;
+  --text: #edf2e8;
+  --secondary: #c1d1c5;
+  --muted: #92a79b;
+  --border: #31504d;
+  --accent: #8fc8a9;
+  --accent-text: #a7dfbd;
+  --accent-soft: #20483f;
+  --input: #142529;
+  --input-border: #3c5b56;
+  --green: #8fc8a9;
+  --red: #ee9b83;
+  --gy-shadow: 0 20px 60px rgba(0, 0, 0, .24);
+  color-scheme: dark;
+}
+
+html { background: var(--canvas); }
+body {
+  min-width: 320px;
+  background: var(--canvas);
+  color: var(--text);
+  font-family: "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Inter, sans-serif;
+  letter-spacing: .005em;
+}
+body::selection { background: var(--gy-jade); color: var(--gy-night); }
+
+button, input, select, textarea { border-radius: 10px; }
+button {
+  min-height: 40px;
+  padding: 9px 15px;
+  border-color: var(--input-border);
+  background: var(--surface);
+  color: var(--secondary);
+  box-shadow: 0 1px 0 rgba(64, 49, 29, .03);
+}
+button:hover { border-color: var(--accent); background: var(--surface-hover); color: var(--text); }
+button.primary {
+  background: linear-gradient(135deg, var(--accent), #2b8b79);
+  border-color: var(--accent);
+  box-shadow: 0 8px 18px rgba(30, 117, 106, .18);
+}
+button.primary:hover { background: linear-gradient(135deg, #175e58, var(--accent)); }
+.icon { border-radius: 10px; }
+.icon:hover { background: var(--accent-soft); color: var(--accent-text); }
+input, select, textarea {
+  border-color: var(--input-border);
+  background: var(--input);
+  color: var(--text);
+  min-height: 42px;
+  box-shadow: inset 0 1px 1px rgba(64, 49, 29, .025);
+}
+input:focus, select:focus, textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+input[type="checkbox"] { accent-color: var(--accent); }
+:focus-visible { outline-color: var(--gy-cinnabar); }
+
+/* Courtyard atmosphere: the SVG is a Penpot-importable moodboard asset. */
+.app-shell, .login-screen { position: relative; isolation: isolate; }
+.app-shell::before, .login-screen::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: url("/guangyue-courtyard.svg") right bottom / min(1100px, 82vw) auto no-repeat;
+  opacity: .095;
+}
+:root[data-theme="dark"] .app-shell::before { opacity: .12; }
+
+/* Night gate navigation with a quiet moon and tower silhouette. */
+.sidebar {
+  width: 248px;
+  padding: 0 14px;
+  overflow: hidden;
+  background: linear-gradient(180deg, var(--gy-night) 0%, var(--gy-night-deep) 100%);
+  border-right: 1px solid rgba(245, 220, 165, .12);
+  color: #b6c9c0;
+  box-shadow: 10px 0 35px rgba(16, 40, 45, .08);
+}
+.sidebar::before {
+  content: "";
+  position: absolute;
+  top: 88px;
+  right: 25px;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--gy-moon);
+  box-shadow: 0 0 30px rgba(245, 220, 165, .24);
+  opacity: .9;
+}
+.sidebar::after {
+  content: "";
+  position: absolute;
+  left: -35px;
+  right: -35px;
+  bottom: -12px;
+  height: 116px;
+  pointer-events: none;
+  background: url("/guangyue-courtyard.svg") left bottom / 620px auto no-repeat;
+  opacity: .2;
+}
+.brand {
+  position: relative;
+  z-index: 1;
+  height: 78px;
+  padding: 0 12px;
+  border-bottom-color: rgba(245, 220, 165, .13);
+  color: #f9f0dc;
+  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-size: 20px;
+  letter-spacing: .05em;
+}
+.brand-icon {
+  width: 37px;
+  height: 37px;
+  border-radius: 50%;
+  color: var(--gy-night);
+  background: radial-gradient(circle at 34% 30%, #fff4d0, var(--gy-moon) 65%, #d8b873);
+  box-shadow: 0 5px 18px rgba(245, 220, 165, .18);
+}
+.brand small { color: #9fb4aa; letter-spacing: .08em; }
+.workspace {
+  position: relative;
+  z-index: 1;
+  margin: 14px 9px 24px;
+  padding: 13px 10px;
+  border: 1px solid rgba(143, 200, 169, .15);
+  border-radius: 12px;
+  background: rgba(143, 200, 169, .07);
+  color: #d2ded5;
+}
+.workspace small { color: #8ea89c; }
+.workspace > svg { color: var(--gy-jade); }
+.grouped-nav { position: relative; z-index: 1; }
+.nav-group { gap: 4px; }
+.nav-caption { color: #819c91; letter-spacing: .12em; }
+.nav-group button {
+  min-height: 42px;
+  height: 42px;
+  border-left: 3px solid transparent;
+  border-radius: 9px;
+  color: #adc2b8;
+}
+.nav-group button:hover { color: #f5f0e4; background: rgba(143, 200, 169, .10); }
+.nav-group button.selected {
+  color: #e5f1dc;
+  background: linear-gradient(90deg, rgba(143, 200, 169, .20), rgba(143, 200, 169, .05));
+  border-left-color: var(--gy-jade);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .04);
+}
+.nav-group button.selected::after { display: none; }
+.nav-group-public button.selected { color: #f3d99a; background: rgba(189, 138, 77, .14); border-left-color: var(--gy-gold); }
+.sidebar-bottom { position: relative; z-index: 1; border-top-color: rgba(245, 220, 165, .13); }
+.sidebar-setting { color: #9fb5aa; }
+.sidebar-setting:hover { background: rgba(143, 200, 169, .10); color: #edf2e8; }
+.edge-status { color: #96afa3; }
+.edge-status .dot { background: var(--gy-jade); box-shadow: 0 0 0 4px rgba(143, 200, 169, .12); }
+
+.main-area { margin-left: 248px; }
+.topbar {
+  height: 78px;
+  padding: 0 34px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  border-bottom: 1px solid var(--border);
+  box-shadow: 0 3px 20px rgba(63, 47, 28, .035);
+  backdrop-filter: blur(16px);
+}
+.page-context h1 { font-family: "Noto Serif SC", "Songti SC", serif; font-size: 20px; letter-spacing: .03em; }
+.page-context p { color: var(--muted); }
+.top-actions { gap: 7px; }
+.edition-badge, .site-switch {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 7px 12px;
+  background: var(--surface-raised);
+  color: var(--accent-text);
+  font-size: 11px;
+}
+.header-account { border-radius: 999px; }
+.live-label .dot { box-shadow: 0 0 0 4px var(--accent-soft); }
+.content { max-width: 1580px; padding: 34px 38px 0; }
+.page-heading {
+  align-items: flex-end;
+  justify-content: space-between;
+  min-height: 56px;
+  margin-bottom: 26px;
+}
+.page-heading > div:first-child:not(.heading-actions) { display: block; }
+.page-heading h1 { font-family: "Noto Serif SC", "Songti SC", serif; font-size: 30px; letter-spacing: .04em; }
+.eyebrow { color: var(--gy-cinnabar); letter-spacing: .17em; }
+.eyebrow::before { width: 7px; height: 7px; border-radius: 50%; background: var(--gy-cinnabar); }
+.heading-actions { width: auto; }
+
+/* Shared cards, tables and forms — one component language across every route. */
+.metrics > div, .user-stat-grid, .pool-stat-grid, .settings-card, .settings-guide,
+.chart-card, .network-card, .node-card, .panel, .table-scroll, .table-wrap,
+.message-list, .message-detail, .commerce-card, .pool-overview, .pool-guide,
+.pool-table, .sub-summary, .pool-intro {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--gy-shadow);
+}
+.metrics { gap: 18px; }
+.metrics > div { position: relative; padding: 22px; }
+.metrics > div::after {
+  content: "";
+  position: absolute;
+  right: 18px;
+  bottom: 0;
+  width: 45px;
+  height: 3px;
+  border-radius: 3px 3px 0 0;
+  background: var(--gy-jade);
+  opacity: .6;
+}
+.metrics > div:nth-child(2)::after { background: var(--gy-gold); }
+.metrics > div:nth-child(3)::after { background: var(--gy-cinnabar); }
+.metrics > div:nth-child(4)::after { background: var(--accent); }
+.metrics strong, .user-stat-grid strong, .pool-stat-grid strong { color: var(--text); }
+.metric-icon { border-radius: 50%; background: var(--accent-soft); color: var(--accent-text); }
+.section-head { margin: 27px 0 18px; }
+.section-head h2, .settings-card h2, .commerce-card h2 { font-family: "Noto Serif SC", "Songti SC", serif; letter-spacing: .035em; }
+.toolbar { padding: 13px 0; }
+.search { max-width: 340px; border-radius: 999px; background: var(--surface); border-color: var(--input-border); }
+.search input { min-height: 38px; }
+.segmented { border-radius: 999px; background: var(--surface-raised); border-color: var(--border); }
+.segmented button { border-radius: 999px; }
+.segmented button.selected { color: var(--accent-text); background: var(--surface); box-shadow: 0 2px 8px rgba(57, 47, 32, .10); }
+table { font-size: 13px; }
+th { background: var(--surface-raised); color: var(--muted); border-bottom-color: var(--border); }
+td { border-bottom-color: var(--border); color: var(--secondary); }
+td strong { color: var(--text); }
+tbody tr:hover { background: var(--surface-hover); }
+.badge { border-radius: 999px; padding: 6px 10px; }
+.success { color: var(--accent-text); background: var(--accent-soft); }
+.danger { color: var(--red); background: color-mix(in srgb, var(--red) 13%, transparent); }
+.tag { border-radius: 999px; }
+.tag.vless { color: #356e9b; background: #dcecf5; }
+.tag.hy2 { color: #9a6330; background: #f3e5c9; }
+.progress { height: 7px; border-radius: 999px; background: var(--surface-raised); }
+.progress > span { border-radius: inherit; background: linear-gradient(90deg, var(--accent), var(--gy-jade)); }
+.node-card:hover { border-color: var(--accent); box-shadow: 0 16px 32px rgba(46, 86, 68, .12); }
+.node-card-footer { background: var(--surface-raised); border-top-color: var(--border); }
+.page-footer { border-top-color: var(--border); }
+.business-dashboard { gap: 26px; }
+.dash-heading h2 { font-family: "Noto Serif SC", "Songti SC", serif; letter-spacing: .035em; }
+.dash-eyebrow { color: var(--gy-cinnabar); letter-spacing: .16em; }
+.dash-metrics { gap: 18px; }
+.dash-metrics article, .dash-card {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--gy-shadow);
+}
+.dash-metrics article { position: relative; padding: 22px 23px; }
+.dash-metrics article::after { content: ""; position: absolute; left: 23px; right: 23px; bottom: 0; height: 3px; border-radius: 3px 3px 0 0; background: var(--gy-jade); opacity: .6; }
+.dash-metrics article:nth-child(2)::after { background: var(--gy-gold); }
+.dash-metrics article:nth-child(3)::after { background: var(--gy-cinnabar); }
+.dash-metrics article:nth-child(4)::after { background: var(--accent); }
+.dash-icon { border-radius: 50%; }
+.dash-icon.mint { color: var(--accent-text); background: var(--accent-soft); }
+.dash-icon.blue { color: #5e87a3; background: #dfebef; }
+.dash-icon.violet { color: #8e718f; background: #eee3ed; }
+.dash-icon.amber { color: #a87840; background: #f2e5cc; }
+.dash-segments { border-radius: 999px; }
+.dash-segments button { border-radius: 999px; }
+.dash-segments button.selected { color: var(--accent-text); }
+.dash-task { border-radius: 12px; background: var(--surface-raised); }
+.dash-meter i { max-width: 100%; }
+.dash-resource-grid footer button, .dash-card-link { color: var(--accent-text); }
+.dash-card:hover { border-color: color-mix(in srgb, var(--accent) 44%, var(--border)); }
+.modal-shade, .message-overlay { background: rgba(13, 27, 31, .62); backdrop-filter: blur(10px); }
+.modal, .compose-card, .mobile-tools-panel, .version-popover { border: 1px solid var(--border); border-radius: 20px; background: var(--surface); box-shadow: 0 25px 80px rgba(22, 43, 38, .24); }
+.modal h2, .compose-card h2 { font-family: "Noto Serif SC", "Songti SC", serif; letter-spacing: .035em; }
+.modal-footer, .compose-card footer { border-top-color: var(--border); }
+.error { color: var(--red); border-color: color-mix(in srgb, var(--red) 24%, var(--border)); background: color-mix(in srgb, var(--red) 10%, var(--surface)); border-radius: 10px; }
+.page-error, .sync-alert { border-color: var(--border); background: var(--surface-raised); }
+.toast { border: 1px solid rgba(245, 220, 165, .3); border-radius: 999px; background: var(--gy-night); box-shadow: 0 14px 35px rgba(16, 40, 45, .24); }
+
+/* The login gateway is the first courtyard encounter. */
+.login-screen {
+  align-items: center;
+  justify-content: center;
+  min-height: 100dvh;
+  padding: 64px 24px 36px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 78% 18%, rgba(245, 220, 165, .22), transparent 18%),
+    linear-gradient(140deg, #10282d 0%, #1a3b3d 46%, #c48e65 160%);
+  border-top: 0;
+}
+.login-screen::before { inset: auto -10vw -6vw auto; width: 85vw; height: 52vw; opacity: .32; background-size: contain; }
+.login-language { top: 24px; right: 30px; z-index: 2; }
+.login-language .language-switch { color: #d9e8dd; }
+.login-language select { color: inherit; }
+.login-brand { position: relative; z-index: 1; margin-bottom: 27px; color: #fff4df; font-family: "Noto Serif SC", "Songti SC", serif; letter-spacing: .07em; }
+.login-brand > svg { color: var(--gy-moon); filter: drop-shadow(0 0 13px rgba(245, 220, 165, .35)); }
+.login-brand small { color: #c7d9ce; letter-spacing: .11em; }
+.login-form {
+  position: relative;
+  z-index: 1;
+  width: 414px;
+  padding: 32px 34px 30px;
+  border: 1px solid rgba(255, 244, 223, .26);
+  border-radius: 22px;
+  background: rgba(255, 250, 242, .93);
+  box-shadow: 0 28px 80px rgba(6, 20, 24, .28);
+  backdrop-filter: blur(18px);
+}
+.login-form h1 { margin-bottom: 24px; color: #21373a; font-family: "Noto Serif SC", "Songti SC", serif; font-size: 25px; }
+.login-form label { color: #62736d; }
+.login-form input { border-radius: 11px; background: #fffdf8; }
+.login-form .full { min-height: 47px; border-radius: 12px; }
+.login-security { color: #758c81; }
+.login-screen footer { position: relative; z-index: 1; margin-top: 25px; padding-top: 0; color: #d5e1d7; }
+
+/* Preserve comfortable touch targets and card readability at every viewport. */
+@media (max-width: 900px) {
+  .sidebar { width: min(320px, calc(100vw - 26px)); }
+  .main-area { margin-left: 0; }
+  .topbar { height: 70px; padding: 0 16px; }
+  .content { padding: 24px 20px calc(88px + env(safe-area-inset-bottom)); }
+  .page-heading h1 { font-size: 25px; }
+  .metrics > div, .settings-card, .pool-overview, .commerce-card { border-radius: 14px; }
+  .mobile-quick-nav { background: color-mix(in srgb, var(--surface) 94%, transparent); backdrop-filter: blur(18px); }
+  .mobile-quick-nav button { border-radius: 12px; color: var(--muted); }
+  .mobile-quick-nav button.selected { background: var(--accent-soft); color: var(--accent-text); }
+}
+@media (max-width: 650px) {
+  .content { padding-left: 14px; padding-right: 14px; }
+  .topbar { padding: 0 12px; }
+  .page-heading { align-items: flex-start; }
+  .page-heading h1 { font-size: 23px; }
+  .page-heading > div:first-child:not(.heading-actions) { width: 100%; }
+  .heading-actions { width: 100%; }
+  .metrics { gap: 10px; }
+  .metrics > div { padding: 17px 15px; }
+  .metrics strong { font-size: 24px; }
+  .table-scroll, .table-wrap { box-shadow: none; border: 0; background: transparent; }
+  .login-screen { padding: 70px 17px 24px; justify-content: center; }
+  .login-form { width: min(100%, 390px); padding: 27px 22px 24px; border-radius: 18px; }
+  .login-brand { font-size: 24px; }
+  .login-language { top: 17px; right: 13px; }
+  .login-screen::before { width: 130vw; height: 82vw; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-shell *, .login-screen * { transition-duration: .01ms !important; animation-duration: .01ms !important; }
+}

@@ -7,4 +7,5 @@ import './enterprise.css'
 import './management.css'
 import './responsive-shell.css'
 import './console.css'
+import './penpot-theme.css'
 createApp(App).use(createPinia()).use(router).mount('#app')

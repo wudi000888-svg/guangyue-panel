@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 620" role="img" aria-label="广州塔与中式庭院月色插画">
+  <defs>
+    <linearGradient id="night" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#10282d"/>
+      <stop offset="1" stop-color="#315a54"/>
+    </linearGradient>
+    <linearGradient id="jade" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#8fc8a9" stop-opacity=".18"/>
+      <stop offset="1" stop-color="#f5dca5" stop-opacity=".38"/>
+    </linearGradient>
+    <radialGradient id="moon" cx="35%" cy="30%">
+      <stop offset="0" stop-color="#fff6d6"/>
+      <stop offset=".7" stop-color="#f5dca5"/>
+      <stop offset="1" stop-color="#cfa968"/>
+    </radialGradient>
+    <filter id="glow"><feGaussianBlur stdDeviation="11"/></filter>
+  </defs>
+  <rect width="1200" height="620" fill="url(#night)"/>
+  <circle cx="945" cy="118" r="105" fill="#f5dca5" opacity=".12" filter="url(#glow)"/>
+  <circle cx="945" cy="118" r="65" fill="url(#moon)"/>
+  <g fill="#e9d6a8" opacity=".7">
+    <circle cx="156" cy="104" r="2"/><circle cx="235" cy="155" r="3"/><circle cx="374" cy="78" r="2"/>
+    <circle cx="700" cy="108" r="2"/><circle cx="820" cy="54" r="2"/><circle cx="1085" cy="236" r="3"/>
+  </g>
+  <!-- Canton Tower: two sweeping ribs, a pearl and a slender observation mast. -->
+  <g fill="none" stroke="#b9d7bf" stroke-linecap="round">
+    <path d="M566 526 C575 405 590 299 631 198 C650 151 674 151 693 198 C734 299 749 405 758 526" stroke-width="16" opacity=".42"/>
+    <path d="M591 526 C601 410 614 310 644 222 C658 181 666 181 680 222 C710 310 723 410 733 526" stroke-width="5" opacity=".72"/>
+    <path d="M626 198 L673 198 L673 91" stroke-width="7" opacity=".8"/>
+    <path d="M641 198 L657 198 L657 57" stroke-width="3" opacity=".7"/>
+    <ellipse cx="661" cy="207" rx="29" ry="10" stroke-width="4" opacity=".8"/>
+  </g>
+  <g fill="#f5dca5"><circle cx="661" cy="55" r="6"/><circle cx="661" cy="207" r="8"/></g>
+  <!-- Courtyard roof and moon gate. -->
+  <path d="M0 486 Q175 394 349 486 L349 521 Q175 438 0 521Z" fill="#081b20" opacity=".9"/>
+  <path d="M852 455 Q1020 358 1200 455 L1200 500 Q1020 413 852 500Z" fill="#081b20" opacity=".95"/>
+  <path d="M48 506 Q180 420 312 506 L312 620 H48Z" fill="#091a1e"/>
+  <path d="M884 477 Q1015 398 1146 477 L1146 620 H884Z" fill="#091a1e"/>
+  <g fill="none" stroke="url(#jade)" stroke-width="8">
+    <path d="M78 506 Q180 443 282 506"/><path d="M912 478 Q1015 419 1118 478"/>
+  </g>
+  <g fill="#8fc8a9" opacity=".35">
+    <circle cx="405" cy="504" r="5"/><circle cx="432" cy="482" r="3"/><circle cx="456" cy="509" r="4"/>
+    <circle cx="802" cy="499" r="4"/><circle cx="830" cy="476" r="3"/>
+  </g>
+  <path d="M0 574 Q285 532 540 579 T1200 568 V620 H0Z" fill="#07171b" opacity=".92"/>
+</svg>
