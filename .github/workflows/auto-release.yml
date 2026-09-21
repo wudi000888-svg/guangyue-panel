@@ -1,4 +1,4 @@
-name: Commit release
+name: Prepare release PR
 
 on:
   push:
@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
   actions: read
 
 concurrency:
@@ -13,57 +14,61 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release:
-    # A commit to main produces the next patch release and its two install bundles.
+  release-pr:
+    # A release commit is merged by the PR created below. It must not create
+    # another release PR for itself.
     if: ${{ !contains(github.event.head_commit.message, '[skip release]') }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
           token: ${{ github.token }}
-      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
-        with:
-          go-version: '1.26.8'
-          cache-dependency-path: backend/go.sum
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: '24'
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
+
       - name: Require successful full CI for the source commit
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           run_id=''
-          for attempt in 1 2 3 4 5 6; do
+          for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
             run_id=$(gh run list --workflow ci.yml --commit "$GITHUB_SHA" --limit 20 --json databaseId --jq '.[0].databaseId // empty')
             test -n "$run_id" && break
             sleep 10
           done
           test -n "$run_id"
           gh run watch "$run_id" --exit-status --interval 15
+
       - name: Increment patch version
         id: version
         run: echo "version=$(python3 scripts/bump-version.py)" >> "$GITHUB_OUTPUT"
-      - name: Run checks and build install cores
-        run: bash scripts/check.sh && bash scripts/build.sh && bash scripts/build-hy2-core.sh --test && bash scripts/build-xray-core.sh --test
-      - name: Build notices and install bundles
-        run: python3 scripts/third-party.py && python3 scripts/package.py
-      - name: Commit version and tag
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add VERSION backend/internal/controlplane/config.go frontend/package.json frontend/package-lock.json README.md CHANGELOG.md
-          git commit -m "release: v${VERSION} [skip ci] [skip release]"
-          git tag -a "v${VERSION}" -m "广月面板 v${VERSION}"
-          git push --atomic origin HEAD:main "v${VERSION}"
-      - name: Create GitHub Release
+
+      - name: Create or update the protected-main release PR
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          bash scripts/publish-release.sh "v${VERSION}"
+          branch="automation/release-v${VERSION}"
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git switch -c "$branch"
+          git add VERSION backend/internal/controlplane/config.go frontend/package.json frontend/package-lock.json README.md CHANGELOG.md
+          # Keep CI enabled for the release PR; only suppress a second release
+          # PR after this change reaches protected main.
+          git commit -m "release: v${VERSION} [skip release]"
+          git push --force-with-lease origin "HEAD:refs/heads/${branch}"
+
+          pr=$(gh pr list --head "$branch" --base main --state open --json number --jq '.[0].number // empty')
+          if test -z "$pr"; then
+            body=$(mktemp)
+            cat > "$body" <<EOF
+          Automated version bump for v${VERSION}.
+
+          The PR is created because main is protected. Its required CI includes the full Lite/Pro installation matrix. Once merged, the release tag and GitHub Release are created automatically.
+          EOF
+            pr=$(gh pr create --base main --head "$branch" --title "release: v${VERSION} [skip release]" --body-file "$body")
+          fi
+
+          # Auto-merge is enabled when repository rules permit it. If an
+          # administrator requires a manual merge, the PR remains available.
+          gh pr merge "$pr" --auto --squash || echo "Automatic merge is unavailable; waiting for a maintainer to merge $pr."
