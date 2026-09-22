@@ -21,6 +21,8 @@ func TestPostgresBehaviors(t *testing.T) {
 		{"commerce_images", TestSupportInternalImagesAndRetention},
 		{"commerce_redemption", TestCommerceRedemptionAtomicAndRevocation},
 		{"commerce_orders", TestCommerceOrderCaptureResetAndRefund},
+		{"commerce_mount_purchase", TestPurchaseReallocatesOldMountBudgetsAndExhaustionRevokes},
+		{"commerce_mount_renewal", TestRenewalDoesNotRejectOldReservations},
 		{"commerce_cancellation", TestCommerceCancellationIsolationAndExpiry},
 		{"commerce_support", TestSupportTicketImagesAndOwnership},
 		{"business_lifecycle", TestBusinessLifecycle},

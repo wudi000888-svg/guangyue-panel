@@ -9,10 +9,11 @@ import PanelUpdater from "./components/PanelUpdater.vue";
 import HeaderBalance from "./components/HeaderBalance.vue";
 const panel=usePanel();
 provide(panelKey,panel);
-const { selectedSite, selectedSiteName, switchSite, api, state, ready, busy, error, page, mobileNav, site, login, registration, registrationChallenge, modal, theme, sideCollapsed, toggleTheme, confirmation, owner, pendingHY, pageTitle, pageDescription, nav, navGroups, currentGroup, date, refresh, task, signIn, signOut, loadRegistrationChallenge, registerAccount, go } = panel;
+const { selectedSite, selectedSiteName, switchSite, api, state, ready, busy, error, page, mobileNav, site, login, registration, registrationReset, modal, theme, sideCollapsed, toggleTheme, confirmation, owner, pendingHY, pageTitle, pageDescription, nav, navGroups, currentGroup, date, refresh, task, signIn, signOut, registerAccount, go } = panel;
 import { Bell, ArrowUpRight, ChevronRight, KeyRound, LoaderCircle, LogOut, Menu, Moon, Sun, PanelLeftClose, PanelLeftOpen, Building2, RefreshCw, ShieldCheck, SlidersHorizontal, X } from "lucide-vue-next";
 import { t } from "./i18n";
 import LanguageSwitcher from "./LanguageSwitcher.vue";
+import RegistrationCaptcha from "./components/RegistrationCaptcha.vue";
 const isDesktop = ref(matchMedia('(min-width: 901px)').matches);
 const registerMode = ref(false);
 const mobileTools = ref(false), drawer = ref<HTMLElement|null>(null), toolsDialog = ref<HTMLElement|null>(null);
@@ -95,7 +96,7 @@ onBeforeUnmount(() => { closeMobile(); desktop?.removeEventListener('change', on
       </button>
       <div class="login-security">
         <ShieldCheck :size="15" />{{ t("企业成员授权访问") }}</div>
-      <button v-if="site.registration_enabled" type="button" class="link-button" @click="registerMode=true;loadRegistrationChallenge()">{{t('注册账号')}}</button>
+      <button v-if="site.registration_enabled" type="button" class="link-button" @click="registerMode=true">{{t('注册账号')}}</button>
     </form>
     <form v-else class="login-form" @submit.prevent="registerAccount">
       <div class="eyebrow">GUANGYUE PANEL</div><h1>{{t('创建账号')}}</h1>
@@ -103,9 +104,9 @@ onBeforeUnmount(() => { closeMobile(); desktop?.removeEventListener('change', on
       <label>{{t('账号')}}<input v-model="registration.username" autocomplete="username" required maxlength="32" :placeholder="t('用户名')"/></label>
       <label>{{t('密码')}}<input v-model="registration.password" type="password" autocomplete="new-password" required minlength="8" maxlength="72" :placeholder="t('至少 8 位密码')"/></label>
       <label>{{t('确认密码')}}<input v-model="registration.confirm_password" type="password" autocomplete="new-password" required minlength="8" maxlength="72"/></label>
-      <label v-if="site.registration_captcha && registrationChallenge">{{t('滑动验证')}}<input v-model.number="registration.captcha_position" type="range" min="0" :max="registrationChallenge.width"/><small>{{t('将滑块拖到目标位置附近')}} · {{t('目标位置')}} {{registrationChallenge.target}}</small></label>
+      <RegistrationCaptcha v-if="site.registration_captcha" :key="registrationReset" v-model="registration.captcha_token"/>
       <p v-if="error" class="error" role="alert">{{t(error)}}</p>
-      <button class="primary full" :disabled="busy"><LoaderCircle v-if="busy" class="spin" :size="18"/><span>{{t('立即注册')}}</span><ArrowUpRight :size="18"/></button>
+      <button class="primary full" :disabled="busy||(site.registration_captcha&&!registration.captcha_token)"><LoaderCircle v-if="busy" class="spin" :size="18"/><span>{{t('立即注册')}}</span><ArrowUpRight :size="18"/></button>
       <button type="button" class="link-button" @click="registerMode=false">{{t('返回登录')}}</button>
     </form>
     <footer>{{site.panel_name}} · {{site.organization}}</footer>
