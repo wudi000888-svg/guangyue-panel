@@ -1,81 +1,54 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 820" role="img" aria-label="广州塔与中式庭院月色插画">
-  <defs>
-    <linearGradient id="night" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#081b22"/>
-      <stop offset=".46" stop-color="#173d42"/>
-      <stop offset="1" stop-color="#6b493e"/>
-    </linearGradient>
-    <linearGradient id="dawn" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#f6dca6" stop-opacity=".45"/>
-      <stop offset="1" stop-color="#8fc8a9" stop-opacity="0"/>
-    </linearGradient>
-    <linearGradient id="jade" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#8fc8a9" stop-opacity=".08"/>
-      <stop offset=".5" stop-color="#b9d7bf" stop-opacity=".65"/>
-      <stop offset="1" stop-color="#f5dca5" stop-opacity=".16"/>
-    </linearGradient>
-    <linearGradient id="water" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#1f5657" stop-opacity=".75"/>
-      <stop offset="1" stop-color="#07171b" stop-opacity=".95"/>
-    </linearGradient>
-    <radialGradient id="moon" cx="35%" cy="30%">
-      <stop offset="0" stop-color="#fff8dc"/>
-      <stop offset=".68" stop-color="#f5dca5"/>
-      <stop offset="1" stop-color="#cfa968"/>
-    </radialGradient>
-    <pattern id="roofTiles" width="42" height="18" patternUnits="userSpaceOnUse">
-      <path d="M0 17 Q10 2 21 17 Q31 2 42 17" fill="none" stroke="#b9d7bf" stroke-opacity=".18" stroke-width="2"/>
-    </pattern>
-    <pattern id="lattice" width="22" height="22" patternUnits="userSpaceOnUse">
-      <path d="M-5 5 L5 -5 M0 22 L22 0 M17 27 L27 17" stroke="#f5dca5" stroke-opacity=".22" stroke-width="2"/>
-    </pattern>
-    <filter id="glow"><feGaussianBlur stdDeviation="16"/></filter>
-    <filter id="soft"><feGaussianBlur stdDeviation="4"/></filter>
-  </defs>
-  <rect width="1600" height="820" fill="url(#night)"/>
-  <circle cx="1210" cy="154" r="190" fill="#f5dca5" opacity=".11" filter="url(#glow)"/>
-  <circle cx="1210" cy="154" r="104" fill="url(#moon)"/>
-  <g fill="#cfaa6b" opacity=".24">
-    <circle cx="1176" cy="118" r="11"/><circle cx="1253" cy="177" r="16"/><circle cx="1186" cy="205" r="7"/><circle cx="1245" cy="111" r="6"/>
-  </g>
-  <g fill="#e9d6a8" opacity=".75">
-    <circle cx="132" cy="128" r="3"/><circle cx="221" cy="202" r="4"/><circle cx="355" cy="88" r="3"/><circle cx="514" cy="158" r="2"/><circle cx="792" cy="86" r="3"/><circle cx="934" cy="235" r="2"/><circle cx="1481" cy="82" r="3"/><circle cx="1514" cy="254" r="4"/>
-  </g>
-  <!-- distant cloud scrolls -->
-  <g fill="none" stroke="#b9d7bf" stroke-opacity=".18" stroke-width="7" stroke-linecap="round">
-    <path d="M80 275 C144 230 195 294 250 255 C292 226 346 249 360 286"/>
-    <path d="M1334 312 C1396 268 1445 326 1492 294 C1530 267 1566 282 1590 310"/>
-  </g>
-  <!-- Canton Tower: double waist, observation rings and pearl mast. -->
-  <g fill="none" stroke="#b9d7bf" stroke-linecap="round">
-    <path d="M739 688 C754 554 776 408 845 274 C875 214 917 214 947 274 C1016 408 1038 554 1053 688" stroke-width="28" opacity=".26"/>
-    <path d="M777 688 C790 558 810 432 861 306 C883 251 909 251 931 306 C982 432 1002 558 1015 688" stroke-width="8" opacity=".72"/>
-    <path d="M805 688 L976 688 M823 613 L958 613 M837 531 L944 531 M850 445 L931 445 M862 358 L919 358" stroke-width="4" opacity=".46"/>
-    <path d="M849 275 L943 275 L943 114" stroke-width="10" opacity=".8"/>
-    <path d="M873 275 L919 275 L919 70" stroke-width="4" opacity=".65"/>
-    <ellipse cx="896" cy="287" rx="58" ry="18" stroke-width="6" opacity=".8"/>
-  </g>
-  <g fill="#f5dca5"><circle cx="896" cy="67" r="9"/><circle cx="896" cy="287" r="13"/></g>
-  <!-- moon gate and courtyard halls -->
-  <path d="M0 584 Q205 458 417 584 L417 628 Q207 526 0 628Z" fill="#07171b" opacity=".95"/>
-  <path d="M1184 549 Q1391 416 1600 549 L1600 602 Q1393 493 1184 602Z" fill="#07171b" opacity=".96"/>
-  <path d="M67 601 Q209 504 350 601 L350 820 H67Z" fill="#07171b"/>
-  <path d="M1249 567 Q1392 470 1535 567 L1535 820 H1249Z" fill="#07171b"/>
-  <path d="M67 601 Q209 504 350 601 L350 625 Q209 544 67 625Z" fill="url(#roofTiles)"/>
-  <path d="M1249 567 Q1392 470 1535 567 L1535 592 Q1392 511 1249 592Z" fill="url(#roofTiles)"/>
-  <path d="M99 820 V655 Q99 566 209 566 Q318 566 318 655 V820" fill="#102d31" stroke="#8fc8a9" stroke-opacity=".35" stroke-width="7"/>
-  <circle cx="209" cy="674" r="65" fill="none" stroke="#f5dca5" stroke-opacity=".25" stroke-width="7"/>
-  <path d="M209 609 V739 M144 674 H274" stroke="#f5dca5" stroke-opacity=".2" stroke-width="4"/>
-  <path d="M1281 820 V635 Q1392 534 1503 635 V820" fill="#102d31" stroke="#8fc8a9" stroke-opacity=".35" stroke-width="7"/>
-  <path d="M1312 820 V654 H1472 V820" fill="url(#lattice)" opacity=".6"/>
-  <!-- foreground pond and reflected tower -->
-  <path d="M0 691 Q376 625 737 704 T1600 691 V820 H0Z" fill="url(#water)"/>
-  <path d="M739 704 C790 710 1017 710 1053 704 L1009 820 H781Z" fill="url(#dawn)" opacity=".18"/>
-  <g fill="none" stroke="url(#jade)" stroke-width="5" opacity=".55">
-    <path d="M90 740 Q238 707 385 740"/><path d="M115 772 Q244 744 373 772"/><path d="M1209 741 Q1392 707 1570 741"/><path d="M1242 774 Q1394 748 1543 774"/>
-  </g>
-  <!-- lanterns and bamboo silhouettes -->
-  <g stroke="#8fc8a9" stroke-opacity=".45" stroke-width="5" fill="none"><path d="M510 820 C499 713 530 638 510 555 M545 820 C558 730 538 667 558 596"/><path d="M1128 820 C1113 720 1151 655 1137 578 M1164 820 C1175 738 1153 680 1180 620"/></g>
-  <g fill="#f5dca5"><path d="M484 580 L536 580 L547 627 L473 627Z"/><path d="M1101 602 L1154 602 L1165 649 L1090 649Z"/><circle cx="510" cy="650" r="8"/><circle cx="1130" cy="672" r="8"/></g>
-  <g fill="#07171b" opacity=".82"><path d="M0 782 Q350 735 690 783 T1600 778 V820 H0Z"/></g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 760" fill="none">
+<title>月映珠江 · 岭南庭院</title>
+<defs>
+ <linearGradient id="sky" x2="0" y2="1"><stop stop-color="#102f35"/><stop offset="1" stop-color="#346463"/></linearGradient>
+ <linearGradient id="river" x2="0" y2="1"><stop stop-color="#356665"/><stop offset="1" stop-color="#12373d"/></linearGradient>
+ <radialGradient id="moon"><stop stop-color="#fff5d8"/><stop offset="1" stop-color="#dbc58f"/></radialGradient>
+ <linearGradient id="wall" x2="0" y2="1"><stop stop-color="#e9e0ca"/><stop offset="1" stop-color="#b5baa9"/></linearGradient>
+ <pattern id="tile" width="24" height="16" patternUnits="userSpaceOnUse"><path d="M0 14Q6 4 12 14Q18 4 24 14" stroke="#809a86" stroke-width="1.2"/></pattern>
+ <pattern id="screen" width="30" height="30" patternUnits="userSpaceOnUse"><path d="M0 0H30V30H0ZM15 0V30M0 15H30" stroke="#c2b381" stroke-opacity=".45"/></pattern>
+ <clipPath id="gate"><circle cx="500" cy="398" r="284"/></clipPath>
+</defs>
+<path fill="#102d33" d="M0 0H1000V760H0Z"/>
+<g clip-path="url(#gate)">
+ <path fill="url(#sky)" d="M0 0H1000V760H0Z"/>
+ <circle cx="542" cy="260" r="145" fill="#eedca7" opacity=".04"/>
+ <circle cx="542" cy="260" r="119" fill="#eedca7" opacity=".06"/>
+ <circle cx="542" cy="260" r="87" fill="url(#moon)"/>
+ <g stroke="#e5d7ab" opacity=".23"><path d="M318 268h89m-49 9h95m191-69h72m-85 11h109m-484 130h61m-24 10h88"/></g>
+ <path d="M147 565Q265 498 395 548T654 548T891 557V760H147Z" fill="#274d50"/>
+ <g fill="#376363"><path d="M266 497h28v81h-28zm40-27h29v108h-29zm40 36h41v72h-41zm401-2h24v80h-24zm40-39h34v119h-34zm46 28h34v91h-34z"/></g>
+ <g stroke="#decfa2" stroke-width="1.1" opacity=".78"><path d="M618.0 588 C682.0 405 658.0 362 629.0 217"/><path d="M627.0 588 C679.9 405 659.4 362 636.9 217"/><path d="M636.0 588 C677.8 405 660.8 362 644.8 217"/><path d="M645.0 588 C675.6 405 662.1 362 652.6 217"/><path d="M654.0 588 C673.5 405 663.5 362 660.5 217"/><path d="M663.0 588 C671.4 405 664.9 362 668.4 217"/><path d="M672.0 588 C669.2 405 666.2 362 676.2 217"/><path d="M681.0 588 C667.1 405 667.6 362 684.1 217"/><path d="M690.0 588 C665.0 405 669.0 362 692.0 217"/><path d="M699.0 588 C662.9 405 670.4 362 699.9 217"/><path d="M708.0 588 C660.8 405 671.8 362 707.8 217"/><path d="M717.0 588 C658.6 405 673.1 362 715.6 217"/><path d="M726.0 588 C656.5 405 674.5 362 723.5 217"/><path d="M735.0 588 C654.4 405 675.9 362 731.4 217"/><path d="M744.0 588 C652.2 405 677.2 362 739.2 217"/><path d="M753.0 588 C650.1 405 678.6 362 747.1 217"/><path d="M762.0 588 C648.0 405 680.0 362 755.0 217"/><path d="M629 225 Q692.0 234 755 225"/><path d="M637 251 Q692.5 260 748 251"/><path d="M646 281 Q692.5 290 739 281"/><path d="M654 314 Q691.5 323 729 314"/><path d="M660 350 Q691.0 359 722 350"/><path d="M661 388 Q689.5 397 718 388"/><path d="M658 426 Q689.0 435 720 426"/><path d="M650 466 Q690.0 475 730 466"/><path d="M641 506 Q690.0 515 739 506"/><path d="M630 547 Q691.5 556 753 547"/><path d="M620 580 Q690.0 589 760 580"/></g>
+ <path d="M694 112V216M688 132V216" stroke="#e7d8ae" stroke-width="2"/>
+ <ellipse cx="692" cy="215" rx="63" ry="10" stroke="#e7d8ae" stroke-width="2"/>
+ <ellipse cx="692" cy="202" rx="48" ry="7" stroke="#e7d8ae" stroke-width="2"/>
+ <path d="M112 582Q349 551 530 593T960 573V760H0Z" fill="url(#river)"/>
+ <g stroke="#d9c89a" opacity=".19"><path d="M478 614h149m-116 10h75m45-20h134m-113 28h81m-203 12h100m-53 14h145m-57 17h-104"/></g>
+ <path d="M195 630Q287 581 405 619T694 634" stroke="#6a8b7f" stroke-width="6"/>
+</g>
+<circle cx="500" cy="398" r="290" stroke="#c3b386" stroke-width="2" opacity=".56"/>
+<circle cx="500" cy="398" r="303" stroke="#c3b386" opacity=".24"/>
+<!-- Lingnan roof: lifted corners, ceramic tiles and a moon gate wall. -->
+<path d="M0 464Q90 470 173 393Q243 458 327 466L321 490Q173 428 0 494Z" fill="#081f28"/>
+<path d="M5 467Q91 475 173 398Q242 460 323 468L317 483Q169 428 6 489Z" fill="url(#tile)"/>
+<path d="M0 500L74 469H276V760H0Z" fill="url(#wall)"/>
+<path d="M34 518h197v168H34Z" fill="#213f41"/>
+<path d="M44 528h177v148H44Z" fill="url(#screen)"/>
+<path d="M0 693h286v16H0Zm0 38h300v29H0Z" fill="#83988b"/>
+<path d="M801 520Q887 479 1000 486V512Q902 505 814 544Z" fill="#0a252c"/>
+<path d="M822 548Q911 515 1000 518V760H822Z" fill="#496e65"/>
+<path d="M843 564h157v9H843Zm-10 28h167v7H833Zm0 29h167v7H833Z" fill="#87a08a" opacity=".35"/>
+<!-- Bamboo stays outside the work surface. -->
+<g stroke="#577e6a" stroke-width="4"><path d="M38 469Q90 262 126 97M79 476Q148 284 206 226"/></g>
+<g fill="#6c9175"><path d="M117 130Q40 91 25 144Q88 161 117 130Zm-7 18Q202 90 226 132Q170 168 110 148Zm-11 44Q34 169 11 205Q63 228 99 192Zm-13 49Q179 186 196 229Q145 262 86 241Zm-18 61Q22 242 4 265Q5 319 68 302Zm87 24Q240 272 242 317Q206 345 155 326Zm20-60Q151 212 174 190Q209 224 175 266Z"/></g>
+<!-- Warm courtyard lantern. -->
+<path d="M302 478v58" stroke="#cdb984" stroke-width="2"/>
+<path d="M285 538h34l7 43h-48Z" fill="#deb877"/>
+<path d="M288 543h27l5 34h-37Z" fill="#f7d49b"/>
+<path d="M300 543v34m5-34v34m-3 7v17m-7-8h14" stroke="#956b49" stroke-width="1.5"/>
+<!-- Pond stones and lotus. -->
+<path d="M0 755Q84 704 206 734T455 738T788 716T1000 731V760H0Z" fill="#0a252c"/>
+<g fill="#577b6b"><ellipse cx="402" cy="722" rx="42" ry="7"/><ellipse cx="774" cy="696" rx="31" ry="5"/></g>
+<path d="M402 719Q384 708 396 693Q410 703 402 719Z" fill="#bda887"/>
+<path d="M402 719Q414 700 423 707Q419 721 402 719Z" fill="#e0c499"/>
 </svg>

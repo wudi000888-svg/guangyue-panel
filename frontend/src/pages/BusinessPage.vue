@@ -47,7 +47,7 @@ async function control(){if(!controlling.value)return;directoryRevision++;busy.v
  const s=controlling.value;replace(await api<ManagedSite>('/'+s.id+'/control','POST',{paused:!s.connection?.status?.paused}));controlling.value=null;
 }catch(e){if(!isCancelled(e))error.value=(e as Error).message;}finally{busy.value=false;}}
 async function manage(site:ManagedSite,page:string){await switchSite(site.id,site.name);if(selectedSite.value===site.id)go(page);}
-async function onPoolSaved(site:ManagedSite){replace(site);await load();}
+function onPoolSaved(site:ManagedSite){directoryRevision++;replace(site);pooling.value=site;}
 const poll=serialPoll(async()=>{if(!document.hidden&&!changing.value)await load(true);},()=>15000);
 onMounted(()=>{void load(true);poll.start();});
 onUnmounted(()=>{disposed=true;poll.stop();form.token='';});

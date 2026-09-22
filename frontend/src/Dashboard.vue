@@ -4,6 +4,7 @@ const api = useApi();
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { Activity, ArrowUpRight, CalendarDays, CheckCircle2, Clock3, Database, Download, Globe2, RadioTower, RefreshCw, Server, ShieldCheck, TriangleAlert, Users, Zap } from 'lucide-vue-next';
 import { t, locale } from './i18n';
+import CourtyardMasthead from "./components/CourtyardMasthead.vue";
 import CountryMark from './CountryMark.vue';
 type User={id:number;username:string;enabled:boolean;expires:number;quota:number;upload:number;download:number;vless_traffic:number;hy2_traffic:number};
 type Node={id:string;name:string;protocol:string;enabled:boolean;managed_by?:string;probe_ip:string;probe_error:string;country:string;country_code:string};
@@ -60,7 +61,7 @@ onUnmounted(()=>{sequence++;controller?.abort();clearInterval(timer)});
 
 <template>
 <section class="business-dashboard">
- <header class="dash-heading"><div><span class="dash-eyebrow">{{t('运营工作台')}}</span><h2>{{t('网络运营概览')}}</h2><p>{{t('流量、用户与两类出口，一处掌握')}}</p></div><div class="dash-heading-actions"><span class="dash-updated"><i class="dot"/>{{date(data?.generated_at)}}</span><button :disabled="loading" @click="load();emit('refresh')"><RefreshCw :size="14" :class="{spin:loading}"/>{{t('刷新数据')}}</button></div></header>
+ <CourtyardMasthead :title="t('网络运营概览')" :description="t('流量、用户与两类出口，一处掌握')" :eyebrow="t('运营工作台')"><span class="dash-updated"><i class="dot"/>{{date(data?.generated_at)}}</span><button :disabled="loading" @click="load();emit('refresh')"><RefreshCw :size="14" :class="{spin:loading}"/>{{t('刷新数据')}}</button></CourtyardMasthead>
  <div v-if="noLogs" class="dash-runtime-notice" role="status"><ShieldCheck :size="18"/><div><strong>{{t(state.runtime?.mode==='no_logs'?'无日志模式':'日志记录已暂停')}}</strong><p>{{t('流量趋势、操作审计与订阅访问时间已停止新增记录。历史空白不代表零用量，配额累计继续更新。')}}</p></div><button v-if="owner" class="text-button" @click="emit('navigate','settings')">{{t('系统设置')}}<ArrowUpRight :size="14"/></button></div>
  <p v-if="error" class="error" role="alert">{{t(error)}} <button @click="load">{{t('重试')}}</button></p>
  <div class="dash-metrics">
