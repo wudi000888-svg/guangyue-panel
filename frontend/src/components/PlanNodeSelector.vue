@@ -2,6 +2,7 @@
 import {computed} from 'vue';
 import type {GroupMember,Node,NodeGroup} from '../types';
 import {t} from '../i18n';
+import {planMemberKey as memberKey,planMemberSelected,removePlanGroupNodes} from '../lib/nodeGroups';
 
 const props=defineProps<{
   groups:NodeGroup[];
@@ -16,26 +17,25 @@ const emit=defineEmits<{
   (event:'update:nodeIds',value:string[]):void;
 }>();
 
-const localNodes=computed(()=>new Map(props.nodes.map(node=>[node.id,node])));
+const memberSelected=(member:GroupMember)=>planMemberSelected(member,props.nodeIds);
 const visibleGroups=computed(()=>props.groups.filter(group=>!props.hidePublic||group.scope!=='public'));
 // /api/node-groups returns the complete effective membership, including
 // mounted child-site nodes. Do not discard those rows just because they are
 // absent from the local node catalog.
-const rowsFor=(groupID:string)=>[...(props.members[groupID]||[])].filter(member=>member.enabled!==false&&member.status!=='disabled');
+const rowsFor=(groupID:string)=>props.members[groupID]||[];
 const groupHasNodes=(groupID:string)=>rowsFor(groupID).length>0;
 const groupSelected=(groupID:string)=>props.groupIds.includes(groupID);
-const nodeSelected=(nodeID:string)=>props.nodeIds.includes(nodeID);
-const selectedCount=(groupID:string)=>rowsFor(groupID).filter(member=>nodeSelected(member.node_id)).length;
+const selectedCount=(groupID:string)=>rowsFor(groupID).filter(member=>memberSelected(member)).length;
 
 function updateGroups(groupID:string,checked:boolean){
   const next=checked?[...props.groupIds,groupID]:props.groupIds.filter(id=>id!==groupID);
-  const selectedGroups=new Set(next);
-  const stillAvailable=new Set(next.flatMap(id=>rowsFor(id).map(member=>member.node_id)));
   emit('update:groupIds',[...new Set(next)]);
-  emit('update:nodeIds',props.nodeIds.filter(id=>selectedGroups.size>0&&stillAvailable.has(id)));
+  if(!checked)emit('update:nodeIds',removePlanGroupNodes(groupID,rowsFor(groupID),props.nodeIds));
 }
-function updateNode(nodeID:string,checked:boolean){
-  const next=checked?[...props.nodeIds,nodeID]:props.nodeIds.filter(id=>id!==nodeID);
+function updateNode(member:GroupMember,checked:boolean){
+  const nodeID=memberKey(member);
+  const current=props.nodeIds.filter(id=>id!==nodeID&&(['mounted','business'].includes(member.source||'')||id!==member.node_id));
+  const next=checked?[...current,nodeID]:current;
   emit('update:nodeIds',[...new Set(next)]);
 }
 </script>
@@ -43,7 +43,7 @@ function updateNode(nodeID:string,checked:boolean){
 <template>
   <div class="plan-node-selector">
     <div class="selector-heading">
-      <div><strong>{{t('节点权限')}}</strong><small>{{t('先选择节点组，再从已选组内勾选单独节点。')}}</small></div>
+      <div><strong>{{t('节点权限')}}</strong><small>{{t('先选择节点组；未勾选单独节点时使用整组，勾选后仅使用本组所选节点。')}}</small></div>
       <span class="selection-count">{{groupIds.length}} {{t('个组')}} · {{nodeIds.length}} {{t('个单独节点')}}</span>
     </div>
     <fieldset class="group-list">
@@ -51,20 +51,20 @@ function updateNode(nodeID:string,checked:boolean){
       <div v-for="group in visibleGroups" :key="group.id" class="group-block">
         <label class="group-option">
           <input type="checkbox" :checked="groupSelected(group.id)" @change="updateGroups(group.id,($event.target as HTMLInputElement).checked)"/>
-          <span><strong>{{group.name}}</strong><small>{{rowsFor(group.id).length}} {{t('个可用节点')}}<template v-if="group.scope==='subsite'"> · {{t('子站节点组')}}</template><template v-if="!group.enabled"> · {{t('已停用')}}</template></small></span>
+          <span><strong>{{group.name}}</strong><small>{{rowsFor(group.id).length}} {{t('个节点')}}<template v-if="group.scope==='subsite'"> · {{t('子站节点组')}}</template><template v-if="!group.enabled"> · {{t('已停用')}}</template></small></span>
         </label>
         <div v-if="groupSelected(group.id)" class="group-node-list">
           <template v-if="groupHasNodes(group.id)">
-            <label v-for="member in rowsFor(group.id)" :key="member.node_id" class="node-option">
-              <input type="checkbox" :checked="nodeSelected(member.node_id)" @change="updateNode(member.node_id,($event.target as HTMLInputElement).checked)"/>
-              <span><strong>{{localNodes.get(member.node_id)?.name||member.name||member.node_id}}</strong><small>{{(localNodes.get(member.node_id)?.protocol||member.protocol||'').toUpperCase()}} · {{localNodes.get(member.node_id)?.exit||localNodes.get(member.node_id)?.host||member.entry_host||member.exit_ip||member.node_id}}<template v-if="member.source&&member.source!=='local'"> · {{member.site_name||member.source}}</template></small></span>
+            <label v-for="member in rowsFor(group.id)" :key="memberKey(member)" class="node-option">
+              <input type="checkbox" :checked="memberSelected(member)" @change="updateNode(member,($event.target as HTMLInputElement).checked)"/>
+              <span><strong>{{member.name||member.node_id}}</strong><small>{{(member.protocol||'').toUpperCase()}} · {{member.entry_host||member.exit_ip||member.node_id}}<template v-if="member.source&&member.source!=='local'"> · {{member.site_name||member.source}}</template></small></span>
             </label>
           </template>
           <p v-else class="field-help">{{t('此组暂无可单独选择的可用节点。')}}</p>
           <small v-if="groupHasNodes(group.id)" class="group-selection-summary">{{selectedCount(group.id)}} / {{rowsFor(group.id).length}} {{t('个节点已单独选择')}}</small>
         </div>
       </div>
-      <p v-if="!visibleGroups.length" class="field-help">{{t('暂无可用节点组，请先创建节点组。')}}</p>
+      <p v-if="!visibleGroups.length" class="field-help">{{t('节点组加载失败，请刷新后重试。')}}</p>
     </fieldset>
   </div>
 </template>

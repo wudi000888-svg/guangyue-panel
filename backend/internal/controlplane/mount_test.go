@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"path/filepath"
 	"reflect"
-	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -347,87 +346,6 @@ func TestMountedMonthlyBudgetStopsNewAuthorizations(t *testing.T) {
 	}
 	if len(s.Mount.Nodes) != 1 || s.Mount.Nodes[0].GroupIDs[0] != defaultSubsiteGroup {
 		t.Fatal("cooldown changed mounted node-group policy")
-	}
-}
-
-func TestMountedRejectsDefaultLocalGroupButAcceptsCustomGroups(t *testing.T) {
-	f := newMountFixture(t)
-	putGroup := func(scope, name string) NodeGroup {
-		t.Helper()
-		w := req(t, f.master, f.owner, "POST", "/api/node-groups", NodeGroup{Name: name, Scope: scope, Enabled: true})
-		if w.Code != 200 {
-			t.Fatal("create node group", w.Code, w.Body.String())
-		}
-		var g NodeGroup
-		if err := json.Unmarshal(w.Body.Bytes(), &g); err != nil {
-			t.Fatal(err)
-		}
-		return g
-	}
-	groups := []NodeGroup{putGroup("private", "挂载私有组"), putGroup("public", "挂载公共组"), putGroup("subsite", "挂载子站组")}
-	s, _ := f.master.store.businessSite(f.site.ID)
-	request := func(ids []string) *httptest.ResponseRecorder {
-		return req(t, f.master, f.owner, "PUT", "/api/business-sites/"+s.ID+"/node-pool", object{
-			"revision": s.Revision, "catalog_revision": s.Mount.Catalog.Revision,
-			"assignment": "manual", "nodes": []MountedNode{{NodeID: "vless-main", Enabled: true, GroupIDs: ids}},
-		})
-	}
-	if w := request([]string{legacyPrivateGroup}); w.Code != 400 {
-		t.Fatalf("default local group was accepted: %d %s", w.Code, w.Body.String())
-	}
-	ids := []string{groups[0].ID, groups[1].ID, groups[2].ID}
-	sort.Strings(ids)
-	if w := request(ids); w.Code != 200 {
-		t.Fatalf("custom mounted groups were rejected: %d %s", w.Code, w.Body.String())
-	}
-	stored, err := f.master.store.businessSite(f.site.ID)
-	if err != nil || len(stored.Mount.Nodes) != 1 || !reflect.DeepEqual(stored.Mount.Nodes[0].GroupIDs, ids) {
-		t.Fatalf("custom mounted groups were not persisted: %v %+v", err, stored.Mount.Nodes)
-	}
-}
-
-func TestAutomaticMountAuthorizesCustomGroup(t *testing.T) {
-	f := newMountFixture(t)
-	w := req(t, f.master, f.owner, "POST", "/api/node-groups", NodeGroup{Name: "自定义挂载组", Scope: "private", Enabled: true})
-	if w.Code != 200 {
-		t.Fatalf("create custom node group: %d %s", w.Code, w.Body.String())
-	}
-	var group NodeGroup
-	if err := json.Unmarshal(w.Body.Bytes(), &group); err != nil {
-		t.Fatal(err)
-	}
-	f.user.Entitlement = &domain.Entitlement{GroupIDs: []string{group.ID}}
-	if err := f.master.store.save(&f.user); err != nil {
-		t.Fatal(err)
-	}
-	s, _ := f.master.store.businessSite(f.site.ID)
-	w = req(t, f.master, f.owner, "PUT", "/api/business-sites/"+s.ID+"/node-pool", object{
-		"revision": s.Revision, "catalog_revision": s.Mount.Catalog.Revision,
-		"assignment": "groups",
-		"nodes":      []MountedNode{{NodeID: "vless-main", Enabled: true, GroupIDs: []string{group.ID}}},
-	})
-	if w.Code != 200 {
-		t.Fatalf("save custom automatic mount: %d %s", w.Code, w.Body.String())
-	}
-	var saved BusinessSite
-	if err := json.Unmarshal(w.Body.Bytes(), &saved); err != nil {
-		t.Fatal(err)
-	}
-	if len(saved.Mount.Nodes) != 1 || len(saved.Mount.Nodes[0].GroupIDs) != 1 || saved.Mount.Nodes[0].GroupIDs[0] != group.ID {
-		t.Fatalf("custom group was not persisted: %+v", saved.Mount.Nodes)
-	}
-	if len(saved.Grants) != 1 || saved.Grants[0].UserID != f.user.ID {
-		t.Fatalf("custom group did not produce an automatic grant: %+v", saved.Grants)
-	}
-	f.site = saved
-	f.sync(t)
-	shadow := f.delegated(t)
-	if len(shadow.Mount.NodeIDs) != 1 || shadow.Mount.NodeIDs[0] != "vless-main" {
-		t.Fatalf("custom group authorization did not reach child: %+v", shadow.Mount)
-	}
-	entries, err := f.master.subscriptionCatalogSource(f.user, "mounted", "")
-	if err != nil || len(entries) != 1 {
-		t.Fatalf("custom group subscription missing: %d %v", len(entries), err)
 	}
 }
 

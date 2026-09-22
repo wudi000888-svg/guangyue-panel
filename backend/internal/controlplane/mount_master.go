@@ -173,14 +173,6 @@ func (a *App) validateMountPolicy(v *BusinessSite) error {
 	if len(v.Mount.Nodes) > 64 || len(v.Grants) > 256 || len(v.Mount.Nodes)*len(v.Grants) > 4096 {
 		return errors.New("每站最多挂载 64 个节点、256 个用户，节点与用户组合不超过 4096")
 	}
-	groups, err := a.store.nodeGroups()
-	if err != nil {
-		return err
-	}
-	known := map[string]bool{}
-	for _, g := range groups {
-		known[g.ID] = true
-	}
 	seen := map[string]bool{}
 	for i := range v.Mount.Nodes {
 		n := &v.Mount.Nodes[i]
@@ -189,17 +181,7 @@ func (a *App) validateMountPolicy(v *BusinessSite) error {
 			return errors.New("来源节点不存在、重复或别名过长")
 		}
 		seen[n.NodeID] = true
-		gs := map[string]bool{}
-		for _, id := range n.GroupIDs {
-			if !known[id] || gs[id] {
-				return errors.New("主站节点组不存在或重复")
-			}
-			if id == legacyPrivateGroup {
-				return errors.New("子站节点不能加入默认本地节点组，请先创建或选择其他节点组")
-			}
-			gs[id] = true
-		}
-		sort.Strings(n.GroupIDs)
+		n.GroupIDs = []string{defaultSubsiteGroup}
 	}
 	sort.Slice(v.Mount.Nodes, func(i, j int) bool { return v.Mount.Nodes[i].NodeID < v.Mount.Nodes[j].NodeID })
 	if v.Mount.Assignment == "groups" {
@@ -320,7 +302,7 @@ func (a *App) syncMountSiteLocked(ctx context.Context, id string) (resultErr err
 				if !ok || !m.Enabled || !n.Enabled {
 					continue
 				}
-				n = mountNodePolicy(m, n)
+				n = mountNodePolicy(v.ID, m, n)
 				if nodeGroupAllowed(u, n) && (n.Protocol == "vless" && u.VLESS || n.Protocol == "hy2" && u.HY2) {
 					nodes = append(nodes, n.ID)
 				}

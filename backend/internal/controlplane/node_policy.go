@@ -116,6 +116,10 @@ func (a *App) nodePolicyAPI(w http.ResponseWriter, r *http.Request, actor Record
 		failure(w, 400, "请选择节点和要修改的倍率或分组")
 		return
 	}
+	if input.GroupIDs != nil {
+		failure(w, 400, "节点按来源自动归组，请在套餐中设置节点权限")
+		return
+	}
 	nodes, err := a.store.nodes()
 	if err != nil {
 		failure(w, 500, "读取节点失败")

@@ -4,15 +4,13 @@ import {useModalFocus} from '../composables/useModalFocus';
 import {X,RefreshCw,Search,CheckCircle2,TriangleAlert} from 'lucide-vue-next';
 import {useApi,isCancelled} from '../lib/api';
 import {usePanelContext} from '../composables/panelContext';
-import NodeGroupPicker from './NodeGroupPicker.vue';
 import type {ManagedSite,MountedNode} from '../lib/sites';
 import type {Node,NodeGroup,GroupMember} from '../types';
-import {applyMountGroups,defaultMountGroups,mountGroupSelection} from '../lib/mounts';
 import {t} from '../i18n';
 const props=defineProps<{site:ManagedSite}>(),emit=defineEmits<{close:[];saved:[site:ManagedSite]}>();
 const api=useApi('/business-sites'),mainAPI=useApi(),{nodeGroups,groupMembers,bytes}=usePanelContext();
 const current=ref<ManagedSite|null>(null),mounts=ref<MountedNode[]>([]),monthlyBudgetGB=ref(0),cooldownHours=ref(24);
-const busy=ref(false),error=ref(''),savedNotice=ref(false),saveStage=ref<'idle'|'loading'|'saving'|'syncing'|'refreshing'|'saved'>('idle'),search=ref(''),targetGroups=ref<string[]>([]),baseline=ref('');
+const busy=ref(false),error=ref(''),savedNotice=ref(false),saveStage=ref<'idle'|'loading'|'saving'|'syncing'|'refreshing'|'saved'>('idle'),search=ref(''),baseline=ref('');
 const dialog=ref<HTMLElement|null>(null),groupRefreshFailed=ref(false),savedCount=ref(0);
 const close=()=>{if(!busy.value)emit('close');};
 useModalFocus(ref(true),dialog,close);
@@ -27,19 +25,18 @@ const feedback=computed(()=>{
  return dirty.value?t('有未保存的修改'):t('按套餐节点组自动授权');
 });
 const catalog=computed(()=>current.value?.mount?.catalog);
-const signature=()=>JSON.stringify([mounts.value,targetGroups.value,monthlyBudgetGB.value,cooldownHours.value]);
+const signature=()=>JSON.stringify([mounts.value,monthlyBudgetGB.value,cooldownHours.value]);
 const dirty=computed(()=>!!current.value&&baseline.value!==signature());
 const visible=computed(()=>catalog.value?.nodes.filter(n=>[n.name,n.id,n.protocol,n.probe_ip,host(n)].join(' ').toLowerCase().includes(search.value.toLowerCase()))||[]);
 const missing=computed(()=>mounts.value.filter(m=>!catalog.value?.nodes.some(n=>n.id===m.node_id)));
 const mount=(id:string)=>mounts.value.find(n=>n.node_id===id);
 const groupNames=(ids:string[])=>ids.map(id=>nodeGroups.value.find(g=>g.id===id)?.name||id).join('、')||t('未分配节点组');
 function host(n:Node){return n.protocol==='hy2'?catalog.value?.info.hy2_host:catalog.value?.info.vless_host;}
-function fill(s:ManagedSite){current.value=s;monthlyBudgetGB.value=(s.monthly_budget||0)/1073741824;cooldownHours.value=(s.cooldown_seconds||86400)/3600;mounts.value=(s.mount?.nodes||[]).map(n=>({...n,group_ids:[...n.group_ids]}));targetGroups.value=mountGroupSelection(mounts.value,defaultMountGroups(nodeGroups.value));baseline.value=signature();}
+function fill(s:ManagedSite){current.value=s;monthlyBudgetGB.value=(s.monthly_budget||0)/1073741824;cooldownHours.value=(s.cooldown_seconds||86400)/3600;mounts.value=(s.mount?.nodes||[]).map(n=>({...n,group_ids:['default-subsite']}));baseline.value=signature();}
 async function refreshGroupDirectory(){const g=await mainAPI<{groups:NodeGroup[];members:Record<string,GroupMember[]>}>('/node-groups');nodeGroups.value=g.groups;groupMembers.value=g.members;}
 async function load(){if(busy.value)return;busy.value=true;saveStage.value='loading';error.value='';try{const [s]=await Promise.all([api<ManagedSite>('/'+props.site.id+'/node-pool'),refreshGroupDirectory()]);fill(s);}catch(e){if(!isCancelled(e))error.value=(e as Error).message;}finally{busy.value=false;saveStage.value='idle';}}
-function selectNode(n:Node,enabled:boolean){savedNotice.value=false;if(!enabled){mounts.value=mounts.value.filter(m=>m.node_id!==n.id);return;}if(!mount(n.id))mounts.value.push({node_id:n.id,name:'',enabled:true,group_ids:[...targetGroups.value]});}
+function selectNode(n:Node,enabled:boolean){savedNotice.value=false;if(!enabled){mounts.value=mounts.value.filter(m=>m.node_id!==n.id);return;}if(!mount(n.id))mounts.value.push({node_id:n.id,name:'',enabled:true,group_ids:['default-subsite']});}
 function selectVisible(){for(const n of visible.value)if(n.enabled)selectNode(n,true);}
-function applyTargetGroups(groups=targetGroups.value){if(!mounts.value.length)return;savedNotice.value=false;mounts.value=applyMountGroups(mounts.value,groups);}
 async function refreshSavedGroups(){
  saveStage.value='refreshing';
  try{await refreshGroupDirectory();groupRefreshFailed.value=false;}
@@ -78,13 +75,13 @@ onMounted(load);
 <template v-if="catalog&&current?.mount">
 <div class="pool-state"><span>{{mounts.length}} {{t('个已选节点')}} · {{current.grants.length}} {{t('位已授权用户')}}</span><small>{{t('上次同步')}} {{current.mount.last_sync?new Date(current.mount.last_sync*1000).toLocaleString():'—'}}</small><button :disabled="busy||dirty" @click="load"><RefreshCw :size="14"/>{{t('刷新目录')}}</button><button :disabled="busy||dirty" @click="sync">{{t('立即同步')}}</button></div>
 <p v-if="current.mount.error" class="error" role="status">{{t(current.mount.error)}} · {{t('未确认前不分发新授权，未结算额度继续保留。')}}</p><p v-if="catalog.paused" class="error">{{t('子站服务或节点共享已暂停')}}</p>
-<fieldset class="pool-fields" :disabled="busy"><details class="target-groups" open><summary>{{t('挂载节点分组')}}：{{groupNames(targetGroups)}}</summary><NodeGroupPicker v-model="targetGroups" :groups="nodeGroups" :exclude-ids="['legacy-private']" @update:model-value="applyTargetGroups"/><p class="field-help">{{t('子站节点不能加入默认本地节点组；选择后会应用到当前已挂载节点和之后新勾选的节点，也可以在单个节点中再调整。')}}</p></details>
+<fieldset class="pool-fields" :disabled="busy"><p class="field-help">{{t('挂载节点自动加入默认子站节点组，用户使用权限由套餐决定。')}}</p>
 <label class="monthly-budget">{{t('子站每月资源预算（GiB）')}}<input v-model.number="monthlyBudgetGB" type="number" min="0" step="0.01" required/><small>{{t('0 表示不限；达到上限后移除所有成员订阅，冷却结束后自动恢复。')}}</small></label><label class="monthly-budget">{{t('预算冷却时长（小时）')}}<input v-model.number="cooldownHours" type="number" min="1" max="8760" step="1" required/><small>{{t('共享预算达到上限后，子站节点暂停此时长；节点组归属不会被修改。')}}</small></label><p v-if="current.monthly_budget" class="field-help">{{t('本月已使用')}} {{bytes(current.monthly_usage||0)}} / {{bytes(current.monthly_budget)}}<template v-if="current.budget_cooldown_until"> · {{t('冷却中，预计')}} {{new Date(current.budget_cooldown_until*1000).toLocaleString()}} {{t('恢复')}}</template></p>
-<div class="toolbar"><div class="search"><Search :size="16"/><input v-model="search" :placeholder="t('搜索节点、协议或出口 IP')" :aria-label="t('搜索子站节点')"/></div><button :disabled="!targetGroups.length" @click="selectVisible">{{t('选择当前列表')}}</button></div>
-<div class="source-nodes"><article v-for="n in visible" :key="n.id" :class="{selected:!!mount(n.id)}"><div class="node-main"><label class="node-choice"><input type="checkbox" :checked="!!mount(n.id)" :disabled="!mount(n.id)&&(!n.enabled||!targetGroups.length)" @change="selectNode(n,($event.target as HTMLInputElement).checked)"/><span :class="['tag',n.protocol]">{{n.protocol.toUpperCase()}}</span><strong>{{mount(n.id)?.name||n.name}}</strong></label><span class="badge" :class="!n.enabled||mount(n.id)?.enabled===false?'neutral':mount(n.id)?'success':'neutral'">{{t(!n.enabled||mount(n.id)?.enabled===false?'已停用':mount(n.id)?'已选择挂载':'未挂载')}}</span></div>
+<div class="toolbar"><div class="search"><Search :size="16"/><input v-model="search" :placeholder="t('搜索节点、协议或出口 IP')" :aria-label="t('搜索子站节点')"/></div><button @click="selectVisible">{{t('选择当前列表')}}</button></div>
+<div class="source-nodes"><article v-for="n in visible" :key="n.id" :class="{selected:!!mount(n.id)}"><div class="node-main"><label class="node-choice"><input type="checkbox" :checked="!!mount(n.id)" :disabled="!mount(n.id)&&!n.enabled" @change="selectNode(n,($event.target as HTMLInputElement).checked)"/><span :class="['tag',n.protocol]">{{n.protocol.toUpperCase()}}</span><strong>{{mount(n.id)?.name||n.name}}</strong></label><span class="badge" :class="!n.enabled||mount(n.id)?.enabled===false?'neutral':mount(n.id)?'success':'neutral'">{{t(!n.enabled||mount(n.id)?.enabled===false?'已停用':mount(n.id)?'已选择挂载':'未挂载')}}</span></div>
 <div class="node-details"><span>{{t('所属站点')}}：{{site.name}}</span><span>{{t('接入地址')}}：{{host(n)}}:443</span><span>{{t('出口 IP')}}：{{n.probe_ip||t('待检测')}}</span><span>{{t('流量倍率')}}：{{(n.rate_milli??1000)/1000}}×</span></div>
 <p class="node-groups">{{t('主站节点组')}}：{{mount(n.id)?groupNames(mount(n.id)!.group_ids):'—'}}</p>
-<details v-if="mount(n.id)" class="node-options"><summary>{{t('调整分组、别名或启停')}}</summary><NodeGroupPicker v-model="mount(n.id)!.group_ids" :groups="nodeGroups" :exclude-ids="['legacy-private']"/><label>{{t('展示别名')}}<input v-model="mount(n.id)!.name" maxlength="64"/></label><label class="check"><input type="checkbox" v-model="mount(n.id)!.enabled"/>{{t('启用挂载')}}</label><small>{{n.id}}</small></details>
+<details v-if="mount(n.id)" class="node-options"><summary>{{t('调整别名或启停')}}</summary><label>{{t('展示别名')}}<input v-model="mount(n.id)!.name" maxlength="64"/></label><label class="check"><input type="checkbox" v-model="mount(n.id)!.enabled"/>{{t('启用挂载')}}</label><small>{{n.id}}</small></details>
 </article><p v-if="!visible.length" class="field-help">{{t('没有匹配的共享节点')}}</p></div>
 <div v-for="m in missing" :key="m.node_id" class="missing-node"><span>{{m.name||m.node_id}} · {{t('来源节点已删除')}}</span><button @click="mounts=mounts.filter(n=>n!==m)">{{t('卸载')}}</button></div>
 <p class="field-help">{{t('同名节点按协议分别授权。勾选 VLESS 不会自动勾选 HY2。')}}</p>
@@ -93,7 +90,7 @@ onMounted(load);
 <footer class="mount-save-bar">
  <div class="mount-feedback" :class="{warning:!!error||groupRefreshFailed||!!current?.mount?.error}" role="status" aria-live="polite" aria-atomic="true">
   <RefreshCw v-if="busy" :size="18" class="spin"/><TriangleAlert v-else-if="error||groupRefreshFailed||current?.mount?.error" :size="18"/><CheckCircle2 v-else-if="savedNotice&&!dirty" :size="18"/>
-  <div><strong>{{feedback}}</strong><small v-if="savedNotice&&!dirty">{{savedCount}} {{t('个节点')}} · {{groupNames(targetGroups)}}</small></div>
+  <div><strong>{{feedback}}</strong><small v-if="savedNotice&&!dirty">{{savedCount}} {{t('个节点')}} · {{groupNames(['default-subsite'])}}</small></div>
  </div>
  <div class="mount-save-actions"><button v-if="groupRefreshFailed" :disabled="busy" @click="retryGroups">{{t('重试刷新列表')}}</button><button :disabled="busy" @click="close">{{t('关闭')}}</button><button class="primary" :disabled="busy||!current" @click="save"><RefreshCw v-if="busy" :size="15" class="spin"/>{{busy?t('处理中…'):savedNotice&&!dirty?t('再次保存'):t('保存挂载')}}</button></div>
 </footer>

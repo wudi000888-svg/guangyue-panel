@@ -61,7 +61,7 @@ func (a *App) entitlementAPI(w http.ResponseWriter, r *http.Request, actor Recor
 		}
 		add := func(siteID, siteName, source, host, status string, n Node) {
 			for _, id := range normalizeNodePolicy(n).GroupIDs {
-				members[id] = append(members[id], object{"site_id": siteID, "site_name": siteName, "source": source, "node_id": n.ID, "name": n.Name, "protocol": n.Protocol, "entry_host": host, "entry_port": 443, "exit_ip": n.ProbeIP, "enabled": status != "disabled", "status": status, "rate_milli": n.RateMilli})
+				members[id] = append(members[id], object{"site_id": siteID, "site_name": siteName, "source": source, "node_id": n.ID, "selection_key": planNodeKey(n), "name": n.Name, "protocol": n.Protocol, "entry_host": host, "entry_port": 443, "exit_ip": n.ProbeIP, "enabled": status != "disabled", "status": status, "rate_milli": n.RateMilli})
 			}
 		}
 		panelName := a.store.siteSettings().PanelName
@@ -118,60 +118,7 @@ func (a *App) entitlementAPI(w http.ResponseWriter, r *http.Request, actor Recor
 		return
 	}
 	if r.Method == "POST" && path == "/api/node-groups" {
-		var g NodeGroup
-		if !decode(w, r, &g) {
-			return
-		}
-		g.Name = strings.TrimSpace(g.Name)
-		if g.Sort < 0 || g.Sort > 9999 || g.Name == "" || len(g.Name) > 100 || len(g.Description) > 1000 || g.Scope != "private" && g.Scope != "public" && g.Scope != "subsite" {
-			failure(w, 400, "节点组名称或订阅范围无效")
-			return
-		}
-		groups, e := a.store.nodeGroups()
-		if e != nil {
-			failure(w, 500, "读取节点组失败")
-			return
-		}
-		found := false
-		for _, old := range groups {
-			if old.ID == g.ID {
-				found = true
-				if old.Enabled != g.Enabled {
-					if e := a.validateGroupCapability(old.ID); e != nil {
-						failure(w, 409, e.Error())
-						return
-					}
-				}
-				if old.Revision != g.Revision {
-					failure(w, 409, "节点组已变化，请刷新后重试")
-					return
-				}
-				if old.Scope != g.Scope {
-					failure(w, 409, "已创建节点组不能更改订阅范围")
-					return
-				}
-			}
-		}
-		if g.ID != "" && !found {
-			failure(w, 404, "节点组不存在")
-			return
-		}
-		if g.ID == "" {
-			if len(groups) >= 128 {
-				failure(w, 400, "节点组最多 128 个")
-				return
-			}
-			g.ID = "group-" + randomToken(9)
-		}
-		g.Revision = randomToken(12)
-		b, _ := json.Marshal(g)
-		if _, e = a.store.db.Exec("INSERT INTO node_groups(id,doc) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET doc=excluded.doc", g.ID, b); e != nil {
-			failure(w, 500, "保存节点组失败")
-			return
-		}
-		a.status = "pending"
-		a.store.audit(actor.Username, "save_node_group", g.ID)
-		jsonResponse(w, 200, g)
+		failure(w, 405, "节点组按来源自动维护，请在套餐中设置节点权限")
 		return
 	}
 	if r.Method == "POST" && path == "/api/plans" {
@@ -296,42 +243,9 @@ func (a *App) deletePlan(w http.ResponseWriter, _ *http.Request, actor Record, i
 	jsonResponse(w, 200, object{"ok": true, "deleted": true, "archived": false, "id": id, "destructive": true})
 }
 
-// deleteNodeGroup intentionally does not inspect or rewrite references. Any
-// issued entitlement or node policy that still names this group becomes
-// unresolved until the administrator assigns a replacement group.
+// Source groups are immutable; packages control subscription access.
 func (a *App) deleteNodeGroup(w http.ResponseWriter, _ *http.Request, actor Record, id string) {
-	id = strings.TrimSpace(id)
-	if id == "" || strings.Contains(id, "/") {
-		failure(w, 400, "节点组 ID 无效")
-		return
-	}
-	if id == legacyPrivateGroup || id == legacyPublicGroup || id == defaultSubsiteGroup {
-		failure(w, 400, "系统默认节点组不能删除")
-		return
-	}
-	groups, err := a.store.nodeGroups()
-	if err != nil {
-		failure(w, 500, "检查节点组失败")
-		return
-	}
-	found := false
-	for _, g := range groups {
-		if g.ID == id {
-			found = true
-			break
-		}
-	}
-	if !found {
-		failure(w, 404, "节点组不存在")
-		return
-	}
-	if _, err = a.store.db.Exec("DELETE FROM node_groups WHERE id=?", id); err != nil {
-		failure(w, 500, "删除节点组失败")
-		return
-	}
-	a.status = "pending"
-	a.store.audit(actor.Username, "delete_node_group", id)
-	jsonResponse(w, 200, object{"ok": true, "deleted": true, "id": id})
+	failure(w, 405, "默认节点组不能删除，请在套餐中设置节点权限")
 }
 
 func (a *App) validatePlan(p *Plan) error {
@@ -376,6 +290,25 @@ func (a *App) validatePlan(p *Plan) error {
 	for _, n := range nodes {
 		knownNodes[n.ID] = true
 		nodesByID[n.ID] = normalizeNodePolicy(n)
+		knownNodes[planNodeKey(n)] = true
+		nodesByID[planNodeKey(n)] = normalizeNodePolicy(n)
+	}
+	sites, err := a.store.businessSites()
+	if err != nil {
+		return err
+	}
+	for _, site := range sites {
+		if site.Removed {
+			continue
+		}
+		remote, e := a.materializeBusinessNodes(site)
+		if e != nil {
+			return e
+		}
+		for _, n := range remote {
+			knownNodes[planNodeKey(n)] = true
+			nodesByID[planNodeKey(n)] = n
+		}
 	}
 	seenNodes := map[string]bool{}
 	selectedGroups := map[string]bool{}

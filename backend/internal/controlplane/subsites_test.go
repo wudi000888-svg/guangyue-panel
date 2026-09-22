@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/wudi000888-svg/guangyue-panel/backend/internal/domain"
 )
 
 func TestSubsiteConfiguration(t *testing.T) {
@@ -118,16 +120,15 @@ func TestMasterControlsLiteSubsitePermissions(t *testing.T) {
 			t.Fatal("master protocol, expiry or role policy not enforced")
 		}
 	}
-	// Removing one site's node groups must not affect another site's access.
-	site, _ := master.store.businessSite("east")
-	denied := businessDefaultNodes()
-	for i := range denied {
-		denied[i] = normalizeNodePolicy(denied[i])
-		denied[i].GroupIDs = []string{}
+	// The package selects west's nodes using site-qualified keys; no node
+	// group mutation or cross-site ID matching is involved.
+	selectedUser, err := master.store.record(user.ID)
+	if err != nil {
+		t.Fatal(err)
 	}
-	policy := object{"name": site.Name, "group": site.Group, "enabled": true, "exclusive": false, "revision": site.Revision, "nodes": []Node{}, "default_nodes": denied, "grants": site.Grants}
-	if w := req(t, master, owner, "PUT", "/api/business-sites/east", policy); w.Code != 200 {
-		t.Fatalf("master node permission change: %d %s", w.Code, w.Body)
+	selectedUser.Entitlement = &domain.Entitlement{GroupIDs: []string{legacyPrivateGroup, defaultSubsiteGroup}, NodeIDs: []string{defaultSubsiteGroup + "/west/vless-main", defaultSubsiteGroup + "/west/hy2-main"}}
+	if err := master.store.save(&selectedUser); err != nil {
+		t.Fatal(err)
 	}
 	sync()
 	for i, agent := range agents {

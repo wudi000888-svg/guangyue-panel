@@ -120,7 +120,7 @@ try:
     initial=json.loads((control/'state/initial-owner.json').read_text());_,cookie=api('/api/login',initial)
     me,_=api('/api/state',cookie=cookie)
     def billing_call(path,body=None):return api('/api'+path,body,cookie=cookie)[0]
-    plan=billing_call('/plans',{'name':'CI business purchase','quota':0,'valid_days':30,'cycle':'none','vless':True,'hy2':True,'group_ids':['legacy-private']})
+    plan=billing_call('/plans',{'name':'CI business purchase','quota':0,'valid_days':30,'cycle':'none','vless':True,'hy2':True,'group_ids':['legacy-private','default-subsite']})
     from commerce_integration import purchase_plan
     purchase_plan(billing_call,billing_call,initial['password'],plan,me['me']['id'],bundle)
     created,_=api('/api/business-sites',{'id':'ci_edge','name':'CI edge','group':'Validation'},cookie=cookie)

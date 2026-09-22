@@ -214,6 +214,7 @@ func (a *App) savePublicSettings(w http.ResponseWriter, r *http.Request, actor R
 		c.NodeRateMilli = old.NodeRateMilli
 		c.NodeGroupIDs = old.NodeGroupIDs
 	}
+	c.NodeGroupIDs = []string{legacyPublicGroup}
 	policy := Node{PolicyVersion: c.NodePolicyVersion, RateMilli: c.NodeRateMilli, GroupIDs: c.NodeGroupIDs, ManagedBy: publicManager}
 	if err := a.store.validateNodePolicy(&policy, nil); err != nil {
 		a.mu.Unlock()
@@ -360,7 +361,7 @@ func (a *App) applyPublicSetLocked(desired []IPResource) error {
 				}
 			}
 			policy := a.store.publicSettings()
-			n := bindPool(Node{ID: id, Protocol: proto, Enabled: true, ManagedBy: publicManager, PolicyVersion: 1, RateMilli: policy.NodeRateMilli, GroupIDs: append([]string{}, policy.NodeGroupIDs...), RateRevision: randomToken(12)}, p)
+			n := bindPool(Node{ID: id, Protocol: proto, Enabled: true, ManagedBy: publicManager, PolicyVersion: 1, RateMilli: policy.NodeRateMilli, GroupIDs: []string{legacyPublicGroup}, RateRevision: randomToken(12)}, p)
 			for _, old := range oldPublicNodes {
 				if old.ID == id && nodeRate(old) == n.RateMilli {
 					n.RateRevision = normalizeNodePolicy(old).RateRevision

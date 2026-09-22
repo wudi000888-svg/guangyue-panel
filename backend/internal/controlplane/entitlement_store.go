@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sort"
 	"time"
 )
 
@@ -101,7 +100,7 @@ func (s *Store) initEntitlements() error {
 		return err
 	}
 	if done == "1" {
-		return s.initSubsiteGroup()
+		return s.initFixedNodeGroups()
 	}
 	users, err := s.records()
 	if err != nil {
@@ -168,105 +167,7 @@ func (s *Store) initEntitlements() error {
 	if err = tx.Commit(); err != nil {
 		return err
 	}
-	return s.initSubsiteGroup()
-}
-
-// Seed once on both installation and upgrade. Never overwrite a renamed or
-// disabled group, recreate an intentionally deleted one, or widen user access.
-func (s *Store) initSubsiteGroup() error {
-	done, err := s.readMeta("subsite_group_v1")
-	if err != nil {
-		return err
-	}
-	if done != "1" {
-		tx, err := s.db.Begin()
-		if err != nil {
-			return err
-		}
-		defer tx.Rollback()
-		g := NodeGroup{ID: defaultSubsiteGroup, Name: "默认子站节点组", Description: "挂载子站节点后，将本组分配给用户或套餐即可使用。", Scope: "subsite", Enabled: true, Sort: 2, Revision: "1"}
-		b, err := json.Marshal(g)
-		if err != nil {
-			return err
-		}
-		if _, err = tx.Exec("INSERT INTO node_groups(id,doc) VALUES(?,?) ON CONFLICT(id) DO NOTHING", g.ID, b); err != nil {
-			return err
-		}
-		if _, err = tx.Exec("INSERT INTO meta(key,value) VALUES('subsite_group_v1','1') ON CONFLICT(key) DO UPDATE SET value=excluded.value"); err != nil {
-			return err
-		}
-		if err = tx.Commit(); err != nil {
-			return err
-		}
-	}
-	if err = s.ensureDefaultSubsiteScope(); err != nil {
-		return err
-	}
-	return s.repairMountedGroupScopes()
-}
-
-// default-subsite was shipped with a private scope by an older migration. It
-// is a reserved system group, so correct only its scope while preserving any
-// administrator rename, description, enabled state, and sort order.
-func (s *Store) ensureDefaultSubsiteScope() error {
-	groups, err := s.nodeGroups()
-	if err != nil {
-		return err
-	}
-	for _, g := range groups {
-		if g.ID != defaultSubsiteGroup || g.Scope == "subsite" {
-			continue
-		}
-		g.Scope = "subsite"
-		g.Revision = randomToken(12)
-		b, err := json.Marshal(g)
-		if err != nil {
-			return err
-		}
-		if _, err = s.db.Exec("UPDATE node_groups SET doc=? WHERE id=?", b, g.ID); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// Mounted nodes used to accept private/public groups. On upgrade, move those
-// memberships into the dedicated default child group so a local entitlement
-// can no longer authorize a direct child endpoint. The migration is idempotent
-// and leaves an intentionally ungrouped mount ungrouped.
-func (s *Store) repairMountedGroupScopes() error {
-	sites, err := s.businessSites()
-	if err != nil {
-		return err
-	}
-	groups, err := s.nodeGroups()
-	if err != nil {
-		return err
-	}
-	for i := range sites {
-		v := sites[i]
-		if v.Connection == nil || v.Mount == nil || v.Removed {
-			continue
-		}
-		changed := false
-		for j := range v.Mount.Nodes {
-			before := append([]string{}, v.Mount.Nodes[j].GroupIDs...)
-			filtered := mountedGroupIDs(before, groups)
-			if len(filtered) == 0 && len(before) > 0 {
-				filtered = []string{defaultSubsiteGroup}
-			}
-			if !sameStrings(before, filtered) {
-				v.Mount.Nodes[j].GroupIDs = filtered
-				changed = true
-			}
-		}
-		if changed {
-			if err = s.saveBusinessSite(v); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
+	return s.initFixedNodeGroups()
 }
 
 func sameStrings(a, b []string) bool {
@@ -396,13 +297,6 @@ func nodeGroupAllowed(r Record, n Node) bool {
 		}
 		return false
 	}
-	if r.Entitlement != nil {
-		for _, id := range r.Entitlement.NodeIDs {
-			if id == n.ID {
-				return true
-			}
-		}
-	}
 	ids := r.AllowedGroups
 	if !r.AccessResolved && r.CompiledGroups != nil {
 		ids = *r.CompiledGroups
@@ -411,7 +305,7 @@ func nodeGroupAllowed(r Record, n Node) bool {
 	}
 	for _, group := range normalizeNodePolicy(n).GroupIDs {
 		for _, id := range ids {
-			if group == id {
+			if group == id && planSelectsNode(r.Entitlement, n, group) {
 				return true
 			}
 		}
@@ -432,22 +326,8 @@ func (s *Store) validateNodePolicy(n *Node, old *Node) error {
 	if n.PolicyVersion != 1 || n.RateMilli < 0 || n.RateMilli > 100000 || n.RateMilli%10 != 0 {
 		return errors.New("节点倍率需为 0–100，最多两位小数")
 	}
-	groups, err := s.nodeGroups()
-	if err != nil {
-		return err
-	}
-	known := map[string]bool{}
-	for _, g := range groups {
-		known[g.ID] = true
-	}
-	seen := map[string]bool{}
-	for _, id := range n.GroupIDs {
-		if !known[id] || seen[id] {
-			return errors.New("节点权限组不存在、重复或订阅范围不匹配")
-		}
-		seen[id] = true
-	}
-	sort.Strings(n.GroupIDs)
+	n.GroupIDs = []string{localNodeGroup(*n)}
+	n.AccessKey = ""
 	if old == nil || n.RateMilli != old.RateMilli {
 		n.RateRevision = randomToken(12)
 	} else {

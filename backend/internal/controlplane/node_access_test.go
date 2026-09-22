@@ -130,22 +130,12 @@ func TestDirectNodeAccessPreviewAndAuthorization(t *testing.T) {
 	if w := req(t, a, owner, "POST", "/api/entitlements/batch", request); w.Code != 409 {
 		t.Fatal("stale preview accepted", w.Code)
 	}
-	// A group's change also invalidates a previously confirmed selection.
-	request.Preview = true
-	w = req(t, a, owner, "POST", "/api/entitlements/batch", request)
-	json.Unmarshal(w.Body.Bytes(), &preview)
+	// Source groups are immutable; there is no independent grouping switch.
 	groups, _ := a.store.nodeGroups()
 	for _, g := range groups {
-		if g.ID == defaultSubsiteGroup {
-			g.Name = "Changed group"
-			if w := req(t, a, owner, "POST", "/api/node-groups", g); w.Code != 200 {
-				t.Fatal(w.Body.String())
-			}
+		if w := req(t, a, owner, "POST", "/api/node-groups", g); w.Code != 405 {
+			t.Fatal("fixed group was editable", w.Code)
 		}
-	}
-	request.Preview, request.Expected = false, preview.Expected
-	if w := req(t, a, owner, "POST", "/api/entitlements/batch", request); w.Code != 409 {
-		t.Fatal("changed group preview accepted", w.Code)
 	}
 	u.Archived = true
 	a.store.save(&u)

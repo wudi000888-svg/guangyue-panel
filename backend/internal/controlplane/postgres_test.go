@@ -28,7 +28,7 @@ func TestPostgresBehaviors(t *testing.T) {
 		{"mounted_isolation", TestMountedNodeIsolationAndSubscriptions},
 		{"mounted_accounting", TestMountedAccountingRevocationAndPeriods},
 		{"mounted_sharing", TestMountedTokenSharingAndLease},
-		{"subsite_default_group", TestSubsiteGroupInstallUpgradeAndCustomization},
+		{"subsite_default_group", TestFixedGroupsUpgradeRemovesCustomGroupsWithoutWideningAccess},
 		{"mounted_auto_access", TestAutomaticMountFollowsMainGroupsAndRevokes},
 		{"mounted_auto_budget", TestAutomaticMountBudgetsRespectOtherSitesAndOfflineReservations},
 		{"mounted_auto_compatibility", TestAutomaticMountManualCompatibilityAndInactiveUsers},
