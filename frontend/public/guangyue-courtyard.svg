@@ -1,47 +1,81 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 620" role="img" aria-label="广州塔与中式庭院月色插画">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 820" role="img" aria-label="广州塔与中式庭院月色插画">
   <defs>
     <linearGradient id="night" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#10282d"/>
-      <stop offset="1" stop-color="#315a54"/>
+      <stop offset="0" stop-color="#081b22"/>
+      <stop offset=".46" stop-color="#173d42"/>
+      <stop offset="1" stop-color="#6b493e"/>
+    </linearGradient>
+    <linearGradient id="dawn" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f6dca6" stop-opacity=".45"/>
+      <stop offset="1" stop-color="#8fc8a9" stop-opacity="0"/>
     </linearGradient>
     <linearGradient id="jade" x1="0" y1="0" x2="1" y2="0">
-      <stop offset="0" stop-color="#8fc8a9" stop-opacity=".18"/>
-      <stop offset="1" stop-color="#f5dca5" stop-opacity=".38"/>
+      <stop offset="0" stop-color="#8fc8a9" stop-opacity=".08"/>
+      <stop offset=".5" stop-color="#b9d7bf" stop-opacity=".65"/>
+      <stop offset="1" stop-color="#f5dca5" stop-opacity=".16"/>
+    </linearGradient>
+    <linearGradient id="water" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1f5657" stop-opacity=".75"/>
+      <stop offset="1" stop-color="#07171b" stop-opacity=".95"/>
     </linearGradient>
     <radialGradient id="moon" cx="35%" cy="30%">
-      <stop offset="0" stop-color="#fff6d6"/>
-      <stop offset=".7" stop-color="#f5dca5"/>
+      <stop offset="0" stop-color="#fff8dc"/>
+      <stop offset=".68" stop-color="#f5dca5"/>
       <stop offset="1" stop-color="#cfa968"/>
     </radialGradient>
-    <filter id="glow"><feGaussianBlur stdDeviation="11"/></filter>
+    <pattern id="roofTiles" width="42" height="18" patternUnits="userSpaceOnUse">
+      <path d="M0 17 Q10 2 21 17 Q31 2 42 17" fill="none" stroke="#b9d7bf" stroke-opacity=".18" stroke-width="2"/>
+    </pattern>
+    <pattern id="lattice" width="22" height="22" patternUnits="userSpaceOnUse">
+      <path d="M-5 5 L5 -5 M0 22 L22 0 M17 27 L27 17" stroke="#f5dca5" stroke-opacity=".22" stroke-width="2"/>
+    </pattern>
+    <filter id="glow"><feGaussianBlur stdDeviation="16"/></filter>
+    <filter id="soft"><feGaussianBlur stdDeviation="4"/></filter>
   </defs>
-  <rect width="1200" height="620" fill="url(#night)"/>
-  <circle cx="945" cy="118" r="105" fill="#f5dca5" opacity=".12" filter="url(#glow)"/>
-  <circle cx="945" cy="118" r="65" fill="url(#moon)"/>
-  <g fill="#e9d6a8" opacity=".7">
-    <circle cx="156" cy="104" r="2"/><circle cx="235" cy="155" r="3"/><circle cx="374" cy="78" r="2"/>
-    <circle cx="700" cy="108" r="2"/><circle cx="820" cy="54" r="2"/><circle cx="1085" cy="236" r="3"/>
+  <rect width="1600" height="820" fill="url(#night)"/>
+  <circle cx="1210" cy="154" r="190" fill="#f5dca5" opacity=".11" filter="url(#glow)"/>
+  <circle cx="1210" cy="154" r="104" fill="url(#moon)"/>
+  <g fill="#cfaa6b" opacity=".24">
+    <circle cx="1176" cy="118" r="11"/><circle cx="1253" cy="177" r="16"/><circle cx="1186" cy="205" r="7"/><circle cx="1245" cy="111" r="6"/>
   </g>
-  <!-- Canton Tower: two sweeping ribs, a pearl and a slender observation mast. -->
+  <g fill="#e9d6a8" opacity=".75">
+    <circle cx="132" cy="128" r="3"/><circle cx="221" cy="202" r="4"/><circle cx="355" cy="88" r="3"/><circle cx="514" cy="158" r="2"/><circle cx="792" cy="86" r="3"/><circle cx="934" cy="235" r="2"/><circle cx="1481" cy="82" r="3"/><circle cx="1514" cy="254" r="4"/>
+  </g>
+  <!-- distant cloud scrolls -->
+  <g fill="none" stroke="#b9d7bf" stroke-opacity=".18" stroke-width="7" stroke-linecap="round">
+    <path d="M80 275 C144 230 195 294 250 255 C292 226 346 249 360 286"/>
+    <path d="M1334 312 C1396 268 1445 326 1492 294 C1530 267 1566 282 1590 310"/>
+  </g>
+  <!-- Canton Tower: double waist, observation rings and pearl mast. -->
   <g fill="none" stroke="#b9d7bf" stroke-linecap="round">
-    <path d="M566 526 C575 405 590 299 631 198 C650 151 674 151 693 198 C734 299 749 405 758 526" stroke-width="16" opacity=".42"/>
-    <path d="M591 526 C601 410 614 310 644 222 C658 181 666 181 680 222 C710 310 723 410 733 526" stroke-width="5" opacity=".72"/>
-    <path d="M626 198 L673 198 L673 91" stroke-width="7" opacity=".8"/>
-    <path d="M641 198 L657 198 L657 57" stroke-width="3" opacity=".7"/>
-    <ellipse cx="661" cy="207" rx="29" ry="10" stroke-width="4" opacity=".8"/>
+    <path d="M739 688 C754 554 776 408 845 274 C875 214 917 214 947 274 C1016 408 1038 554 1053 688" stroke-width="28" opacity=".26"/>
+    <path d="M777 688 C790 558 810 432 861 306 C883 251 909 251 931 306 C982 432 1002 558 1015 688" stroke-width="8" opacity=".72"/>
+    <path d="M805 688 L976 688 M823 613 L958 613 M837 531 L944 531 M850 445 L931 445 M862 358 L919 358" stroke-width="4" opacity=".46"/>
+    <path d="M849 275 L943 275 L943 114" stroke-width="10" opacity=".8"/>
+    <path d="M873 275 L919 275 L919 70" stroke-width="4" opacity=".65"/>
+    <ellipse cx="896" cy="287" rx="58" ry="18" stroke-width="6" opacity=".8"/>
   </g>
-  <g fill="#f5dca5"><circle cx="661" cy="55" r="6"/><circle cx="661" cy="207" r="8"/></g>
-  <!-- Courtyard roof and moon gate. -->
-  <path d="M0 486 Q175 394 349 486 L349 521 Q175 438 0 521Z" fill="#081b20" opacity=".9"/>
-  <path d="M852 455 Q1020 358 1200 455 L1200 500 Q1020 413 852 500Z" fill="#081b20" opacity=".95"/>
-  <path d="M48 506 Q180 420 312 506 L312 620 H48Z" fill="#091a1e"/>
-  <path d="M884 477 Q1015 398 1146 477 L1146 620 H884Z" fill="#091a1e"/>
-  <g fill="none" stroke="url(#jade)" stroke-width="8">
-    <path d="M78 506 Q180 443 282 506"/><path d="M912 478 Q1015 419 1118 478"/>
+  <g fill="#f5dca5"><circle cx="896" cy="67" r="9"/><circle cx="896" cy="287" r="13"/></g>
+  <!-- moon gate and courtyard halls -->
+  <path d="M0 584 Q205 458 417 584 L417 628 Q207 526 0 628Z" fill="#07171b" opacity=".95"/>
+  <path d="M1184 549 Q1391 416 1600 549 L1600 602 Q1393 493 1184 602Z" fill="#07171b" opacity=".96"/>
+  <path d="M67 601 Q209 504 350 601 L350 820 H67Z" fill="#07171b"/>
+  <path d="M1249 567 Q1392 470 1535 567 L1535 820 H1249Z" fill="#07171b"/>
+  <path d="M67 601 Q209 504 350 601 L350 625 Q209 544 67 625Z" fill="url(#roofTiles)"/>
+  <path d="M1249 567 Q1392 470 1535 567 L1535 592 Q1392 511 1249 592Z" fill="url(#roofTiles)"/>
+  <path d="M99 820 V655 Q99 566 209 566 Q318 566 318 655 V820" fill="#102d31" stroke="#8fc8a9" stroke-opacity=".35" stroke-width="7"/>
+  <circle cx="209" cy="674" r="65" fill="none" stroke="#f5dca5" stroke-opacity=".25" stroke-width="7"/>
+  <path d="M209 609 V739 M144 674 H274" stroke="#f5dca5" stroke-opacity=".2" stroke-width="4"/>
+  <path d="M1281 820 V635 Q1392 534 1503 635 V820" fill="#102d31" stroke="#8fc8a9" stroke-opacity=".35" stroke-width="7"/>
+  <path d="M1312 820 V654 H1472 V820" fill="url(#lattice)" opacity=".6"/>
+  <!-- foreground pond and reflected tower -->
+  <path d="M0 691 Q376 625 737 704 T1600 691 V820 H0Z" fill="url(#water)"/>
+  <path d="M739 704 C790 710 1017 710 1053 704 L1009 820 H781Z" fill="url(#dawn)" opacity=".18"/>
+  <g fill="none" stroke="url(#jade)" stroke-width="5" opacity=".55">
+    <path d="M90 740 Q238 707 385 740"/><path d="M115 772 Q244 744 373 772"/><path d="M1209 741 Q1392 707 1570 741"/><path d="M1242 774 Q1394 748 1543 774"/>
   </g>
-  <g fill="#8fc8a9" opacity=".35">
-    <circle cx="405" cy="504" r="5"/><circle cx="432" cy="482" r="3"/><circle cx="456" cy="509" r="4"/>
-    <circle cx="802" cy="499" r="4"/><circle cx="830" cy="476" r="3"/>
-  </g>
-  <path d="M0 574 Q285 532 540 579 T1200 568 V620 H0Z" fill="#07171b" opacity=".92"/>
+  <!-- lanterns and bamboo silhouettes -->
+  <g stroke="#8fc8a9" stroke-opacity=".45" stroke-width="5" fill="none"><path d="M510 820 C499 713 530 638 510 555 M545 820 C558 730 538 667 558 596"/><path d="M1128 820 C1113 720 1151 655 1137 578 M1164 820 C1175 738 1153 680 1180 620"/></g>
+  <g fill="#f5dca5"><path d="M484 580 L536 580 L547 627 L473 627Z"/><path d="M1101 602 L1154 602 L1165 649 L1090 649Z"/><circle cx="510" cy="650" r="8"/><circle cx="1130" cy="672" r="8"/></g>
+  <g fill="#07171b" opacity=".82"><path d="M0 782 Q350 735 690 783 T1600 778 V820 H0Z"/></g>
 </svg>

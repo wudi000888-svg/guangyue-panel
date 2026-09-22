@@ -389,3 +389,186 @@ tbody tr:hover { background: var(--surface-hover); }
 @media (prefers-reduced-motion: reduce) {
   .app-shell *, .login-screen * { transition-duration: .01ms !important; animation-duration: .01ms !important; }
 }
+
+/* Custom courtyard finish: layered ink, roof and moon-gate details. */
+:root {
+  --gy-ink: #173337;
+  --gy-paper: #fff9ee;
+  --gy-seal: #b85c4f;
+  --gy-bronze: #b9894e;
+  --gy-grid: rgba(143, 200, 169, .10);
+}
+:root[data-theme="dark"] {
+  --gy-ink: #0b2025;
+  --gy-paper: #edf2e8;
+  --gy-seal: #e58a76;
+  --gy-bronze: #d4ae68;
+  --gy-grid: rgba(143, 200, 169, .13);
+}
+.app-shell {
+  background-image:
+    linear-gradient(var(--gy-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--gy-grid) 1px, transparent 1px);
+  background-size: 42px 42px;
+  background-position: 248px 78px;
+}
+.app-shell::after {
+  content: "";
+  position: fixed;
+  right: 28px;
+  bottom: 26px;
+  width: 82px;
+  height: 82px;
+  border: 1px solid color-mix(in srgb, var(--gy-seal) 42%, transparent);
+  border-radius: 50%;
+  opacity: .18;
+  pointer-events: none;
+  background: radial-gradient(circle, transparent 55%, color-mix(in srgb, var(--gy-seal) 14%, transparent) 56% 58%, transparent 59%);
+}
+.topbar::after {
+  content: "月照南门 · 广州塔";
+  position: absolute;
+  right: 34px;
+  bottom: -10px;
+  padding: 2px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-size: 10px;
+  letter-spacing: .15em;
+  opacity: .72;
+}
+.page-heading {
+  position: relative;
+  padding: 22px 24px 24px;
+  border: 1px solid color-mix(in srgb, var(--border) 78%, var(--gy-bronze));
+  border-radius: 18px;
+  background: linear-gradient(115deg, color-mix(in srgb, var(--surface) 94%, transparent), color-mix(in srgb, var(--surface-raised) 88%, transparent));
+  overflow: hidden;
+}
+.page-heading::before {
+  content: "";
+  position: absolute;
+  top: -48px;
+  right: 96px;
+  width: 130px;
+  height: 130px;
+  border: 1px solid color-mix(in srgb, var(--gy-bronze) 55%, transparent);
+  border-radius: 50%;
+  box-shadow: 0 0 0 12px color-mix(in srgb, var(--gy-bronze) 10%, transparent), 0 0 0 24px color-mix(in srgb, var(--gy-bronze) 7%, transparent);
+  opacity: .52;
+}
+.page-heading::after {
+  content: "印";
+  position: absolute;
+  right: 28px;
+  bottom: 18px;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--gy-seal);
+  color: var(--gy-seal);
+  font-family: "Noto Serif SC", serif;
+  font-size: 15px;
+  line-height: 1;
+  opacity: .68;
+}
+.page-heading > * { position: relative; z-index: 1; }
+.section-head h2::before, .dash-heading h2::before {
+  content: "";
+  display: inline-block;
+  width: 24px;
+  height: 2px;
+  margin: 0 10px 5px 0;
+  background: linear-gradient(90deg, var(--gy-seal), var(--gy-bronze));
+}
+.metrics > div, .dash-metrics article, .dash-card, .plan-card, .node-card, .pool-cards article, .site-summary > div {
+  position: relative;
+  overflow: hidden;
+}
+.metrics > div::before, .dash-metrics article::before, .dash-card::before, .plan-card::before, .node-card::before, .pool-cards article::before, .site-summary > div::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 72px;
+  height: 72px;
+  background: linear-gradient(135deg, transparent 47%, color-mix(in srgb, var(--gy-bronze) 18%, transparent) 48% 50%, transparent 51%);
+  opacity: .62;
+  pointer-events: none;
+}
+.plan-card:hover, .pool-cards article:hover, .site-summary > div:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--accent) 58%, var(--border));
+  box-shadow: 0 20px 46px color-mix(in srgb, var(--gy-ink) 18%, transparent);
+}
+.plan-card, .pool-cards article, .site-summary > div { transition: transform .22s ease, border-color .22s ease, box-shadow .22s ease; }
+.toolbar {
+  position: relative;
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface-raised) 72%, transparent);
+}
+.toolbar::before {
+  content: "";
+  position: absolute;
+  left: 18px;
+  top: -1px;
+  width: 44px;
+  height: 3px;
+  border-radius: 0 0 3px 3px;
+  background: var(--gy-seal);
+}
+.table-scroll, .table-wrap, .message-list, .message-detail {
+  background-image: linear-gradient(135deg, color-mix(in srgb, var(--gy-bronze) 6%, transparent), transparent 28%);
+}
+.subsite-node-note, .pool-intro {
+  border-left: 4px solid var(--gy-seal);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--gy-seal) 9%, var(--surface)), var(--surface));
+}
+.login-screen::after {
+  content: "月门 · 观塔 · 入庭";
+  position: absolute;
+  left: 36px;
+  bottom: 30px;
+  color: rgba(255, 244, 223, .62);
+  font-family: "Noto Serif SC", "Songti SC", serif;
+  font-size: 12px;
+  letter-spacing: .35em;
+  writing-mode: vertical-rl;
+}
+.login-form::before {
+  content: "广月";
+  position: absolute;
+  top: 20px;
+  right: 25px;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(184, 92, 79, .48);
+  color: rgba(184, 92, 79, .72);
+  font-family: "Noto Serif SC", serif;
+  font-size: 12px;
+  transform: rotate(8deg);
+}
+@media (max-width: 900px) {
+  .app-shell { background-position: 0 70px; }
+  .topbar::after { right: 12px; font-size: 9px; letter-spacing: .08em; }
+  .page-heading { padding: 18px 16px 20px; }
+  .page-heading::before { right: 24px; opacity: .35; }
+  .page-heading::after { right: 17px; bottom: 14px; }
+}
+@media (max-width: 650px) {
+  .app-shell::after { right: 12px; bottom: 76px; width: 58px; height: 58px; }
+  .login-screen::after { left: 12px; bottom: 17px; font-size: 10px; }
+  .page-heading { border-radius: 14px; }
+  .toolbar { padding: 12px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .plan-card, .pool-cards article, .site-summary > div { transition: none; }
+}

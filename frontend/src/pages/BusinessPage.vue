@@ -47,6 +47,7 @@ async function control(){if(!controlling.value)return;directoryRevision++;busy.v
  const s=controlling.value;replace(await api<ManagedSite>('/'+s.id+'/control','POST',{paused:!s.connection?.status?.paused}));controlling.value=null;
 }catch(e){if(!isCancelled(e))error.value=(e as Error).message;}finally{busy.value=false;}}
 async function manage(site:ManagedSite,page:string){await switchSite(site.id,site.name);if(selectedSite.value===site.id)go(page);}
+async function onPoolSaved(site:ManagedSite){replace(site);await load();}
 const poll=serialPoll(async()=>{if(!document.hidden&&!changing.value)await load(true);},()=>15000);
 onMounted(()=>{void load(true);poll.start();});
 onUnmounted(()=>{disposed=true;poll.stop();form.token='';});
@@ -71,7 +72,7 @@ onUnmounted(()=>{disposed=true;poll.stop();form.token='';});
    </tbody></table>
   </TablePageLayout>
   <section v-if="settling.length" class="settling-sites"><h3>{{t('等待结算的已移除子站')}}</h3><p class="field-help">{{t('授权撤回并确认最终用量后释放预留额度；子站离线或令牌已撤销时继续保留账本。')}}</p><p v-for="s in settling" :key="s.id">{{s.name}} · {{t(s.mount?.error||'等待撤销与流量结算')}}</p></section>
-  <SubsiteNodePool v-if="pooling" :site="pooling" @close="pooling=null" @saved="load()"/>
+  <SubsiteNodePool v-if="pooling" :site="pooling" @close="pooling=null" @saved="onPoolSaved"/>
   <ManagedSitePolicy v-if="editing" :site="editing" @close="editing=null" @saved="load()"/>
   <Teleport to="body"><div v-if="adding||removing||controlling" class="message-overlay" @click.self="close">
    <form v-if="adding" class="compose-card" role="dialog" aria-modal="true" :aria-label="t('导入子站令牌')" @submit.prevent="connect">
