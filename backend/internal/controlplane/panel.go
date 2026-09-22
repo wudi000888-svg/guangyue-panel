@@ -12,12 +12,14 @@ import (
 
 // Presentation settings do not touch protocol configuration or credentials.
 type SiteSettings struct {
-	PanelName     string `json:"panel_name"`
-	Organization  string `json:"organization"`
-	DefaultLocale string `json:"default_locale"`
-	SupportEmail  string `json:"support_email"`
-	LoginNotice   string `json:"login_notice"`
-	Revision      string `json:"revision"`
+	PanelName           string `json:"panel_name"`
+	Organization        string `json:"organization"`
+	DefaultLocale       string `json:"default_locale"`
+	SupportEmail        string `json:"support_email"`
+	LoginNotice         string `json:"login_notice"`
+	RegistrationEnabled bool   `json:"registration_enabled"`
+	RegistrationCaptcha bool   `json:"registration_captcha"`
+	Revision            string `json:"revision"`
 }
 
 func (s *Store) siteSettings() SiteSettings {

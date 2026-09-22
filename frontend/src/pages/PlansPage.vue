@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import {computed,onMounted,ref,watch} from 'vue';
-import {useRoute} from 'vue-router';
+import {useRoute,useRouter} from 'vue-router';
 import GroupNodeList from '../components/GroupNodeList.vue';
 import {filterGroupMembers} from '../lib/nodeGroups';
-import {Package,Layers3,Plus,Pencil,RefreshCw,X,Search,Trash2} from 'lucide-vue-next';
+import {Package,Layers3,Plus,Pencil,RefreshCw,X,Search,Trash2,ArrowUpRight} from 'lucide-vue-next';
 import type {Plan,NodeGroup,GroupMember} from '../types';
 import {useApi,isCancelled} from '../lib/api';
 import {bytes} from '../lib/format';
@@ -12,7 +12,7 @@ import {t} from '../i18n';
 import {usePanelContext} from '../composables/panelContext';
 import {useModalFocus} from '../composables/useModalFocus';
 import PlanNodeSelector from '../components/PlanNodeSelector.vue';
-const route=useRoute();
+const route=useRoute(),router=useRouter();
 const props=defineProps<{mode?:'plans'|'groups'}>();
 const groupSearch=ref(''),groupSource=ref('all');
 const groupRows=(id:string)=>filterGroupMembers(members.value[id]||[],groupSearch.value,groupSource.value);
@@ -26,6 +26,7 @@ const filtered=computed(()=>plans.value.filter(p=>(archived.value||!p.archived)&
 const visibleGroups=computed(()=>[...groups.value].filter(g=>(!publicFeaturesEnabled.value&&g.scope==='public')?false:true).sort((a,b)=>a.sort-b.sort||a.name.localeCompare(b.name)));
 const selectedNodesInGroup=(plan:Plan,groupID:string)=>{const membersInGroup=new Set((members.value[groupID]||[]).map(member=>member.node_id));return (plan.node_ids||[]).filter(id=>membersInGroup.has(id));};
 const cycleLabel=(cycle:string)=>cycle==='30d'?t('每 30 天'):cycle==='month'?t('每自然月'):t('不自动重置');
+function goShop(){router.push('/shop');}
 const pageTitle=computed(()=>tab.value==='groups'?t('节点组管理'):t('套餐管理'));
 const pageSubtitle=computed(()=>tab.value==='groups'?t('独立维护节点分组，套餐只引用节点组和单独节点。'):t('套餐统一决定账号额度、有效期和节点权限。'));
 function close(){if(!busy.value){editingPlan.value=null;editingGroup.value=null;error.value='';}}
@@ -40,7 +41,7 @@ onMounted(load);
 </script>
 <template>
 <section class="plans-page">
- <header class="page-heading"><div><div class="eyebrow">{{tab==='groups'?'NODE GROUPS':'ENTITLEMENTS'}}</div><h1>{{pageTitle}}</h1><p class="section-subtitle">{{pageSubtitle}}</p></div><div class="plan-actions"><button :disabled="busy" @click="load"><RefreshCw :size="15"/>{{t('刷新')}}</button><button class="primary" @click="tab==='plans'?editPlan():editGroup()"><Plus :size="16"/>{{tab==='plans'?t('创建套餐'):t('创建节点组')}}</button></div></header>
+ <header class="page-heading"><div><div class="eyebrow">{{tab==='groups'?'NODE GROUPS':'ENTITLEMENTS'}}</div><h1>{{pageTitle}}</h1><p class="section-subtitle">{{pageSubtitle}}</p></div><div class="plan-actions"><button :disabled="busy" @click="load"><RefreshCw :size="15"/>{{t('刷新')}}</button><button v-if="tab==='plans'" @click="goShop"><ArrowUpRight :size="15"/>{{t('套餐上架')}}</button><button class="primary" @click="tab==='plans'?editPlan():editGroup()"><Plus :size="16"/>{{tab==='plans'?t('创建套餐'):t('创建节点组')}}</button></div></header>
  <div class="plan-stat-grid"><div><Package :size="19"/><span>{{t('可分配套餐')}}</span><strong>{{plans.filter(p=>!p.archived).length}}</strong></div><div><Layers3 :size="19"/><span>{{t('节点权限组')}}</span><strong>{{visibleGroups.length}}</strong></div><div><span>{{t('授权方式')}}</span><strong class="stat-text">{{t('按套餐自动授权')}}</strong><small>{{t('节点组和单独节点共同决定订阅内容')}}</small></div></div>
  <div v-if="!props.mode" class="plans-tabs" role="tablist" :aria-label="t('套餐管理')"><button role="tab" :aria-selected="tab==='plans'" :class="{active:tab==='plans'}" @click="tab='plans'"><Package :size="16"/>{{t('套餐列表')}}</button><button role="tab" :aria-selected="tab==='groups'" :class="{active:tab==='groups'}" @click="tab='groups'"><Layers3 :size="16"/>{{t('节点权限组')}}</button></div>
  <p v-if="error&&!open" class="error" role="alert">{{t(error)}}</p>
