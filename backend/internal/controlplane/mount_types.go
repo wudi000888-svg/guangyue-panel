@@ -2,7 +2,6 @@ package controlplane
 
 import (
 	"encoding/json"
-	"sort"
 
 	"github.com/wudi000888-svg/guangyue-panel/backend/internal/domain"
 )
@@ -100,8 +99,10 @@ func (s MountSharing) allows(id string) bool {
 	return false
 }
 func mountGeneration(r Record) string { return digest("mounted-user/" + r.Credentials.HY2) }
-func mountNodePolicy(m MountedNode, source Node) Node {
-	source.GroupIDs = append([]string{}, m.GroupIDs...)
+func mountNodePolicy(siteID string, m MountedNode, source Node) Node {
+	source = normalizeNodePolicy(source)
+	source.GroupIDs = []string{defaultSubsiteGroup}
+	source.AccessKey = defaultSubsiteGroup + "/" + siteID + "/" + source.ID
 	source.Enabled = source.Enabled && m.Enabled
 	if m.Name != "" {
 		source.Name = m.Name
@@ -109,55 +110,18 @@ func mountNodePolicy(m MountedNode, source Node) Node {
 	return source
 }
 
-// Mounted nodes may use any administrator-created node group. The installation
-// default local group is deliberately excluded so a mounted endpoint can never
-// silently become part of the ordinary local subscription. Group scope remains
-// a plan concern; it does not decide whether a mounted node is valid.
-func mountedGroupIDs(ids []string, groups []NodeGroup) []string {
-	allowed := map[string]bool{}
-	for _, g := range groups {
-		if g.ID != legacyPrivateGroup {
-			allowed[g.ID] = true
-		}
-	}
-	out := make([]string, 0, len(ids))
-	seen := map[string]bool{}
-	for _, id := range ids {
-		if allowed[id] && !seen[id] {
-			seen[id] = true
-			out = append(out, id)
-		}
-	}
-	sort.Strings(out)
-	return out
+// Mounted endpoints always belong to the child group. Membership does not
+// grant access; the user's current package and site budgets decide that.
+func mountedGroupIDs(_ []string, _ []NodeGroup) []string {
+	return []string{defaultSubsiteGroup}
 }
-
-// Repair configurations written before mounted nodes were restricted to
-// sub-site groups. The caller persists the containing site and resynchronizes
-// authorizations when this returns true.
-func normalizeMountedNodeGroups(nodes []MountedNode, groups []NodeGroup) bool {
+func normalizeMountedNodeGroups(nodes []MountedNode, _ []NodeGroup) bool {
 	changed := false
 	for i := range nodes {
-		filtered := mountedGroupIDs(nodes[i].GroupIDs, groups)
-		if len(filtered) == 0 && len(nodes[i].GroupIDs) > 0 {
-			for _, g := range groups {
-				if g.ID == defaultSubsiteGroup && g.Enabled {
-					filtered = []string{defaultSubsiteGroup}
-					break
-				}
-			}
-		}
-		if len(filtered) != len(nodes[i].GroupIDs) {
+		if !sameStrings(nodes[i].GroupIDs, []string{defaultSubsiteGroup}) {
+			nodes[i].GroupIDs = []string{defaultSubsiteGroup}
 			changed = true
-		} else {
-			for j, id := range filtered {
-				if nodes[i].GroupIDs[j] != id {
-					changed = true
-					break
-				}
-			}
 		}
-		nodes[i].GroupIDs = filtered
 	}
 	return changed
 }

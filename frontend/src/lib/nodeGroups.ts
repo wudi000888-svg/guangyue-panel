@@ -8,3 +8,10 @@ export function filterGroupMembers(members:GroupMember[],search:string,source='a
 export function groupSources(members:GroupMember[]):string[] {
  return [...new Set(members.map(m=>m.source==='mounted'||m.source==='business'?m.site_name||m.site_id:m.source==='public'?'公共节点':'本站节点'))];
 }
+
+export const planMemberKey=(member:GroupMember)=>member.selection_key||member.node_id;
+export const planMemberSelected=(member:GroupMember,nodeIds:string[])=>nodeIds.includes(planMemberKey(member))||(!['mounted','business'].includes(member.source||'')&&nodeIds.includes(member.node_id));
+export function removePlanGroupNodes(groupID:string,members:GroupMember[],nodeIds:string[]):string[]{
+ const localIds=new Set(members.filter(m=>!['mounted','business'].includes(m.source||'')).map(m=>m.node_id));
+ return nodeIds.filter(id=>!id.startsWith(groupID+'/')&&(id.includes('/')||!localIds.has(id)));
+}

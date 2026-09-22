@@ -196,7 +196,7 @@ func (a *App) mountedSubscriptionEntries(record Record, site BusinessSite, proto
 			if !allowed {
 				continue
 			}
-			n = mountNodePolicy(mount, n)
+			n = mountNodePolicy(site.ID, mount, n)
 			n.Name = "[挂载·" + site.Name + "] " + n.Name
 			nodes = append(nodes, n)
 		}

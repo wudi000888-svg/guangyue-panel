@@ -23,7 +23,7 @@ func (a *App) materializeBusinessNodes(v BusinessSite) ([]Node, error) {
 			for _, m := range v.Mount.Nodes {
 				if n, ok := mountSource(v.Mount.Catalog, m.NodeID); ok {
 					m.GroupIDs = mountedGroupIDs(m.GroupIDs, groups)
-					out = append(out, mountNodePolicy(m, n))
+					out = append(out, mountNodePolicy(v.ID, m, n))
 				}
 			}
 		}
@@ -67,6 +67,10 @@ func (a *App) materializeBusinessNodes(v BusinessSite) ([]Node, error) {
 		n.BridgePassword = ""
 
 		out = append(out, n)
+	}
+	for i := range out {
+		out[i].GroupIDs = []string{defaultSubsiteGroup}
+		out[i].AccessKey = defaultSubsiteGroup + "/" + v.ID + "/" + out[i].ID
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out, nil

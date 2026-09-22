@@ -65,7 +65,7 @@ func testBusinessLifecycle(t *testing.T, edition string) {
 	owner := testUser(t, master, "owner", "owner")
 	user := testUser(t, master, "alice", "user")
 	other := testUser(t, master, "bob", "user")
-	user.Quota = 10000
+	assignPlan(&user, Plan{Quota: 10000, VLESS: true, HY2: true, GroupIDs: []string{legacyPrivateGroup, defaultSubsiteGroup}}, time.Now().Unix())
 	master.store.save(&user)
 	site, token := createBusinessTest(t, master, owner, "east")
 	site.Grants = []BusinessGrant{{UserID: user.ID, Quota: 4000}}

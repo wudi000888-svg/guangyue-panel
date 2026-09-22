@@ -69,7 +69,7 @@ onMounted(loadEntitlements);
             ><span class="muted">{{ visibleNodes.length }}{{ t("个节点") }}</span>
           </div>
           <div v-if="selectedNodeIDs.length" class="batch-toolbar" role="region" :aria-label="t('批量操作')">
-            <strong>{{t('已选择')}} {{selectedNodeIDs.length}}</strong><button :disabled="busy" @click="policyOpen=true">{{t("调整倍率与分组")}}</button>
+            <strong>{{t('已选择')}} {{selectedNodeIDs.length}}</strong><button :disabled="busy" @click="policyOpen=true">{{t("调整节点倍率")}}</button>
             <button :disabled="busy" @click="batchAction('nodes','enable')">{{t('批量启用')}}</button>
             <button :disabled="busy" @click="batchAction('nodes','disable')">{{t('批量停用')}}</button>
             <button  class="danger-button" :disabled="busy" @click="batchAction('nodes','delete')"><Trash2 :size="14"/>{{t('批量删除')}}</button>

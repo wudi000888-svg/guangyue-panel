@@ -18,7 +18,7 @@ import (
 	"strings"
 )
 
-const version = "0.30.11"
+const version = "0.30.12"
 
 const businessAdoptionFile = "business-adoption.json"
 
@@ -314,6 +314,7 @@ type User = domain.User
 type Record = domain.Record
 type Credentials = domain.Credentials
 type Node struct {
+	AccessKey      string       `json:"access_key,omitempty"`
 	PolicyVersion  int          `json:"policy_version"`
 	RateMilli      int64        `json:"rate_milli"`
 	RateRevision   string       `json:"rate_revision"`

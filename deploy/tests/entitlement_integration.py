@@ -120,8 +120,9 @@ def verify_entitlements(bundle, temp, cert, api, cookie, admin_password):
             files.append(log)
             processes.append(subprocess.Popen([*args, str(path)], stdout=log, stderr=log))
 
-    group = call('/node-groups', {'name': 'CI entitlement', 'scope': 'private', 'enabled': True})
-    plan = call('/plans', {'name': 'CI plan', 'quota': 1 << 30, 'valid_days': 1, 'cycle': 'none', 'vless': True, 'hy2': True, 'group_ids': [group['id']]})
+    groups = call('/node-groups')['groups']
+    assert {g['id'] for g in groups} == {'legacy-private', 'default-subsite', 'legacy-public'}
+    plan = call('/plans', {'name': 'CI plan', 'quota': 1 << 30, 'valid_days': 1, 'cycle': 'none', 'vless': True, 'hy2': True, 'group_ids': ['legacy-private']})
     password=secrets.token_urlsafe(24)
     user = call('/users', {'username': 'ci-entitlement', 'password': password, 'enabled': True, 'vless': True, 'hy2': True})
     _,member_cookie=api('/api/login',{'username':'ci-entitlement','password':password})
@@ -129,7 +130,10 @@ def verify_entitlements(bundle, temp, cert, api, cookie, admin_password):
     from commerce_integration import purchase_plan
     purchase_plan(call,member,admin_password,plan,user['id'],bundle)
     ids = ['vless-main', 'hy2-main']
-    call('/nodes/policy', {'ids': ids, 'group_ids': ['legacy-private', group['id']]})
+    def assign(package):
+        request = {'ids': [user['id']], 'action': 'assign', 'plan_id': package['id'], 'operation_id': secrets.token_urlsafe(24)}
+        preview = call('/entitlements/batch', dict(request, preview=True))
+        call('/entitlements/batch', dict(request, expected=preview['expected']))
     wait_applied()
     catalog = call('/subscription?user_id=' + str(user['id']))
     assert len(catalog['nodes']) == 2, 'plan access did not reach subscription'
@@ -156,8 +160,8 @@ def verify_entitlements(bundle, temp, cert, api, cookie, admin_password):
             sock.sendall(b'before')
             assert receive(sock, 6) == b'before'
             held.append(sock)
-        group['enabled'] = False
-        group = call('/node-groups', group)
+        child_plan = call('/plans', {'name': 'CI child-only plan', 'quota': 1 << 30, 'valid_days': 1, 'cycle': 'none', 'vless': True, 'hy2': True, 'group_ids': ['default-subsite']})
+        assign(child_plan)
         # Allow the regular 10-second reconciliation loop to revoke credentials.
         time.sleep(12)
         for sock in held:
@@ -174,14 +178,13 @@ def verify_entitlements(bundle, temp, cert, api, cookie, admin_password):
                 usable = True
             except (OSError, AssertionError):
                 usable = False
-            assert not usable, 'saved link bypassed revoked group'
-        print('PASS group revocation closes existing VLESS/HY2 streams and denies saved links')
+            assert not usable, 'saved local link bypassed child-only package'
+        print('PASS package reassignment closes existing VLESS/HY2 streams and denies saved local links')
 
         for sock in held:
             sock.close()
         held.clear()
-        group['enabled'] = True
-        group = call('/node-groups', group)
+        assign(plan)
         wait_applied()
         for port in [19891, 19892]:
             wait_reconnected(port)
@@ -230,4 +233,4 @@ def verify_entitlements(bundle, temp, cert, api, cookie, admin_password):
         for server in [tcp, udp]:
             server.shutdown()
             server.server_close()
-        call('/nodes/policy', {'ids': ids, 'rate_milli': 1000, 'group_ids': ['legacy-private']})
+        call('/nodes/policy', {'ids': ids, 'rate_milli': 1000})

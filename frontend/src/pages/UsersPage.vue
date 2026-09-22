@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { usePanelContext } from "../composables/panelContext";
-const { state, busy, refresh,nodeGroups,loadEntitlements,quotaUsed, userSearch, userFilter, userRole, expiringUsers, active, userStatus, users, usage, bytes, date, editUser, toggleUser, showSub } = usePanelContext();
+const { state, busy, refresh,nodeGroups,groupMembers,loadEntitlements,quotaUsed, userSearch, userFilter, userRole, expiringUsers, active, userStatus, users, usage, bytes, date, editUser, toggleUser, showSub } = usePanelContext();
 import {computed,onMounted,ref} from "vue";
 import {userNodeGroups} from "../lib/nodeGroups";
 import type {User} from "../types";
@@ -11,7 +11,7 @@ import { usePagination } from "../composables/usePagination";
 import ListTable from "../components/ListTable.vue";
 const localUsers=computed(()=>(state.value?.users||[]).filter(u=>!u.mount_access));
 onMounted(()=>loadEntitlements());
-const groupLabel=(u:User)=>{const groups=userNodeGroups(u).map(id=>nodeGroups.value.find(g=>g.id===id)?.name||id);const nodes=(u.entitlement?.node_ids||[]).map(id=>state.value?.nodes.find(n=>n.id===id)?.name||id);return [...groups,...nodes].join('、')||t('无节点权限');};
+const groupLabel=(u:User)=>{const groups=userNodeGroups(u).map(id=>nodeGroups.value.find(g=>g.id===id)?.name||id);const nodes=(u.entitlement?.node_ids||[]).map(id=>Object.values(groupMembers.value).flat().find(m=>m.selection_key===id)?.name||state.value?.nodes.find(n=>n.id===id)?.name||t('节点已移除'));return [...groups,...nodes].join('、')||t('无节点权限');};
 const selected=ref<number[]>([]),entitlementUsers=ref<User[]>([]),planFilter=ref('all');
 const planOptions=computed(()=>[...new Map(localUsers.value.filter(u=>u.entitlement).map(u=>[u.entitlement!.plan_id,u.entitlement!.name])).entries()]);
 const visibleUsers=computed(()=>users.value.filter(u=>planFilter.value==='all'||u.entitlement?.plan_id===planFilter.value));

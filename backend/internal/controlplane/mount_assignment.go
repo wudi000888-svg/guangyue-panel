@@ -17,7 +17,7 @@ func mountedPolicyNodes(v BusinessSite) []Node {
 	}
 	for _, m := range v.Mount.Nodes {
 		if n, ok := sources[m.NodeID]; ok && m.Enabled && n.Enabled {
-			nodes = append(nodes, mountNodePolicy(m, n))
+			nodes = append(nodes, mountNodePolicy(v.ID, m, n))
 		}
 	}
 	return nodes

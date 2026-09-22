@@ -45,15 +45,12 @@ func TestPlanPriceRoundTrip(t *testing.T) {
 func TestPlanAndNodeGroupDeletionHonorsReferences(t *testing.T) {
 	a := testApp(t)
 	owner := testUser(t, a, "owner", "owner")
-	group := NodeGroup{Name: "Temporary group", Description: "delete me", Scope: "private", Enabled: true}
+	group := NodeGroup{Name: "Retired custom group", Scope: "private", Enabled: true}
 	w := req(t, a, owner, "POST", "/api/node-groups", group)
-	if w.Code != 200 {
-		t.Fatal(w.Code, w.Body.String())
+	if w.Code != 405 {
+		t.Fatal("custom group creation is still allowed")
 	}
-	if err := json.Unmarshal(w.Body.Bytes(), &group); err != nil || group.ID == "" {
-		t.Fatalf("created group=%+v err=%v", group, err)
-	}
-	plan := Plan{Name: "Temporary plan", Quota: 1000, ValidDays: 30, Cycle: "30d", Timezone: "UTC", GroupIDs: []string{group.ID}, VLESS: true}
+	plan := Plan{Name: "Temporary plan", Quota: 1000, ValidDays: 30, Cycle: "30d", Timezone: "UTC", GroupIDs: []string{legacyPrivateGroup}, VLESS: true}
 	w = req(t, a, owner, "POST", "/api/plans", plan)
 	if w.Code != 200 {
 		t.Fatal(w.Code, w.Body.String())
@@ -61,25 +58,18 @@ func TestPlanAndNodeGroupDeletionHonorsReferences(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &plan); err != nil {
 		t.Fatal(err)
 	}
-	if w = req(t, a, owner, "DELETE", "/api/node-groups/"+group.ID, nil); w.Code != 200 || !strings.Contains(w.Body.String(), `"deleted":true`) {
-		t.Fatalf("destructive group delete status=%d body=%s", w.Code, w.Body.String())
+	for _, id := range []string{legacyPrivateGroup, legacyPublicGroup, defaultSubsiteGroup} {
+		if w = req(t, a, owner, "DELETE", "/api/node-groups/"+id, nil); w.Code != 405 {
+			t.Fatal("default group deletion is still allowed")
+		}
 	}
 	if w = req(t, a, owner, "DELETE", "/api/plans/"+plan.ID, nil); w.Code != 200 || !strings.Contains(w.Body.String(), `"deleted":true`) {
 		t.Fatalf("plan delete status=%d body=%s", w.Code, w.Body.String())
 	}
-	if w = req(t, a, owner, "DELETE", "/api/node-groups/"+group.ID, nil); w.Code != 404 {
-		t.Fatalf("deleted group second delete status=%d body=%s", w.Code, w.Body.String())
-	}
 	if _, err := a.store.plan(plan.ID); err == nil {
 		t.Fatal("deleted plan still exists")
 	}
-	var count int
-	if err := a.store.db.QueryRow("SELECT COUNT(*) FROM node_groups WHERE id=?", group.ID).Scan(&count); err != nil {
-		t.Fatal(err)
-	}
-	if count != 0 {
-		t.Fatal("deleted node group still exists")
-	}
+
 }
 func applyTestEntitlement(t *testing.T, a *App, owner Record, in entitlementRequest) {
 	t.Helper()
@@ -153,26 +143,20 @@ func TestEntitlementSnapshotsRenewResetAndAccess(t *testing.T) {
 	if !memberMayUseNode(u, nodes[0]) && !memberMayUseNode(u, nodes[1]) {
 		t.Fatal("plan cannot use private nodes")
 	}
-	groups, _ := a.store.nodeGroups()
-	for _, g := range groups {
-		if g.ID == legacyPrivateGroup {
-			g.Enabled = false
-			w = req(t, a, owner, "POST", "/api/node-groups", g)
-			if w.Code != 200 {
-				t.Fatal(w.Body.String())
-			}
-		}
+	u.Entitlement.GroupIDs = []string{}
+	if err := a.store.save(&u); err != nil {
+		t.Fatal(err)
 	}
 	entries, err := a.subscriptionCatalog(u, false, "")
 	if err != nil || len(entries) != 0 {
-		t.Fatal("disabled group remained in subscription")
+		t.Fatal("removed package permission remained in subscription")
 	}
 	records, _ := a.coreRecords()
 	for _, r := range records {
 		if r.ID == u.ID {
 			for _, n := range nodes {
 				if memberMayUseNode(r, n) {
-					t.Fatal("disabled group retained core authorization")
+					t.Fatal("removed package permission retained core authorization")
 				}
 			}
 		}

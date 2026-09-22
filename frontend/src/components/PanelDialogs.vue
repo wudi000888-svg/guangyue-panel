@@ -2,8 +2,7 @@
 import { computed, ref } from "vue";
 import { useModalFocus } from "../composables/useModalFocus";
 import { usePanelContext } from "../composables/panelContext";
-import NodeGroupPicker from "./NodeGroupPicker.vue";
-const { plans,nodeGroups,state, busy, error, notice, modal, editingID, userForm, nodeForm, ipForm, importMode, importForm, importFile, importFileReading, importIssues, clearPrivateFile, readPrivateFile, importSubscription, ipPool, selectedIP, ipStatus, ipBadge, passwordForm, probeResult, displayedNodeName, confirmation, defaultRealitySNI, editingDefaultDirect, bytes, exitName, go, saveUser, confirmUser, confirmed, editNode, probe, saveIP, saveNode, deleteNode, changePassword } = usePanelContext();
+const { plans,state, busy, error, notice, modal, editingID, userForm, nodeForm, ipForm, importMode, importForm, importFile, importFileReading, importIssues, clearPrivateFile, readPrivateFile, importSubscription, ipPool, selectedIP, ipStatus, ipBadge, passwordForm, probeResult, displayedNodeName, confirmation, defaultRealitySNI, editingDefaultDirect, bytes, exitName, go, saveUser, confirmUser, confirmed, editNode, probe, saveIP, saveNode, deleteNode, changePassword } = usePanelContext();
 import { Activity, ArrowUpRight, Check, CircleHelp, Download, Globe2, KeyRound, LoaderCircle, Plus, ShieldCheck, Trash2, X } from "lucide-vue-next";
 import { t } from "../i18n";
 import CountryMark from "../CountryMark.vue";
@@ -315,7 +314,7 @@ useModalFocus(computed(()=>!!modal.value || !!confirmation.value), computed(()=>
             nodeForm.protocol.toUpperCase()
           }}</span>
         </div>
-        <section class="node-dns-settings"><label>{{t('节点倍率')}}<input v-model.number="nodeRate" type="number" min="0" max="100" step="0.01" required/></label><p class="field-help">{{t('实际使用 1 GiB 消耗对应倍率的配额；0×免扣配额，仍统计实际流量。')}}</p><NodeGroupPicker v-model="nodeForm.group_ids" :groups="nodeGroups" scope="private"/><p v-if="!nodeForm.group_ids?.length" class="field-help">{{t('未分组节点不会发放给用户。删除节点时会自动移出所有分组。')}}</p></section>
+        <section class="node-dns-settings"><label>{{t('节点倍率')}}<input v-model.number="nodeRate" type="number" min="0" max="100" step="0.01" required/></label><p class="field-help">{{t('实际使用 1 GiB 消耗对应倍率的配额；0×免扣配额，仍统计实际流量。')}}</p><p class="field-help">{{t('本地节点自动加入默认本地节点组，用户使用权限由套餐决定。')}}</p></section>
         <div v-if="editingDefaultDirect" class="default-direct-notice"><ShieldCheck :size="18"/><div><strong>{{t('保留服务器默认直连入口')}}</strong><p>{{t('此节点固定使用本机出口，保持启用，不能删除或绑定其他出口。')}}</p><button type="button" class="text-button" :disabled="busy" @click="editNode(undefined, nodeForm.protocol)"><Plus :size="14"/>{{t('绑定 IP 池出口请新增节点')}}</button></div></div>
         <div v-if="nodeForm.protocol === 'vless'" class="node-sni-setting">
           <label for="node-reality-sni">{{t('Reality SNI（可选）')}}<input id="node-reality-sni" v-model="nodeForm.reality_sni" type="text" inputmode="url" autocomplete="off" autocapitalize="none" :spellcheck="false" maxlength="63" :disabled="busy" :placeholder="defaultRealitySNI" aria-describedby="node-reality-sni-help"/></label>
