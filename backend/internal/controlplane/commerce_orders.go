@@ -247,13 +247,6 @@ func (a *App) createOrder(w http.ResponseWriter, r *http.Request, actor Record) 
 		jsonResponse(w, 200, json.RawMessage(b))
 		return nil
 	}
-	settings, e := a.store.commerceSettings()
-	if e != nil {
-		return e
-	}
-	if !settings.Sales {
-		return commerceFail(409, "套餐销售暂未开放")
-	}
 	offer, e := a.store.offer(in.OfferID)
 	if e != nil || !offer.Enabled || offer.Version != in.OfferVersion {
 		return commerceFail(409, "商品已变化或已下架")
@@ -355,13 +348,9 @@ func (a *App) orderAction(w http.ResponseWriter, r *http.Request, actor Record) 
 		if actor.ID != o.UserID {
 			return commerceFail(403, "订单需由所属用户确认")
 		}
-		settings, e := a.store.commerceSettings()
-		if e != nil {
-			return e
-		}
 		offer, e := a.store.offer(o.Offer.ID)
 		p, pe := a.store.plan(o.Offer.Plan.ID)
-		if !settings.Sales || e != nil || !offer.Enabled || pe != nil || p.Archived {
+		if e != nil || !offer.Enabled || pe != nil || p.Archived {
 			return commerceFail(409, "商品已暂停销售")
 		}
 		if offer.PurchaseLimit > 0 {

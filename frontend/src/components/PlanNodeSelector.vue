@@ -18,7 +18,10 @@ const emit=defineEmits<{
 
 const localNodes=computed(()=>new Map(props.nodes.map(node=>[node.id,node])));
 const visibleGroups=computed(()=>props.groups.filter(group=>!props.hidePublic||group.scope!=='public'));
-const rowsFor=(groupID:string)=>[...(props.members[groupID]||[])].filter(member=>member.source==='local'&&localNodes.value.has(member.node_id));
+// /api/node-groups returns the complete effective membership, including
+// mounted child-site nodes. Do not discard those rows just because they are
+// absent from the local node catalog.
+const rowsFor=(groupID:string)=>[...(props.members[groupID]||[])].filter(member=>member.enabled!==false&&member.status!=='disabled');
 const groupHasNodes=(groupID:string)=>rowsFor(groupID).length>0;
 const groupSelected=(groupID:string)=>props.groupIds.includes(groupID);
 const nodeSelected=(nodeID:string)=>props.nodeIds.includes(nodeID);
@@ -48,16 +51,16 @@ function updateNode(nodeID:string,checked:boolean){
       <div v-for="group in visibleGroups" :key="group.id" class="group-block">
         <label class="group-option">
           <input type="checkbox" :checked="groupSelected(group.id)" @change="updateGroups(group.id,($event.target as HTMLInputElement).checked)"/>
-          <span><strong>{{group.name}}</strong><small>{{rowsFor(group.id).length}} {{t('个本站节点')}}<template v-if="group.scope==='subsite'"> · {{t('子站节点组')}}</template><template v-if="!group.enabled"> · {{t('已停用')}}</template></small></span>
+          <span><strong>{{group.name}}</strong><small>{{rowsFor(group.id).length}} {{t('个可用节点')}}<template v-if="group.scope==='subsite'"> · {{t('子站节点组')}}</template><template v-if="!group.enabled"> · {{t('已停用')}}</template></small></span>
         </label>
         <div v-if="groupSelected(group.id)" class="group-node-list">
           <template v-if="groupHasNodes(group.id)">
             <label v-for="member in rowsFor(group.id)" :key="member.node_id" class="node-option">
               <input type="checkbox" :checked="nodeSelected(member.node_id)" @change="updateNode(member.node_id,($event.target as HTMLInputElement).checked)"/>
-              <span><strong>{{localNodes.get(member.node_id)?.name||member.name||member.node_id}}</strong><small>{{(localNodes.get(member.node_id)?.protocol||member.protocol).toUpperCase()}} · {{localNodes.get(member.node_id)?.exit||localNodes.get(member.node_id)?.host||member.exit_ip||member.node_id}}</small></span>
+              <span><strong>{{localNodes.get(member.node_id)?.name||member.name||member.node_id}}</strong><small>{{(localNodes.get(member.node_id)?.protocol||member.protocol||'').toUpperCase()}} · {{localNodes.get(member.node_id)?.exit||localNodes.get(member.node_id)?.host||member.entry_host||member.exit_ip||member.node_id}}<template v-if="member.source&&member.source!=='local'"> · {{member.site_name||member.source}}</template></small></span>
             </label>
           </template>
-          <p v-else class="field-help">{{t('此组暂无可单独选择的本站节点；子站节点由挂载策略控制。')}}</p>
+          <p v-else class="field-help">{{t('此组暂无可单独选择的可用节点。')}}</p>
           <small v-if="groupHasNodes(group.id)" class="group-selection-summary">{{selectedCount(group.id)}} / {{rowsFor(group.id).length}} {{t('个节点已单独选择')}}</small>
         </div>
       </div>

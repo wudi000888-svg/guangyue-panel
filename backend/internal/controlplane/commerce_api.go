@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/mail"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -46,10 +48,19 @@ func (a *App) commerceAPI(w http.ResponseWriter, r *http.Request, actor Record) 
 			return
 		}
 		if _, e = a.commerceActor(actor, true, in.Password); e == nil {
-			if in.Settings.Currency != "CNY" {
-				e = commerceFail(400, "当前仅支持 CNY")
-			} else {
-				_, e = a.store.db.Exec("INSERT INTO meta(key,value) VALUES('commerce_settings',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", string(jsonBytes(in.Settings)))
+			s := in.Settings
+			if s.Currency != "CNY" || s.PaymentProvider != "manual" && s.PaymentProvider != "webhook" || s.MailProvider != "none" && s.MailProvider != "webhook" {
+				e = commerceFail(400, "账户服务配置无效")
+			} else if s.PaymentWebhook != "" && !validWebhookURL(s.PaymentWebhook) || s.MailWebhook != "" && !validWebhookURL(s.MailWebhook) {
+				e = commerceFail(400, "回调地址必须是 http 或 https 地址")
+			} else if s.MailFrom != "" {
+				addr, me := mail.ParseAddress(s.MailFrom)
+				if me != nil || addr.Address != s.MailFrom || len(s.MailFrom) > 254 {
+					e = commerceFail(400, "发件人邮箱无效")
+				}
+			}
+			if e == nil {
+				_, e = a.store.db.Exec("INSERT INTO meta(key,value) VALUES('commerce_settings',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", string(jsonBytes(s)))
 			}
 		}
 		if e == nil {
@@ -78,6 +89,11 @@ func (a *App) commerceAPI(w http.ResponseWriter, r *http.Request, actor Record) 
 	if e != nil {
 		commerceWriteError(w, e)
 	}
+}
+
+func validWebhookURL(value string) bool {
+	u, err := url.Parse(strings.TrimSpace(value))
+	return err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != ""
 }
 func pageCursor(r *http.Request) string {
 	c := r.URL.Query().Get("before")

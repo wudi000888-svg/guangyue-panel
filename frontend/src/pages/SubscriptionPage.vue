@@ -37,7 +37,7 @@ const queuedExpiry=(slot:{expires:number;paused_at:number})=>slot.expires?Math.f
                 <div>
                   <strong>{{ sub.user.username }}</strong
                   ><small>{{
-                    sub.user.entitlement?.name || t("暂无套餐")
+                    t("当前套餐") + " · " + (sub.user.entitlement?.name || t("暂无套餐"))
                   }}</small>
                 </div>
               </div>

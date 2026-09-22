@@ -20,49 +20,51 @@ import (
 )
 
 type App struct {
-	mountSyncMu      [64]sync.Mutex
-	ticketProcessor  func(context.Context, []byte, string) ([]byte, error)
-	updateClient     *http.Client
-	controllerLease  *persistence.ControllerLease
-	gatewaySlots     chan struct{}
-	cache            *cachepkg.Cache
-	jobs             *jobs.Manager
-	dnsGateway       *nodeGateway
-	cfg              Config
-	store            *Store
-	mu               sync.Mutex
-	fleetMigrationMu sync.Mutex
-	restart          context.CancelFunc
-	realityProbeMu   sync.Mutex
-	heavyMu          sync.Mutex
-	importRunning    string
-	importWG         sync.WaitGroup
-	publicSourceMu   sync.Mutex
-	publicSourceID   string
-	probeMu          sync.Mutex
-	speedMu          sync.Mutex
-	qualityMu        sync.Mutex
-	publicMu         sync.Mutex
-	publicCancel     context.CancelFunc
-	publicStatus     PublicStatus
-	publicContext    context.Context
-	publicWG         sync.WaitGroup
-	publicStopping   bool
-	bridgeMu         sync.Mutex
-	bridge           *bridgeProcess
-	status           string
-	syncError        string
-	trafficError     string
-	monitor          liveMonitor
-	appliedAt        int64
-	lastCoreHash     string
-	lastCoreCheck    time.Time
-	lastUsers        string
-	oldHYConnections int
-	loginSlots       chan struct{}
-	limits           map[string][]time.Time
-	limitMu          sync.Mutex
-	started          time.Time
+	mountSyncMu            [64]sync.Mutex
+	ticketProcessor        func(context.Context, []byte, string) ([]byte, error)
+	updateClient           *http.Client
+	controllerLease        *persistence.ControllerLease
+	gatewaySlots           chan struct{}
+	cache                  *cachepkg.Cache
+	jobs                   *jobs.Manager
+	dnsGateway             *nodeGateway
+	cfg                    Config
+	store                  *Store
+	mu                     sync.Mutex
+	fleetMigrationMu       sync.Mutex
+	restart                context.CancelFunc
+	realityProbeMu         sync.Mutex
+	heavyMu                sync.Mutex
+	importRunning          string
+	importWG               sync.WaitGroup
+	publicSourceMu         sync.Mutex
+	publicSourceID         string
+	probeMu                sync.Mutex
+	speedMu                sync.Mutex
+	qualityMu              sync.Mutex
+	publicMu               sync.Mutex
+	publicCancel           context.CancelFunc
+	publicStatus           PublicStatus
+	publicContext          context.Context
+	publicWG               sync.WaitGroup
+	publicStopping         bool
+	bridgeMu               sync.Mutex
+	bridge                 *bridgeProcess
+	status                 string
+	syncError              string
+	trafficError           string
+	monitor                liveMonitor
+	appliedAt              int64
+	lastCoreHash           string
+	lastCoreCheck          time.Time
+	lastUsers              string
+	oldHYConnections       int
+	loginSlots             chan struct{}
+	limits                 map[string][]time.Time
+	limitMu                sync.Mutex
+	registrationMu         sync.Mutex
+	registrationChallenges map[string]registrationChallenge
+	started                time.Time
 }
 
 func encodeBase64(b []byte) string { return base64.StdEncoding.EncodeToString(b) }

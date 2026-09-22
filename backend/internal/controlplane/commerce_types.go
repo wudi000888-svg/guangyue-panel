@@ -68,14 +68,21 @@ func validText(s string, max int) bool {
 }
 
 type CommerceSettings struct {
-	Sales      bool   `json:"sales"`
-	Redemption bool   `json:"redemption"`
-	Tickets    bool   `json:"tickets"`
-	Currency   string `json:"currency"`
+	// Sales is retained for database compatibility. Offer.Enabled is the
+	// authoritative switch for whether a package can be purchased.
+	Sales           bool   `json:"sales"`
+	Redemption      bool   `json:"redemption"`
+	Tickets         bool   `json:"tickets"`
+	Currency        string `json:"currency"`
+	PaymentProvider string `json:"payment_provider"`
+	PaymentWebhook  string `json:"payment_webhook_url"`
+	MailProvider    string `json:"mail_provider"`
+	MailFrom        string `json:"mail_from"`
+	MailWebhook     string `json:"mail_webhook_url"`
 }
 
 func (s *Store) commerceSettings() (CommerceSettings, error) {
-	v := CommerceSettings{Redemption: true, Tickets: true, Currency: "CNY"}
+	v := CommerceSettings{Redemption: true, Tickets: true, Currency: "CNY", PaymentProvider: "manual", MailProvider: "none"}
 	b, e := s.readMeta("commerce_settings")
 	if e == nil && b != "" {
 		e = json.Unmarshal([]byte(b), &v)

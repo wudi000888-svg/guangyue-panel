@@ -9,11 +9,12 @@ import PanelUpdater from "./components/PanelUpdater.vue";
 import HeaderBalance from "./components/HeaderBalance.vue";
 const panel=usePanel();
 provide(panelKey,panel);
-const { selectedSite, selectedSiteName, switchSite, api, state, ready, busy, error, page, mobileNav, site, login, modal, theme, sideCollapsed, toggleTheme, confirmation, owner, pendingHY, titles, pageDescriptions, nav, navGroups, currentGroup, date, refresh, task, signIn, signOut, go } = panel;
+const { selectedSite, selectedSiteName, switchSite, api, state, ready, busy, error, page, mobileNav, site, login, registration, registrationChallenge, modal, theme, sideCollapsed, toggleTheme, confirmation, owner, pendingHY, pageTitle, pageDescription, nav, navGroups, currentGroup, date, refresh, task, signIn, signOut, loadRegistrationChallenge, registerAccount, go } = panel;
 import { Bell, ArrowUpRight, ChevronRight, KeyRound, LoaderCircle, LogOut, Menu, Moon, Sun, PanelLeftClose, PanelLeftOpen, Building2, RefreshCw, ShieldCheck, SlidersHorizontal, X } from "lucide-vue-next";
 import { t } from "./i18n";
 import LanguageSwitcher from "./LanguageSwitcher.vue";
 const isDesktop = ref(matchMedia('(min-width: 901px)').matches);
+const registerMode = ref(false);
 const mobileTools = ref(false), drawer = ref<HTMLElement|null>(null), toolsDialog = ref<HTMLElement|null>(null);
 const quickNav = computed(() => (owner.value?['overview','ips','nodes','users','subscription']:['subscription','shop','wallet','orders','tickets']).flatMap(id => nav.value.filter(item => item.id === id)));
 const mobileLayer = computed(() => mobileNav.value || mobileTools.value);
@@ -65,7 +66,7 @@ onBeforeUnmount(() => { closeMobile(); desktop?.removeEventListener('change', on
         >{{site.panel_name}}<small>{{site.organization}}</small></span
       >
     </div>
-    <form class="login-form" @submit.prevent="signIn">
+    <form v-if="!registerMode" class="login-form" @submit.prevent="signIn">
       <div class="eyebrow">GUANGYUE PANEL</div>
       <h1>{{ t("登录企业控制台") }}</h1>
       <p v-if="site.login_notice" class="login-notice">{{site.login_notice}}</p>
@@ -94,6 +95,18 @@ onBeforeUnmount(() => { closeMobile(); desktop?.removeEventListener('change', on
       </button>
       <div class="login-security">
         <ShieldCheck :size="15" />{{ t("企业成员授权访问") }}</div>
+      <button v-if="site.registration_enabled" type="button" class="link-button" @click="registerMode=true;loadRegistrationChallenge()">{{t('注册账号')}}</button>
+    </form>
+    <form v-else class="login-form" @submit.prevent="registerAccount">
+      <div class="eyebrow">GUANGYUE PANEL</div><h1>{{t('创建账号')}}</h1>
+      <p class="login-notice">{{t('注册后默认获得演示套餐，可在订阅管理查看当前套餐。')}}</p>
+      <label>{{t('账号')}}<input v-model="registration.username" autocomplete="username" required maxlength="32" :placeholder="t('用户名')"/></label>
+      <label>{{t('密码')}}<input v-model="registration.password" type="password" autocomplete="new-password" required minlength="8" maxlength="72" :placeholder="t('至少 8 位密码')"/></label>
+      <label>{{t('确认密码')}}<input v-model="registration.confirm_password" type="password" autocomplete="new-password" required minlength="8" maxlength="72"/></label>
+      <label v-if="site.registration_captcha && registrationChallenge">{{t('滑动验证')}}<input v-model.number="registration.captcha_position" type="range" min="0" :max="registrationChallenge.width"/><small>{{t('将滑块拖到目标位置附近')}} · {{t('目标位置')}} {{registrationChallenge.target}}</small></label>
+      <p v-if="error" class="error" role="alert">{{t(error)}}</p>
+      <button class="primary full" :disabled="busy"><LoaderCircle v-if="busy" class="spin" :size="18"/><span>{{t('立即注册')}}</span><ArrowUpRight :size="18"/></button>
+      <button type="button" class="link-button" @click="registerMode=false">{{t('返回登录')}}</button>
     </form>
     <footer>{{site.panel_name}} · {{site.organization}}</footer>
     </div>
@@ -183,9 +196,9 @@ onBeforeUnmount(() => { closeMobile(); desktop?.removeEventListener('change', on
         </button>
         <div class="page-context">
           <h1>
-            <span class="breadcrumb-group">{{currentGroup}} <ChevronRight :size="13"/></span>{{ t(titles[page]) }}
+            <span class="breadcrumb-group">{{currentGroup}} <ChevronRight :size="13"/></span>{{ pageTitle }}
           </h1>
-          <p>{{ t(pageDescriptions[page]) }}</p>
+          <p>{{ pageDescription }}</p>
         </div>
         <HeaderBalance v-if="!selectedSite" :key="state.me.id" :user-id="state.me.id"/>
         <div class="top-actions">
