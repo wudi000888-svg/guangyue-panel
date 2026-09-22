@@ -280,11 +280,6 @@ func (a *App) createOrder(w http.ResponseWriter, r *http.Request, actor Record) 
 	if e = a.validateEntitlementSites(next, "reset"); e != nil {
 		return e
 	}
-	if action == "purchase" {
-		if e = a.validatePurchaseBudgets(next); e != nil {
-			return e
-		}
-	}
 	o := Order{ID: serial("GYO"), UserID: actor.ID, State: "pending", Created: now, Updated: now, Expires: now + 900, Offer: offer, Action: action, BeforeExpiry: actor.Expires, Expected: userCommerceVersion(actor)}
 	if actor.Entitlement != nil {
 		o.BeforeRevision = actor.Entitlement.Revision
@@ -372,13 +367,6 @@ func (a *App) orderAction(w http.ResponseWriter, r *http.Request, actor Record) 
 			future.Expires += int64(o.Offer.Plan.ValidDays) * 86400
 		}
 		if e = a.validateEntitlementSites(future, "reset"); e != nil {
-			return e
-		}
-		if o.Action == "renew" {
-			if e = a.validateBusinessUserQuota(future); e != nil {
-				return e
-			}
-		} else if e = a.validatePurchaseBudgets(future); e != nil {
 			return e
 		}
 		u.InitMeter("legacy-"+businessUsageKey(u.ID), now)
@@ -602,14 +590,17 @@ func (a *App) fulfilOrder(o Order, now int64) error {
 			future.Expires = max(now, future.Expires) + int64(o.Offer.Plan.ValidDays)*86400
 		}
 		policyErr := a.validateEntitlementSites(future, "reset")
-		if policyErr == nil && o.Action == "purchase" {
-			policyErr = a.validatePurchaseBudgets(future)
-		}
-		if policyErr == nil && o.Action == "renew" {
-			policyErr = a.validateBusinessUserQuota(future)
-		}
 		if policyErr != nil {
 			return a.failProvisioning(o, "业务站权益配置已变化，冻结余额已退回")
+		}
+	}
+	var budgets map[string]int64
+	if o.State == "provisioning" && o.Action == "purchase" {
+		future := cloneCommerceUser(u)
+		assignPlan(&future, o.Offer.Plan, now)
+		budgets, e = a.purchaseSiteBudgets(future, sites)
+		if e != nil {
+			return e
 		}
 	}
 	oldState := o.State
@@ -663,34 +654,32 @@ func (a *App) fulfilOrder(o Order, now int64) error {
 			if e == nil {
 				_, e = tx.Exec("INSERT INTO quota_periods(user_id,period_id,doc) VALUES(?,?,?) ON CONFLICT(user_id,period_id) DO NOTHING", u.ID, oldPeriod, oldDoc)
 			}
-			// Existing business-site budget policy survives a new paid period, bounded
-			// by the new plan's total quota. Remaining allocation uses current usage.
+			// Old issued grants have been acknowledged above. Mounts derive fresh
+			// grants from the new package on their next sync; legacy sites receive
+			// a bounded share. Never copy an old unlimited or oversized budget.
 			for i := range sites {
 				s := &sites[i]
+				grants := []BusinessGrant{}
 				changed := false
-				for j := range s.Grants {
-					g := &s.Grants[j]
+				for _, g := range s.Grants {
 					if g.UserID != u.ID {
+						grants = append(grants, g)
 						continue
 					}
-					budget := g.Budget
-					if budget == 0 && g.Quota > 0 {
-						budget = g.Quota
-					}
-					if budget > 0 {
-						g.Quota, e = domain.AddCounter(s.Usage[u.ID].total(), budget)
-					} else {
-						g.Quota = 0
-					}
-					g.Budget = budget
-					g.PeriodID = m.PeriodID
 					changed = true
-					if e != nil {
-						return e
+					if budget, keep := budgets[s.ID]; keep && s.Mount == nil {
+						g.Budget, g.Quota, g.PeriodID = budget, 0, m.PeriodID
+						if budget > 0 {
+							g.Quota, e = domain.AddCounter(s.Usage[u.ID].total(), budget)
+							if e != nil {
+								return e
+							}
+						}
+						grants = append(grants, g)
 					}
 				}
 				if changed {
-					s.Revision = serial("GYV")
+					s.Grants, s.Revision = grants, serial("GYV")
 					b, err := a.store.vault.seal(s)
 					if err != nil {
 						return err
@@ -793,29 +782,63 @@ func cloneCommerceUser(u Record) Record {
 	}
 	return u
 }
-func (a *App) validatePurchaseBudgets(u Record) error {
-	if u.Quota == 0 {
-		return nil
+
+// Compute fresh shares only after old remote authorizations have settled.
+// Selling a plan is independent of reservations from the user's previous plan.
+func (a *App) purchaseSiteBudgets(u Record, sites []BusinessSite) (map[string]int64, error) {
+	eligible := map[string]bool{}
+	shares := int64(0)
+	allows := func(nodes []Node) bool {
+		for _, n := range nodes {
+			if n.Enabled && nodeGroupAllowed(u, n) && (n.Protocol == "vless" && u.VLESS || n.Protocol == "hy2" && u.HY2) {
+				return true
+			}
+		}
+		return false
 	}
-	sites, e := a.store.businessSites()
-	if e != nil {
-		return e
+	local, err := a.store.nodes()
+	if err != nil {
+		return nil, err
 	}
-	remaining := u.Quota
+	if allows(local) {
+		shares++
+	}
 	for _, s := range sites {
+		if !s.Enabled || s.Removed || !a.businessOwnerEnabled(s) {
+			continue
+		}
+		assigned := s.Mount != nil
 		for _, g := range s.Grants {
-			if g.UserID != u.ID {
-				continue
-			}
-			budget := g.Budget
-			if budget == 0 && g.Quota > 0 {
-				budget = g.Quota
-			}
-			if budget == 0 || budget > remaining {
-				return commerceFail(409, "请先调整业务站预留额度，使其不超过套餐总额度")
-			}
-			remaining -= budget
+			assigned = assigned || g.UserID == u.ID
+		}
+		if !assigned {
+			continue
+		}
+		nodes, err := a.materializeBusinessNodes(s)
+		if err != nil {
+			return nil, err
+		}
+		if allows(nodes) {
+			eligible[s.ID] = true
+			shares++
 		}
 	}
-	return nil
+	out := map[string]int64{}
+	remaining := u.Quota
+	for _, s := range sites {
+		if !eligible[s.ID] || s.Mount != nil {
+			continue
+		}
+		if u.Quota == 0 {
+			out[s.ID] = 0
+			continue
+		}
+		if remaining == 0 {
+			continue
+		}
+		budget := min(remaining, max(int64(1), u.Quota/max(int64(1), shares)))
+		out[s.ID] = budget
+		remaining -= budget
+	}
+	return out, nil
 }

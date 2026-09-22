@@ -47,6 +47,7 @@ func (a *App) routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/login", a.login)
 	mux.HandleFunc("GET /api/register/challenge", a.registrationChallenge)
+	mux.HandleFunc("POST /api/register/verify", a.verifyRegistrationChallenge)
 	mux.HandleFunc("POST /api/register", a.register)
 	mux.HandleFunc("POST /api/business/enroll", a.businessEnroll)
 	mux.HandleFunc("POST /api/business/connect", a.businessEnroll)

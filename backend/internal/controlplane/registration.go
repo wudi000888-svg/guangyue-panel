@@ -9,35 +9,6 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// registrationChallenge is deliberately small and in-memory. It is a local
-// friction check for public sign-up; the shape leaves room for a hosted CAPTCHA
-// provider later without coupling registration to an external service today.
-type registrationChallenge struct {
-	target  int
-	expires time.Time
-}
-
-func (a *App) registrationChallenge(w http.ResponseWriter, r *http.Request) {
-	if !a.store.siteSettings().RegistrationEnabled {
-		failure(w, 404, "注册功能未开放")
-		return
-	}
-	token := randomToken(24)
-	target := 56 + int(time.Now().UnixNano()%150)
-	a.registrationMu.Lock()
-	if a.registrationChallenges == nil {
-		a.registrationChallenges = map[string]registrationChallenge{}
-	}
-	for key, challenge := range a.registrationChallenges {
-		if time.Now().After(challenge.expires) {
-			delete(a.registrationChallenges, key)
-		}
-	}
-	a.registrationChallenges[token] = registrationChallenge{target: target, expires: time.Now().Add(5 * time.Minute)}
-	a.registrationMu.Unlock()
-	jsonResponse(w, 200, object{"token": token, "width": 240, "target": target, "tolerance": 14, "expires": time.Now().Add(5 * time.Minute).Unix()})
-}
-
 func requestIP(r *http.Request) string {
 	ip, _, _ := net.SplitHostPort(r.RemoteAddr)
 	if ip == "127.0.0.1" || ip == "::1" {
@@ -63,7 +34,6 @@ func (a *App) register(w http.ResponseWriter, r *http.Request) {
 		Password        string `json:"password"`
 		ConfirmPassword string `json:"confirm_password"`
 		CaptchaToken    string `json:"captcha_token"`
-		CaptchaPosition int    `json:"captcha_position"`
 	}
 	if !decode(w, r, &input) {
 		return
@@ -72,24 +42,9 @@ func (a *App) register(w http.ResponseWriter, r *http.Request) {
 		failure(w, 400, "账号需为 3–32 位字母、数字或 ._-，密码需为 8–72 个字节且两次输入一致")
 		return
 	}
-	if settings.RegistrationCaptcha {
-		a.registrationMu.Lock()
-		challenge, ok := a.registrationChallenges[input.CaptchaToken]
-		if ok && time.Now().After(challenge.expires) {
-			delete(a.registrationChallenges, input.CaptchaToken)
-			ok = false
-		}
-		if ok && abs(input.CaptchaPosition-challenge.target) > 14 {
-			ok = false
-		}
-		if ok {
-			delete(a.registrationChallenges, input.CaptchaToken)
-		}
-		a.registrationMu.Unlock()
-		if !ok {
-			failure(w, 400, "请完成滑动验证")
-			return
-		}
+	if settings.RegistrationCaptcha && !a.consumeRegistrationProof(input.CaptchaToken, r) {
+		failure(w, 400, "请完成拼图滑动验证")
+		return
 	}
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(input.Password), 12)
@@ -150,11 +105,4 @@ func (a *App) register(w http.ResponseWriter, r *http.Request) {
 	}
 	http.SetCookie(w, &http.Cookie{Name: "gy_session", Value: token, Path: "/", HttpOnly: true, Secure: !a.cfg.Dev, SameSite: http.SameSiteStrictMode, Expires: expires})
 	jsonResponse(w, 201, object{"user": record.User})
-}
-
-func abs(value int) int {
-	if value < 0 {
-		return -value
-	}
-	return value
 }

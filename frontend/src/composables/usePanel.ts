@@ -44,8 +44,8 @@ watch(state,v=>{access.role=v?.me.role||null;access.edition=v?.system.edition||'
 const site = ref<SiteSettings>({panel_name:'广月面板',organization:'跨境电商工作区',default_locale:'zh-CN',support_email:'',login_notice:'',registration_enabled:false,registration_captcha:false,revision:''});
 watch([site, locale], () => { document.title=site.value.panel_name+' · '+t('企业控制台'); }, {deep:true,immediate:true});
 const login = reactive({ username: "", password: "" });
-const registration = reactive({ username: "", password: "", confirm_password: "", captcha_token: "", captcha_position: 0 });
-const registrationChallenge = ref<{token:string;width:number;target:number;tolerance:number;expires:number}|null>(null);
+const registration = reactive({ username: "", password: "", confirm_password: "", captcha_token: "" });
+const registrationReset = ref(0);
 const userSearch = ref(""),
   userFilter = ref("all"),
   userRole = ref("all"),
@@ -546,18 +546,12 @@ async function signIn() {
     toast(t("已登录"));
   });
 }
-async function loadRegistrationChallenge() {
-  const challenge = await api<{token:string;width:number;target:number;tolerance:number;expires:number}>('/register/challenge');
-  registrationChallenge.value = challenge;
-  registration.captcha_token = challenge.token;
-  registration.captcha_position = 0;
-}
 async function registerAccount() {
   await task(async () => {
-    await api('/register', 'POST', registration);
+    try { await api('/register', 'POST', registration); } catch(e) { registration.captcha_token='';registrationReset.value++;throw e; }
     Object.assign(login, {username: registration.username, password: ''});
-    Object.assign(registration, {username:'', password:'', confirm_password:'', captcha_token:'', captcha_position:0});
-    registrationChallenge.value = null;
+    Object.assign(registration, {username:'', password:'', confirm_password:'', captcha_token:''});
+    registrationReset.value++;
     await refresh();
     subUser.value = state.value?.me.id || 0;
     go('subscription');
@@ -1009,5 +1003,5 @@ onMounted(async () => {
   poll.start();
 });
 onUnmounted(() => { mounted = false; poll.stop(); stateRequest.cancel(); removeSessionListener(); clearTimeout(toastTimer);  clearSubscription(); });
-return { canMountSubsites,plans,nodeGroups,groupMembers,loadEntitlements,quotaUsed,selectedSite,selectedSiteName,switchSite, api, stateRequest, state, ready, busy, error, notice, page, mobileNav, site, login, registration, registrationChallenge, userSearch, userFilter, userRole, modal, editingID, userForm, nodeForm, ipForm, speedRunning, qualityRunning, qualityTest, importMode, importForm, importFile, importFileReading, importIssues, importFileContent, importFileSequence, clearPrivateFile, readPrivateFile, importReport, openImport, importSubscription, speedTest, ipSearch, ipType, ipState, ipPool, publicResources, privateTab, privateSources, privateSourcesReady, privateSourcesLoading, privateSourcesError, privateSourcesRequest, receivePrivateSources, loadPrivateSources, publicTab, selectPublicTab, subscriptionResourceIDs, isSubscribedResource, subscriptionIPs, manualIPs, privateTabs, sourceLabel, selectPrivateTab, viewSourceResources, sourceChanged, selectedIP, poolStats, ipStatus, ipBadge, sourceFilter, filteredIPs, nodePoolLabel, expiringUsers, passwordForm, sub, subUser, format, subProtocol, subSource, qr, qrError, subLoading, subError, probeResult, detecting, theme, sideCollapsed, publicFeaturesEnabled, nodeSearch, nodeProtocol, nodeStatus, filteredNodes, publicNodePage, publicSubPage, toggleTheme, originalExit, exitFingerprint, displayedNodeName, confirmation, owner, defaultRealitySNI, editingDefaultDirect, pendingHY, titles, pageTitle, pageDescription, pageDescriptions, allNavGroups, navGroups, nav, currentGroup, active, userStatus, users, subURL, usage, bytes, date, duration, exitName, refresh, clearSession, removeSessionListener, task, toastTimer, toast, signIn, signOut, loadRegistrationChallenge, registerAccount, go, editUser, saveUser, toggleUser, confirmUser, confirmed, editNode, probe, detectNode, editIP, saveIP, detectIP, deleteIP, selectedIPIDs, selectedNodeIDs, selectableNodes, selectAll, batchAction, saveNode, deleteNode, clearSubscription, loadSub, showSub, copy, downloadSub, download, backup, changePassword, actionName, poll, mounted };
+return { canMountSubsites,plans,nodeGroups,groupMembers,loadEntitlements,quotaUsed,selectedSite,selectedSiteName,switchSite, api, stateRequest, state, ready, busy, error, notice, page, mobileNav, site, login, registration, registrationReset, userSearch, userFilter, userRole, modal, editingID, userForm, nodeForm, ipForm, speedRunning, qualityRunning, qualityTest, importMode, importForm, importFile, importFileReading, importIssues, importFileContent, importFileSequence, clearPrivateFile, readPrivateFile, importReport, openImport, importSubscription, speedTest, ipSearch, ipType, ipState, ipPool, publicResources, privateTab, privateSources, privateSourcesReady, privateSourcesLoading, privateSourcesError, privateSourcesRequest, receivePrivateSources, loadPrivateSources, publicTab, selectPublicTab, subscriptionResourceIDs, isSubscribedResource, subscriptionIPs, manualIPs, privateTabs, sourceLabel, selectPrivateTab, viewSourceResources, sourceChanged, selectedIP, poolStats, ipStatus, ipBadge, sourceFilter, filteredIPs, nodePoolLabel, expiringUsers, passwordForm, sub, subUser, format, subProtocol, subSource, qr, qrError, subLoading, subError, probeResult, detecting, theme, sideCollapsed, publicFeaturesEnabled, nodeSearch, nodeProtocol, nodeStatus, filteredNodes, publicNodePage, publicSubPage, toggleTheme, originalExit, exitFingerprint, displayedNodeName, confirmation, owner, defaultRealitySNI, editingDefaultDirect, pendingHY, titles, pageTitle, pageDescription, pageDescriptions, allNavGroups, navGroups, nav, currentGroup, active, userStatus, users, subURL, usage, bytes, date, duration, exitName, refresh, clearSession, removeSessionListener, task, toastTimer, toast, signIn, signOut, registerAccount, go, editUser, saveUser, toggleUser, confirmUser, confirmed, editNode, probe, detectNode, editIP, saveIP, detectIP, deleteIP, selectedIPIDs, selectedNodeIDs, selectableNodes, selectAll, batchAction, saveNode, deleteNode, clearSubscription, loadSub, showSub, copy, downloadSub, download, backup, changePassword, actionName, poll, mounted };
 }

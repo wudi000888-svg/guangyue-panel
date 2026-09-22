@@ -352,7 +352,8 @@ tbody tr:hover { background: var(--surface-hover); }
 }
 .login-form h1 { margin-bottom: 24px; color: #21373a; font-family: "Noto Serif SC", "Songti SC", serif; font-size: 25px; }
 .login-form label { color: #62736d; }
-.login-form input { border-radius: 11px; background: #fffdf8; }
+.login-form input { border-radius: 11px; background: #fffdf8; color: #21373a; }
+.login-form input::placeholder { color: #7a8981; }
 .login-form .full { min-height: 47px; border-radius: 12px; }
 .login-security { color: #758c81; }
 .login-screen footer { position: relative; z-index: 1; margin-top: 25px; padding-top: 0; color: #d5e1d7; }
