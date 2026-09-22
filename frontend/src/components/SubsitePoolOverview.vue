@@ -13,13 +13,13 @@ const api=useApi('/business-sites'),{go}=usePanelContext();
 const sites=ref<ManagedSite[]>([]),selected=ref<ManagedSite|null>(null),error=ref(''),loaded=ref(false),busy=ref(false),adding=ref(false);
 const form=reactive({token:'',url:'',name:''});
 const pools=computed(()=>sites.value.filter(s=>s.connection?.scope==='manage'));
-let disposed=false;
-async function load(){try{const out=await api<{sites:ManagedSite[]}>();if(disposed)return;sites.value=out.sites;loaded.value=true;error.value='';}catch(e){if(!isCancelled(e)&&!disposed)error.value=(e as Error).message;}}
+let disposed=false,directoryRevision=0;
+async function load(){const revision=++directoryRevision;try{const out=await api<{sites:ManagedSite[]}>();if(disposed||revision!==directoryRevision)return;sites.value=out.sites;loaded.value=true;error.value='';}catch(e){if(!isCancelled(e)&&!disposed)error.value=(e as Error).message;}}
 async function connect(){busy.value=true;error.value='';try{const site=await api<ManagedSite>('/import','POST',form);form.token='';form.url='';form.name='';adding.value=false;await load();selected.value=site;}catch(e){if(!isCancelled(e))error.value=(e as Error).message;}finally{busy.value=false;}}
 function close(){if(busy.value)return;adding.value=false;form.token='';error.value='';}
 function members(s:ManagedSite):GroupMember[]{return (s.mount?.nodes||[]).map(m=>{const n=s.mount?.catalog.nodes.find(n=>n.id===m.node_id);return {site_id:s.id,site_name:s.name,source:'mounted',node_id:m.node_id,name:m.name||n?.name||m.node_id,protocol:n?.protocol||'—',entry_host:n?.protocol==='hy2'?s.mount?.catalog.info.hy2_host:s.mount?.catalog.info.vless_host,exit_ip:n?.probe_ip,status:!m.enabled||!n?.enabled||!s.enabled||s.mount?.catalog.paused?'disabled':s.mount?.error||!s.mount?.lease_until||s.mount.lease_until<Date.now()/1000?'pending':'ready'};});}
 const poll=serialPoll(async()=>{if(!document.hidden&&!selected.value&&!adding.value)await load();},()=>15000);
-async function onPoolSaved(site:ManagedSite){const index=sites.value.findIndex(item=>item.id===site.id);if(index>=0)sites.value[index]=site;selected.value=site;await load();}
+function onPoolSaved(site:ManagedSite){directoryRevision++;const index=sites.value.findIndex(item=>item.id===site.id);if(index>=0)sites.value[index]=site;selected.value=site;}
 onMounted(()=>{void load();poll.start();});onUnmounted(()=>{disposed=true;poll.stop();form.token='';});
 </script>
 <template>
@@ -27,7 +27,7 @@ onMounted(()=>{void load();poll.start();});onUnmounted(()=>{disposed=true;poll.s
  <div class="resource-section-heading"><div><h2>{{t('子站节点池')}}</h2><p>{{t('挂载后客户端直接连接子站，流量不经过主站。子站节点与子站 IP 池是两种独立的出口方式。')}}</p></div><div class="pool-actions"><button @click="load"><RefreshCw :size="15"/>{{t('刷新')}}</button><button class="primary" @click="adding=true"><Plus :size="15"/>{{t('导入子站令牌')}}</button></div></div>
  <ol class="pool-steps"><li>{{t('导入子站令牌')}}</li><li>{{t('勾选需要的节点')}}</li><li>{{t('保存挂载，按套餐自动授权')}}</li></ol>
  <p v-if="error&&!adding" class="error" role="alert">{{t(error)}}</p>
- <div class="pool-links"><button @click="go('plans')">{{t('套餐管理')}}</button><button @click="go('plans?tab=groups')">{{t('查看节点分组')}}</button><button @click="go('subscription')">{{t('订阅管理')}}</button><button @click="go('fleet')">{{t('子站管理与调度')}}</button></div>
+ <div class="pool-links"><button @click="go('plans')">{{t('套餐管理')}}</button><button @click="go('node-groups')">{{t('查看节点分组')}}</button><button @click="go('subscription')">{{t('订阅管理')}}</button><button @click="go('fleet')">{{t('子站管理与调度')}}</button></div>
  <div v-if="pools.length" class="pool-cards"><article v-for="s in pools" :key="s.id"><header><h3>{{s.name}}</h3><span class="badge neutral">{{s.mount?.nodes.filter(n=>n.enabled).length||0}} {{t('已启用挂载')}}</span></header><p class="muted">{{s.connection?.url}}</p><p>{{t('节点使用权限由用户套餐决定')}}</p><p v-if="s.mount?.error||s.error" class="error">{{t(s.mount?.error||s.error)}}</p><p v-else-if="s.mount?.last_sync" class="field-help">{{t('上次同步')}} {{new Date(s.mount.last_sync*1000).toLocaleString()}}</p><GroupNodeList v-if="s.mount?.nodes.length" :members="members(s)"/><button class="primary" @click="selected=s">{{t('选择与挂载节点')}}</button></article></div>
  <div v-else class="pool-empty"><h3>{{t(loaded?'尚未连接可挂载的子站':'加载中…')}}</h3><p>{{t('在子站生成管理令牌，导入后即可选择共享节点。默认子站节点组已准备好。')}}</p><button v-if="loaded" @click="adding=true">{{t('导入子站令牌')}}</button></div>
  <SubsiteNodePool v-if="selected" :site="selected" @close="selected=null" @saved="onPoolSaved"/>

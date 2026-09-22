@@ -3,13 +3,14 @@ import { computed, nextTick, onMounted, onBeforeUnmount, provide, ref, watch } f
 import { RouterView } from "vue-router";
 import { usePanel } from "./composables/usePanel";
 import { panelKey } from "./composables/panelContext";
+import CourtyardMasthead from "./components/CourtyardMasthead.vue";
 import PanelDialogs from "./components/PanelDialogs.vue";
 import PanelUpdater from "./components/PanelUpdater.vue";
 import HeaderBalance from "./components/HeaderBalance.vue";
 const panel=usePanel();
 provide(panelKey,panel);
 const { selectedSite, selectedSiteName, switchSite, api, state, ready, busy, error, page, mobileNav, site, login, modal, theme, sideCollapsed, toggleTheme, confirmation, owner, pendingHY, titles, pageDescriptions, nav, navGroups, currentGroup, date, refresh, task, signIn, signOut, go } = panel;
-import { Bell, ArrowUpRight, ChevronRight, KeyRound, LoaderCircle, LogOut, Menu, Moon, Sun, PanelLeftClose, PanelLeftOpen, Building2, RadioTower, RefreshCw, ShieldCheck, SlidersHorizontal, X } from "lucide-vue-next";
+import { Bell, ArrowUpRight, ChevronRight, KeyRound, LoaderCircle, LogOut, Menu, Moon, Sun, PanelLeftClose, PanelLeftOpen, Building2, RefreshCw, ShieldCheck, SlidersHorizontal, X } from "lucide-vue-next";
 import { t } from "./i18n";
 import LanguageSwitcher from "./LanguageSwitcher.vue";
 const isDesktop = ref(matchMedia('(min-width: 901px)').matches);
@@ -53,8 +54,14 @@ onBeforeUnmount(() => { closeMobile(); desktop?.removeEventListener('change', on
   </div>
   <main v-else-if="!state" class="login-screen">
     <div class="login-language"><LanguageSwitcher/></div>
+    <section class="login-scene" :aria-label="t('月映珠江')">
+      <div class="login-scene-copy"><span class="courtyard-kicker">GUANGYUE · 岭南</span><h2>{{t('一庭月色，连接四方。')}}</h2><p>{{t('从容管理每一条连接。')}}</p></div>
+      <img class="login-art" src="/guangyue-courtyard.svg" alt="" width="1000" height="760"/>
+      <div class="login-scene-foot"><span>GUANGZHOU · 23.13° N</span><span>{{t('月映珠江')}}</span></div>
+    </section>
+    <div class="login-entry">
     <div class="login-brand">
-      <Building2 :size="32" /><span
+      <img class="courtyard-mark" src="/guangyue-mark.svg" alt="" width="42" height="42"/><span
         >{{site.panel_name}}<small>{{site.organization}}</small></span
       >
     </div>
@@ -89,6 +96,7 @@ onBeforeUnmount(() => { closeMobile(); desktop?.removeEventListener('change', on
         <ShieldCheck :size="15" />{{ t("企业成员授权访问") }}</div>
     </form>
     <footer>{{site.panel_name}} · {{site.organization}}</footer>
+    </div>
   </main>
   <div
     v-else
@@ -103,7 +111,7 @@ onBeforeUnmount(() => { closeMobile(); desktop?.removeEventListener('change', on
         href="#"
         :aria-label="site.panel_name + ' · ' + t('仪表盘')"
         @click.prevent="go('overview')"
-        ><span class="brand-icon"><RadioTower :size="25" /></span
+        ><span class="brand-icon"><img src="/guangyue-mark.svg" alt="" width="36" height="36"/></span
         ><span class="brand-name"
           >{{site.panel_name}}<small
             >{{ t("企业控制台") }}<template v-if="!owner || selectedSite"> · v{{ state.system.version.split("-")[0] }}</template></small
@@ -243,6 +251,7 @@ onBeforeUnmount(() => { closeMobile(); desktop?.removeEventListener('change', on
       </div>
       <div v-if="pendingHY" class="sync-alert" role="status">{{ t("正在关闭") }}{{ pendingHY }}{{ t("个旧 HY2 连接") }}</div>
       <div class="content">
+        <CourtyardMasthead v-if="!owner&&page==='subscription'" :title="t('你好，')+state.me.username" :description="t('套餐、用量与连接，尽在此处。')" :eyebrow="t('我的庭院')"><button @click="go('shop')">{{t('查看套餐')}}<ArrowUpRight :size="15"/></button><button @click="go('clients')">{{t('客户端中心')}}</button></CourtyardMasthead>
         <RouterView />
         <footer class="page-footer">
           <span>{{site.panel_name}} · {{site.organization}}</span
