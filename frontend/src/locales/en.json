@@ -2347,5 +2347,6 @@
   "网络优化独立于日志模式": "Network optimization is independent of logging mode",
   "公共功能显示": "Public feature visibility",
   "公共节点仅在系统设置开启公共功能后使用。": "Public nodes are available after enabling public features in System settings.",
-  "暂无可见节点权限组，请开启公共功能或先创建本地节点组。": "No visible node groups. Enable public features or create a local node group first."
+  "暂无可见节点权限组，请开启公共功能或先创建本地节点组。": "No visible node groups. Enable public features or create a local node group first.",
+  "挂载配置已保存，节点组成员已刷新。": "Mount settings saved and node group members refreshed."
 }
