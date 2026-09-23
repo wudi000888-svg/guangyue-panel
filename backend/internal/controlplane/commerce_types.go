@@ -155,8 +155,17 @@ func txUser(tx *persistence.Tx, user domain.User) error {
 	return e
 }
 func (s *Store) commercePending(user int64) (bool, error) {
+	return s.commercePendingExcept(user, "")
+}
+func (s *Store) commercePendingExcept(user int64, exclude string) (bool, error) {
 	var n int
-	e := s.db.QueryRow("SELECT COUNT(*) FROM commerce_orders WHERE user_id=? AND state IN ('pending','provisioning','refunding')", user).Scan(&n)
+	query := "SELECT COUNT(*) FROM commerce_orders WHERE user_id=? AND state IN ('pending','provisioning','refund_requested','refunding')"
+	args := []any{user}
+	if exclude != "" {
+		query += " AND id<>?"
+		args = append(args, exclude)
+	}
+	e := s.db.QueryRow(query, args...).Scan(&n)
 	return n > 0, e
 }
 func (s *Store) commerceBarrier(user int64) (bool, error) {

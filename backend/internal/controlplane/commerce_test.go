@@ -269,6 +269,62 @@ func TestCommerceOrderCaptureResetAndRefund(t *testing.T) {
 	assertLedger(t, a)
 }
 
+func TestCommerceRefundRequiresMemberRequestAndOwnerApproval(t *testing.T) {
+	a := testApp(t)
+	owner := testUser(t, a, "owner", "owner")
+	user := testUser(t, a, "member", "user")
+	offer := commerceOffer(t, a, owner)
+	fundWallet(t, a, owner, user, "3000")
+	order := newOrder(t, a, user, offer)
+	orderDo(t, a, user, order, "confirm")
+	if e := a.commerceWork(time.Now().Unix()); e != nil {
+		t.Fatal(e)
+	}
+	order, _ = a.store.order(order.ID)
+	if order.State != "completed" {
+		t.Fatalf("order did not complete: %s", order.State)
+	}
+
+	requestedResponse := req(t, a, user, "POST", "/api/commerce/orders/action", object{"id": order.ID, "action": "request_refund", "operation_id": randomToken(24)})
+	if requestedResponse.Code != 200 {
+		t.Fatalf("refund request failed: %d %s", requestedResponse.Code, requestedResponse.Body.String())
+	}
+	requested := decoded[Order](t, requestedResponse, 200)
+	if requested.State != "refund_requested" {
+		t.Fatalf("refund request was not queued: %s", requested.State)
+	}
+	wallet, _ := a.store.wallet(user.ID)
+	if wallet.Available != 2000 || wallet.Held != 0 {
+		t.Fatalf("refund request moved funds: %+v", wallet)
+	}
+	if req(t, a, user, "POST", "/api/commerce/orders/action", object{"id": order.ID, "action": "request_refund", "operation_id": randomToken(24)}).Code != 409 {
+		t.Fatal("duplicate refund request was accepted")
+	}
+
+	var listed struct {
+		Items []Order `json:"items"`
+	}
+	if w := req(t, a, owner, "GET", "/api/commerce/orders?all=1", nil); w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &listed) != nil || len(listed.Items) != 1 || listed.Items[0].State != "refund_requested" {
+		t.Fatalf("owner cannot see refund request: %d %s", w.Code, w.Body.String())
+	}
+	approved := orderDo(t, a, owner, requested, "refund")
+	if approved.State != "refunding" {
+		t.Fatalf("approval did not start refund: %s", approved.State)
+	}
+	if e := a.commerceWork(time.Now().Unix()); e != nil {
+		t.Fatal(e)
+	}
+	order, _ = a.store.order(order.ID)
+	if order.State != "refunded" {
+		t.Fatalf("refund did not complete: %s", order.State)
+	}
+	wallet, _ = a.store.wallet(user.ID)
+	if wallet.Available != 3000 || wallet.Held != 0 {
+		t.Fatalf("approved refund did not restore funds: %+v", wallet)
+	}
+	assertLedger(t, a)
+}
+
 func TestFreeOfferAndPerUserPurchaseLimit(t *testing.T) {
 	a := testApp(t)
 	owner := testUser(t, a, "owner", "owner")

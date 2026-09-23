@@ -2451,5 +2451,18 @@
   "拼图未对齐或已过期，请刷新后重试": "The piece did not match or expired. Refresh to try again.",
   "请完成拼图滑动验证": "Please complete the slide puzzle verification",
   "套餐已生效，订阅节点会随后台同步更新。": "The plan is active. Subscription nodes will update as the backend syncs.",
-  "查看当前套餐与订阅": "View current plan and subscription"
+  "查看当前套餐与订阅": "View current plan and subscription",
+  "套餐决定订阅内容与账号有效期。": "The plan determines your subscription content and account validity.",
+  "订阅内容按当前套餐提供，下载后即可使用。": "Your current plan provides the available subscription content. Download it to use your nodes.",
+  "已购买新套餐": "New plan purchased",
+  "当前套餐结束后恢复": "Your previous plan resumes after the current plan ends",
+  "退款申请已提交，等待管理员审核": "Refund request submitted; waiting for administrator approval",
+  "用户已提交退款申请，请审核。": "The user submitted a refund request. Please review it.",
+  "审核退款申请": "Review refund request",
+  "申请退款": "Request refund",
+  "待审核退款": "Refund awaiting approval",
+  "退款申请待审核": "Refund request awaiting review",
+  "订单存在后续权益变化，暂时不能申请退款": "The order entitlement has changed, so a refund cannot be requested now",
+  "退款申请需由所属用户提交": "Only the order owner can submit a refund request",
+  "退款申请已提交，等待管理员审核。": "Refund request submitted; waiting for administrator approval."
 }
