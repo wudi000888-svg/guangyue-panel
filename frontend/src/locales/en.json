@@ -2449,5 +2449,7 @@
   "验证请求过多，请稍后重试": "Too many verification requests. Please try again later.",
   "无法生成验证图片，请重试": "Could not generate the verification image. Please retry.",
   "拼图未对齐或已过期，请刷新后重试": "The piece did not match or expired. Refresh to try again.",
-  "请完成拼图滑动验证": "Please complete the slide puzzle verification"
+  "请完成拼图滑动验证": "Please complete the slide puzzle verification",
+  "套餐已生效，订阅节点会随后台同步更新。": "The plan is active. Subscription nodes will update as the backend syncs.",
+  "查看当前套餐与订阅": "View current plan and subscription"
 }

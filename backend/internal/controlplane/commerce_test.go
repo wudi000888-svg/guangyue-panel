@@ -183,6 +183,25 @@ func newOrder(t *testing.T, a *App, user Record, o Offer) Order {
 	t.Helper()
 	return decoded[Order](t, req(t, a, user, "POST", "/api/commerce/orders", object{"offer_id": o.ID, "offer_version": o.Version, "operation_id": randomToken(24)}), 201)
 }
+
+func TestCommerceOrderListFirstPageReturnsNewOrder(t *testing.T) {
+	a := testApp(t)
+	owner := testUser(t, a, "owner", "owner")
+	user := testUser(t, a, "member", "user")
+	offer := commerceOffer(t, a, owner)
+	order := newOrder(t, a, user, offer)
+	var listed struct {
+		Items []Order `json:"items"`
+	}
+	w := req(t, a, user, "GET", "/api/commerce/orders", nil)
+	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &listed) != nil {
+		t.Fatalf("order list failed: %d %s", w.Code, w.Body.String())
+	}
+	if len(listed.Items) != 1 || listed.Items[0].ID != order.ID || listed.Items[0].State != "pending" {
+		t.Fatalf("new order was not visible: %+v", listed.Items)
+	}
+}
+
 func orderDo(t *testing.T, a *App, actor Record, o Order, action string) Order {
 	t.Helper()
 	return decoded[Order](t, req(t, a, actor, "POST", "/api/commerce/orders/action", object{"id": o.ID, "action": action, "operation_id": randomToken(24), "password": commerceTestPassword}), 200)

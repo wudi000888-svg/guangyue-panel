@@ -198,15 +198,27 @@ func boolInt(b bool) int {
 	return 0
 }
 func (a *App) listOrders(w http.ResponseWriter, r *http.Request, actor Record) error {
-	query := "SELECT doc FROM commerce_orders WHERE id<?"
-	args := []any{pageCursor(r)}
+	query := "SELECT doc FROM commerce_orders"
+	args := []any{}
+	clauses := []string{}
+	// Do not use an artificial first-page cursor. Order IDs are opaque text and
+	// the ordering of '~' relative to letters differs between SQLite and
+	// PostgreSQL collations; the old sentinel could hide every order on a new
+	// PostgreSQL installation.
+	if before := strings.TrimSpace(r.URL.Query().Get("before")); before != "" {
+		clauses = append(clauses, "id<?")
+		args = append(args, before)
+	}
 	if actor.Role != "owner" || r.URL.Query().Get("all") != "1" {
 		u, e := requestedUser(r, actor)
 		if e != nil {
 			return e
 		}
-		query += " AND user_id=?"
+		clauses = append(clauses, "user_id=?")
 		args = append(args, u)
+	}
+	if len(clauses) > 0 {
+		query += " WHERE " + strings.Join(clauses, " AND ")
 	}
 	query += " ORDER BY id DESC LIMIT 50"
 	rows, e := a.store.db.Query(query, args...)
