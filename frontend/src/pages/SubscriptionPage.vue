@@ -7,6 +7,7 @@ import { t } from "../i18n";
 import UsageDetails from "../components/UsageDetails.vue";
 import NodeSubscriptionCards from "../NodeSubscriptionCards.vue";
 const queuedExpiry=(slot:{expires:number;paused_at:number})=>slot.expires?Math.floor(Date.now()/1000)+Math.max(0,slot.expires-slot.paused_at):0;
+const queuedRemainingDays=(slot:{expires:number;paused_at:number})=>slot.expires&&slot.paused_at?Math.max(0,Math.ceil((slot.expires-slot.paused_at)/86400)):0;
 </script>
 <template>
 <section v-if="state">
@@ -23,9 +24,9 @@ const queuedExpiry=(slot:{expires:number;paused_at:number})=>slot.expires?Math.f
               </option>
             </select>
           </div>
-          <div class="pool-intro"><QrCode :size="21"/><div><strong>{{publicSubPage?t('公共订阅'):t('套餐订阅')}}</strong><p>{{publicSubPage?t('公共节点仅在系统设置开启公共功能后使用。'):t('混合订阅优先按套餐节点组分发本站、公共与挂载子站节点；也可单独查看某一来源。')}}</p></div></div>
+          <div class="pool-intro"><QrCode :size="21"/><div><strong>{{publicSubPage?t('公共订阅'):t('套餐订阅')}}</strong><p>{{publicSubPage?t('公共节点仅在系统设置开启公共功能后使用。'):(owner?t('套餐决定订阅内容与账号有效期。'):t('订阅内容按当前套餐提供，下载后即可使用。'))}}</p></div></div>
           <label v-if="owner" class="sub-source">{{t('订阅包含范围')}}<select v-model="subSource"><option v-if="!publicSubPage" value="mixed">{{t('混合订阅（优先）')}}</option><option v-if="!publicSubPage" value="local">{{t('本站本地节点')}}</option><option v-if="!publicSubPage" value="subsite">{{t('子站节点池（挂载）')}}</option><option v-if="publicSubPage" value="public">{{t('公共节点')}}</option></select></label>
-          <p class="field-help">{{t('套餐决定账号额度、有效期和节点组；混合订阅按节点组过滤全部已授权来源。')}}</p>
+          <p v-if="owner" class="field-help">{{t('套餐决定账号额度、有效期和节点组；混合订阅按节点组过滤全部已授权来源。')}}</p>
           <p v-if="subError" class="error" role="alert">{{ t(subError) }} <button :disabled="subLoading" @click="loadSub(true)"><RefreshCw :size="14"/>{{t('重试')}}</button></p>
           <div v-if="subLoading && !sub" class="empty" role="status"><LoaderCircle :size="20" class="spin"/> {{t('正在读取订阅节点…')}}</div>
           <template v-if="sub"
@@ -59,8 +60,8 @@ const queuedExpiry=(slot:{expires:number;paused_at:number})=>slot.expires?Math.f
                 ><strong>{{ date(sub.user.expires) }}</strong>
               </div>
             </div>
-            <div v-if="sub.user.entitlement" class="plan-meta"><span>{{t('套餐版本')}} · v{{sub.user.entitlement.version}}</span><span>{{t('节点组')}} · {{sub.user.entitlement.group_ids.length}}</span><span>{{t('单独节点')}} · {{sub.user.entitlement.node_ids?.length||0}}</span></div>
-            <div v-if="sub.user.plan_queue?.length" class="plan-queue"><strong>{{t('套餐队列')}}</strong><span v-for="slot in [...sub.user.plan_queue].reverse()" :key="slot.entitlement.revision">{{slot.entitlement.name}} · {{slot.expires?date(queuedExpiry(slot)):t('不限')}}</span></div>
+            <div v-if="owner&&sub.user.entitlement" class="plan-meta"><span>{{t('套餐版本')}} · v{{sub.user.entitlement.version}}</span><span>{{t('节点组')}} · {{sub.user.entitlement.group_ids.length}}</span><span>{{t('单独节点')}} · {{sub.user.entitlement.node_ids?.length||0}}</span></div>
+            <div v-if="sub.user.plan_queue?.length" class="plan-queue"><template v-if="owner"><strong>{{t('套餐队列')}}</strong><span v-for="slot in [...sub.user.plan_queue].reverse()" :key="slot.entitlement.revision">{{slot.entitlement.name}} · {{slot.expires?date(queuedExpiry(slot)):t('不限')}}</span></template><template v-else><strong>{{t('已购买新套餐')}}</strong><span v-for="slot in [...sub.user.plan_queue].reverse()" :key="slot.entitlement.revision">{{t('当前套餐结束后恢复')}} · {{slot.expires?queuedRemainingDays(slot):t('不限')}}{{slot.expires?t('天'):''}}</span></template></div>
             <div class="quota-detail"><span>{{t("实际周期流量")}} · {{bytes(rawPeriodUsed(sub.user))}}</span><span>{{t("下次重置")}} · {{sub.user.meter?.end?date(sub.user.meter.end):t("不自动重置")}}</span><span>{{t("所有订阅来源共用账号配额")}}</span></div>
  <UsageDetails :user="sub.user"/><div class="section-head">
               <h2>{{ t("订阅配置") }}</h2>

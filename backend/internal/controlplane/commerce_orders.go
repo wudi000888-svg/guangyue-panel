@@ -6,6 +6,7 @@ import (
 	"github.com/wudi000888-svg/guangyue-panel/backend/internal/domain"
 	"github.com/wudi000888-svg/guangyue-panel/backend/internal/persistence"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -178,7 +179,7 @@ func (a *App) countOfferPurchases(user int64, offerID, exclude string) (int, err
 		if err = rows.Scan(&id, &state, &b); err != nil {
 			return 0, err
 		}
-		if id == exclude || state != "pending" && state != "provisioning" && state != "completed" && state != "refunding" {
+		if id == exclude || state != "pending" && state != "provisioning" && state != "completed" && state != "refund_requested" && state != "refunding" {
 			continue
 		}
 		var order Order
@@ -278,6 +279,11 @@ func (a *App) createOrder(w http.ResponseWriter, r *http.Request, actor Record) 
 	}
 	if actor.Meter != nil && actor.Meter.PendingReset {
 		return commerceFail(409, "旧周期正在结算，请稍后重试")
+	}
+	if pending, e := a.store.commercePending(actor.ID); e != nil {
+		return e
+	} else if pending {
+		return commerceFail(409, "请先处理已有未完成订单")
 	}
 	now := time.Now().Unix()
 	action := "purchase"
@@ -402,15 +408,30 @@ func (a *App) orderAction(w http.ResponseWriter, r *http.Request, actor Record) 
 				u.Meter.PendingReset = false
 			}
 		}
-	case "refund":
+	case "request_refund":
+		if actor.ID != o.UserID {
+			return commerceFail(403, "退款申请需由所属用户提交")
+		}
 		if old != "completed" || u.Entitlement == nil || u.Entitlement.Revision != o.AppliedRevision {
-			return commerceFail(409, "订单存在后续权益变化，不能自动退款")
+			return commerceFail(409, "订单存在后续权益变化，暂时不能申请退款")
 		}
 		if pending, e := a.store.commercePending(u.ID); e != nil {
 			return e
 		} else if pending {
 			return commerceFail(409, "请先处理用户的未完成订单")
 		}
+		o.State = "refund_requested"
+		o.Message = "退款申请已提交，等待管理员审核"
+	case "refund":
+		if old != "completed" && old != "refund_requested" || u.Entitlement == nil || u.Entitlement.Revision != o.AppliedRevision {
+			return commerceFail(409, "订单存在后续权益变化，不能自动退款")
+		}
+		if pending, e := a.store.commercePendingExcept(u.ID, o.ID); e != nil {
+			return e
+		} else if pending {
+			return commerceFail(409, "请先处理用户的未完成订单")
+		}
+		u.InitMeter("legacy-"+businessUsageKey(u.ID), now)
 		u.Meter.PendingReset = true
 		o.Started = now
 		o.NextAttempt = 0
@@ -431,6 +452,9 @@ func (a *App) orderAction(w http.ResponseWriter, r *http.Request, actor Record) 
 	}
 	if e = saveOrder(tx, o, old); e == nil {
 		e = txUser(tx, u.User)
+	}
+	if e == nil && in.Action == "request_refund" {
+		e = a.notifyCommerceOwners(tx, o.ID+" 用户 #"+strconv.FormatInt(o.UserID, 10)+" 已提交退款申请，请在订单中心审核。", now)
 	}
 	if e == nil {
 		e = a.store.saveCommerceRequest(tx, actor.ID, in.OperationID, in, o)
@@ -557,6 +581,46 @@ func (a *App) failProvisioning(o Order, message string) error {
 		return e
 	}
 	return tx.Commit()
+}
+
+// notifyCommerceOwners creates an inbox notification for every enabled owner.
+// Refund requests are intentionally visible to administrators without changing
+// the user's entitlement or issuing any money movement before approval.
+func (a *App) notifyCommerceOwners(tx *persistence.Tx, body string, now int64) error {
+	var messageID int64
+	if err := tx.QueryRow("INSERT INTO messages(sender_id,sender_name,title,body,category,created) VALUES(NULL,'System',?,?, 'account',?) RETURNING id", "退款申请待审核", body, now).Scan(&messageID); err != nil {
+		return err
+	}
+	rows, err := tx.Query("SELECT id,doc FROM users")
+	if err != nil {
+		return err
+	}
+	owners := []int64{}
+	for rows.Next() {
+		var id int64
+		var b []byte
+		var user domain.User
+		if err = rows.Scan(&id, &b); err != nil {
+			rows.Close()
+			return err
+		}
+		if err = json.Unmarshal(b, &user); err != nil {
+			rows.Close()
+			return err
+		}
+		if user.Role == "owner" && user.Enabled {
+			owners = append(owners, id)
+		}
+	}
+	if err = rows.Close(); err != nil {
+		return err
+	}
+	for _, ownerID := range owners {
+		if _, err = tx.Exec("INSERT INTO message_recipients(message_id,user_id) VALUES(?,?)", messageID, ownerID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (a *App) fulfilOrder(o Order, now int64) error {

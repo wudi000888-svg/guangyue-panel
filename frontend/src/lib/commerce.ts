@@ -27,7 +27,7 @@ export function operationID(): string {
 export function cents(value:string):string{if(!/^(0|[1-9]\d*)(\.\d{1,2})?$/.test(value))throw new Error(t('金额最多两位小数'));const [whole,fraction='']=value.split('.');const n=BigInt(whole)*100n+BigInt(fraction.padEnd(2,'0'));if(n<=0n||n>100000000000n)throw new Error(t('金额超出限制'));return n.toString()}
 export function money(value:string|undefined):string{const n=BigInt(value||'0'),abs=n<0n?-n:n;return (n<0n?'-':'')+'¥'+(abs/100n).toLocaleString()+'.'+(abs%100n).toString().padStart(2,'0')}
 export const stamp=(n:number)=>n?new Date(n*1000).toLocaleString():t('不限');
-const states:Record<string,string>={pending:'待确认',provisioning:'开通中',completed:'已完成',cancelled:'已取消',expired:'已过期',failed:'开通失败',refunding:'退款处理中',refunded:'已退款',unused:'未使用',redeemed:'已兑换',revoked:'已作废',open:'待处理',processing:'处理中',waiting_user:'待用户回复',resolved:'已解决',closed:'已关闭',credit:'人工入账',debit:'人工扣减',gift:'赠送',redemption:'兑换码入账',hold:'余额冻结',release:'余额解冻',purchase:'套餐消费',refund:'订单退款'};
+const states:Record<string,string>={pending:'待确认',provisioning:'开通中',completed:'已完成',cancelled:'已取消',expired:'已过期',failed:'开通失败',refund_requested:'待审核退款',refunding:'退款处理中',refunded:'已退款',unused:'未使用',redeemed:'已兑换',revoked:'已作废',open:'待处理',processing:'处理中',waiting_user:'待用户回复',resolved:'已解决',closed:'已关闭',credit:'人工入账',debit:'人工扣减',gift:'赠送',redemption:'兑换码入账',hold:'余额冻结',release:'余额解冻',purchase:'套餐消费',refund:'订单退款'};
 export const stateText=(s:string)=>t(states[s]||s);
 export function useCommerce(prefix='/commerce'){
  const api=useApi(prefix),busy=ref(false),error=ref(''),notice=ref(''),keys=new Map<string,string>();
