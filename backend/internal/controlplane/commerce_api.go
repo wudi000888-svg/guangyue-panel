@@ -95,13 +95,6 @@ func validWebhookURL(value string) bool {
 	u, err := url.Parse(strings.TrimSpace(value))
 	return err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != ""
 }
-func pageCursor(r *http.Request) string {
-	c := r.URL.Query().Get("before")
-	if c == "" {
-		return "~"
-	}
-	return c
-}
 func requestedUser(r *http.Request, actor Record) (int64, error) {
 	u := actor.ID
 	if v := r.URL.Query().Get("user_id"); v != "" {
@@ -139,7 +132,14 @@ func (a *App) commerceGet(w http.ResponseWriter, r *http.Request, actor Record, 
 		if e != nil {
 			return e
 		}
-		rows, e := a.store.db.Query("SELECT id,kind,amount,available,held,reason,reference,created FROM money_transactions WHERE user_id=? AND id<? ORDER BY id DESC LIMIT 50", u, pageCursor(r))
+		query := "SELECT id,kind,amount,available,held,reason,reference,created FROM money_transactions WHERE user_id=?"
+		args := []any{u}
+		if before := strings.TrimSpace(r.URL.Query().Get("before")); before != "" {
+			query += " AND id<?"
+			args = append(args, before)
+		}
+		query += " ORDER BY id DESC LIMIT 50"
+		rows, e := a.store.db.Query(query, args...)
 		if e != nil {
 			return e
 		}
@@ -161,7 +161,14 @@ func (a *App) commerceGet(w http.ResponseWriter, r *http.Request, actor Record, 
 		if actor.Role != "owner" {
 			return commerceFail(403, "需要管理员权限")
 		}
-		rows, e := a.store.db.Query("SELECT id,batch_id,suffix,amount,expires,revoked,redeemed_by,redeemed_at,created,note,code_secret IS NOT NULL FROM redeem_codes WHERE id<? ORDER BY id DESC LIMIT 50", pageCursor(r))
+		query := "SELECT id,batch_id,suffix,amount,expires,revoked,redeemed_by,redeemed_at,created,note,code_secret IS NOT NULL FROM redeem_codes"
+		args := []any{}
+		if before := strings.TrimSpace(r.URL.Query().Get("before")); before != "" {
+			query += " WHERE id<?"
+			args = append(args, before)
+		}
+		query += " ORDER BY id DESC LIMIT 50"
+		rows, e := a.store.db.Query(query, args...)
 		if e != nil {
 			return e
 		}
