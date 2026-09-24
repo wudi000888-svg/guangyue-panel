@@ -1,0 +1,13 @@
+CREATE TABLE payment_providers (id TEXT PRIMARY KEY, code TEXT NOT NULL, name TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 0, version INTEGER NOT NULL DEFAULT 1, doc BLOB NOT NULL, created INTEGER NOT NULL, updated INTEGER NOT NULL);
+CREATE UNIQUE INDEX payment_provider_code ON payment_providers(code);
+CREATE INDEX payment_provider_enabled ON payment_providers(enabled,updated);
+CREATE TABLE payment_attempts (id TEXT PRIMARY KEY, order_id TEXT NOT NULL, user_id INTEGER NOT NULL, provider_id TEXT NOT NULL, state TEXT NOT NULL, amount INTEGER NOT NULL CHECK(amount>=0), currency TEXT NOT NULL, merchant_ref TEXT NOT NULL, external_ref TEXT, checkout_url TEXT NOT NULL DEFAULT '', idempotency_key TEXT NOT NULL UNIQUE, created INTEGER NOT NULL, updated INTEGER NOT NULL, expires INTEGER NOT NULL, doc BLOB NOT NULL);
+CREATE INDEX payment_attempt_order ON payment_attempts(order_id,created,id);
+CREATE INDEX payment_attempt_pending ON payment_attempts(state,expires,updated);
+CREATE UNIQUE INDEX payment_attempt_external ON payment_attempts(provider_id,external_ref);
+CREATE TABLE payment_events (id TEXT PRIMARY KEY, provider_id TEXT NOT NULL, external_id TEXT, payload_hash TEXT NOT NULL, signature_valid INTEGER NOT NULL, state TEXT NOT NULL, order_id TEXT NOT NULL DEFAULT '', attempt_id TEXT NOT NULL DEFAULT '', body BLOB NOT NULL, created INTEGER NOT NULL, processed INTEGER NOT NULL DEFAULT 0, message TEXT NOT NULL DEFAULT '');
+CREATE UNIQUE INDEX payment_event_external ON payment_events(provider_id,external_id);
+CREATE UNIQUE INDEX payment_event_payload ON payment_events(provider_id,payload_hash);
+CREATE INDEX payment_event_pending ON payment_events(processed,created,id);
+CREATE TABLE commerce_outbox (id TEXT PRIMARY KEY, topic TEXT NOT NULL, aggregate_id TEXT NOT NULL, body BLOB NOT NULL, state TEXT NOT NULL DEFAULT 'pending', attempts INTEGER NOT NULL DEFAULT 0, next_attempt INTEGER NOT NULL DEFAULT 0, created INTEGER NOT NULL, updated INTEGER NOT NULL);
+CREATE INDEX commerce_outbox_pending ON commerce_outbox(state,next_attempt,created,id);

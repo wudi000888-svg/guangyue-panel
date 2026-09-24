@@ -20,23 +20,25 @@ type Offer struct {
 	Plan          Plan   `json:"plan"`
 }
 type Order struct {
-	ID              string `json:"id"`
-	UserID          int64  `json:"user_id"`
-	State           string `json:"state"`
-	Created         int64  `json:"created"`
-	Updated         int64  `json:"updated"`
-	Expires         int64  `json:"expires"`
-	Offer           Offer  `json:"offer"`
-	Action          string `json:"action"`
-	BeforeExpiry    int64  `json:"before_expiry"`
-	BeforeRevision  string `json:"before_revision"`
-	AppliedRevision string `json:"applied_revision"`
-	Expected        string `json:"expected"`
-	PreviousEnd     int64  `json:"previous_end"`
-	Started         int64  `json:"started"`
-	NextAttempt     int64  `json:"next_attempt"`
-	Attempts        int    `json:"attempts"`
-	Message         string `json:"message"`
+	ID                string `json:"id"`
+	UserID            int64  `json:"user_id"`
+	State             string `json:"state"`
+	Created           int64  `json:"created"`
+	Updated           int64  `json:"updated"`
+	Expires           int64  `json:"expires"`
+	Offer             Offer  `json:"offer"`
+	Action            string `json:"action"`
+	BeforeExpiry      int64  `json:"before_expiry"`
+	BeforeRevision    string `json:"before_revision"`
+	AppliedRevision   string `json:"applied_revision"`
+	Expected          string `json:"expected"`
+	PreviousEnd       int64  `json:"previous_end"`
+	Started           int64  `json:"started"`
+	NextAttempt       int64  `json:"next_attempt"`
+	Attempts          int    `json:"attempts"`
+	Message           string `json:"message"`
+	PaymentAttemptID  string `json:"payment_attempt_id,omitempty"`
+	PaymentProviderID string `json:"payment_provider_id,omitempty"`
 }
 
 func (s *Store) offer(id string) (Offer, error) {
@@ -321,10 +323,11 @@ func (a *App) createOrder(w http.ResponseWriter, r *http.Request, actor Record) 
 }
 func (a *App) orderAction(w http.ResponseWriter, r *http.Request, actor Record) error {
 	var in struct {
-		ID          string `json:"id"`
-		Action      string `json:"action"`
-		OperationID string `json:"operation_id"`
-		Password    string `json:"password"`
+		ID               string `json:"id"`
+		Action           string `json:"action"`
+		OperationID      string `json:"operation_id"`
+		Password         string `json:"password"`
+		PaymentAttemptID string `json:"payment_attempt_id"`
 	}
 	if !decode(w, r, &in) {
 		return nil
@@ -378,6 +381,21 @@ func (a *App) orderAction(w http.ResponseWriter, r *http.Request, actor Record) 
 		if o.State != "pending" || o.Expires <= now || !u.Enabled || o.Expected != userCommerceVersion(u) || u.Meter != nil && u.Meter.PendingReset {
 			return commerceFail(409, "订单或权益已变化，请取消后重新下单")
 		}
+		// Online payments are activated only after a verified provider callback.
+		// The client cannot turn an unpaid online order into a balance order by
+		// calling this endpoint directly.
+		onlinePayment := o.PaymentAttemptID != ""
+		if onlinePayment {
+			if strings.TrimSpace(in.PaymentAttemptID) != o.PaymentAttemptID {
+				return commerceFail(409, "请先完成在线支付")
+			}
+			var paymentState string
+			if e = a.store.db.QueryRow("SELECT state FROM payment_attempts WHERE id=? AND order_id=?", o.PaymentAttemptID, o.ID).Scan(&paymentState); e != nil || paymentState != "paid" {
+				return commerceFail(409, "请先完成在线支付")
+			}
+		} else if strings.TrimSpace(in.PaymentAttemptID) != "" {
+			return commerceFail(409, "订单支付方式无效")
+		}
 		future := cloneCommerceUser(u)
 		assignPlan(&future, o.Offer.Plan, now)
 		if o.Action == "renew" {
@@ -394,8 +412,12 @@ func (a *App) orderAction(w http.ResponseWriter, r *http.Request, actor Record) 
 		}
 		o.Started = now
 		o.State = "provisioning"
-		o.Message = "余额已冻结，正在开通"
-		deltaAvailable, deltaHeld, kind = -o.Offer.Price, o.Offer.Price, "hold"
+		if onlinePayment {
+			o.Message = "在线支付已确认，正在开通"
+		} else {
+			o.Message = "余额已冻结，正在开通"
+			deltaAvailable, deltaHeld, kind = -o.Offer.Price, o.Offer.Price, "hold"
+		}
 	case "cancel":
 		if old != "pending" && old != "provisioning" {
 			return commerceFail(409, "订单无法取消")
@@ -445,6 +467,14 @@ func (a *App) orderAction(w http.ResponseWriter, r *http.Request, actor Record) 
 		return e
 	}
 	defer tx.Rollback()
+	if in.Action == "cancel" && o.PaymentAttemptID != "" {
+		if _, e = tx.Exec("UPDATE payment_attempts SET state=CASE WHEN state='paid' THEN 'refund_required' ELSE 'cancelled' END,updated=? WHERE id=? AND state IN ('created','awaiting_customer','paid')", now, o.PaymentAttemptID); e != nil {
+			return e
+		}
+		if old == "provisioning" {
+			o.Message = "订单已取消；在线支付待人工退款"
+		}
+	}
 	if kind != "" && o.Offer.Price > 0 {
 		if _, e = a.store.postMoney(tx, u.ID, actor.ID, kind+":"+o.ID, kind, o.ID, o.Message, deltaAvailable, deltaHeld); e != nil {
 			return e
@@ -506,6 +536,12 @@ func (a *App) commerceWork(now int64) error {
 			if o.Expires <= now {
 				o.State = "expired"
 				o.Message = "订单确认已超时"
+				if o.PaymentAttemptID != "" {
+					if _, e = a.store.db.Exec("UPDATE payment_attempts SET state='expired',updated=? WHERE id=? AND state IN ('created','awaiting_customer')", now, o.PaymentAttemptID); e != nil {
+						problems = append(problems, e)
+						continue
+					}
+				}
 				if e = a.persistOrder(o, "pending"); e != nil {
 					problems = append(problems, e)
 				}
@@ -561,7 +597,15 @@ func (a *App) failProvisioning(o Order, message string) error {
 		return e
 	}
 	defer tx.Rollback()
-	if o.Offer.Price > 0 {
+	// A provider-paid order has no wallet hold to release.  Keep the paid
+	// attempt visible for an operator to refund through the provider instead of
+	// silently crediting the user's internal balance.
+	if o.PaymentAttemptID != "" {
+		if _, e = tx.Exec("UPDATE payment_attempts SET state='refund_required',updated=? WHERE id=? AND state IN ('paid','completed')", time.Now().Unix(), o.PaymentAttemptID); e != nil {
+			return e
+		}
+		o.Message = message + "；在线支付待人工退款"
+	} else if o.Offer.Price > 0 {
 		if _, e = a.store.postMoney(tx, u.ID, 0, "release:"+o.ID, "release", o.ID, message, o.Offer.Price, -o.Offer.Price); e != nil {
 			return e
 		}
@@ -573,7 +617,9 @@ func (a *App) failProvisioning(o Order, message string) error {
 		return e
 	}
 	o.State = "failed"
-	o.Message = message
+	if o.PaymentAttemptID == "" {
+		o.Message = message
+	}
 	if e = saveOrder(tx, o, "provisioning"); e != nil {
 		return e
 	}
@@ -691,7 +737,10 @@ func (a *App) fulfilOrder(o Order, now int64) error {
 		if u.Meter != nil {
 			u.Meter.PendingReset = false
 		}
-		if o.Offer.Price > 0 {
+		if o.PaymentAttemptID != "" {
+			_, e = tx.Exec("UPDATE payment_attempts SET state='refund_required',updated=? WHERE id=? AND state IN ('paid','completed')", time.Now().Unix(), o.PaymentAttemptID)
+			o.Message += "；在线支付待人工退款"
+		} else if o.Offer.Price > 0 {
 			_, e = a.store.postMoney(tx, u.ID, 0, "release:"+o.ID, "release", o.ID, o.Message, o.Offer.Price, -o.Offer.Price)
 		}
 	} else if oldState == "refunding" {
@@ -707,6 +756,11 @@ func (a *App) fulfilOrder(o Order, now int64) error {
 		}
 		o.State = "refunded"
 		o.Message = "已退回站内余额"
+		if o.PaymentAttemptID != "" {
+			if _, e = tx.Exec("UPDATE payment_attempts SET state='refunded',updated=? WHERE id=? AND state IN ('completed','paid')", time.Now().Unix(), o.PaymentAttemptID); e != nil {
+				return e
+			}
+		}
 		if o.Offer.Price > 0 {
 			_, e = a.store.postMoney(tx, u.ID, 0, "refund:"+o.ID, "refund", o.ID, o.Message, o.Offer.Price, 0)
 		}
@@ -770,7 +824,9 @@ func (a *App) fulfilOrder(o Order, now int64) error {
 			o.AppliedRevision = u.Entitlement.Revision
 			o.State = "completed"
 			o.Message = "权益已开通，业务站按同步状态生效"
-			if o.Offer.Price > 0 {
+			if o.PaymentAttemptID != "" {
+				_, e = tx.Exec("UPDATE payment_attempts SET state='completed',updated=? WHERE id=? AND state='paid'", time.Now().Unix(), o.PaymentAttemptID)
+			} else if o.Offer.Price > 0 {
 				_, e = a.store.postMoney(tx, u.ID, 0, "capture:"+o.ID, "purchase", o.ID, o.Message, 0, -o.Offer.Price)
 			}
 		}
