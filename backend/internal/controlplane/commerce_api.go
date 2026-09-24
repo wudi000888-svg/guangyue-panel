@@ -49,7 +49,7 @@ func (a *App) commerceAPI(w http.ResponseWriter, r *http.Request, actor Record) 
 		}
 		if _, e = a.commerceActor(actor, true, in.Password); e == nil {
 			s := in.Settings
-			if s.Currency != "CNY" || s.PaymentProvider != "manual" && s.PaymentProvider != "webhook" || s.MailProvider != "none" && s.MailProvider != "webhook" {
+			if s.Currency != "CNY" || s.MailProvider != "none" && s.MailProvider != "webhook" {
 				e = commerceFail(400, "账户服务配置无效")
 			} else if s.PaymentWebhook != "" && !validWebhookURL(s.PaymentWebhook) || s.MailWebhook != "" && !validWebhookURL(s.MailWebhook) {
 				e = commerceFail(400, "回调地址必须是 http 或 https 地址")
@@ -79,6 +79,10 @@ func (a *App) commerceAPI(w http.ResponseWriter, r *http.Request, actor Record) 
 		e = a.redeemCode(w, r, actor)
 	case "offers":
 		e = a.saveOffer(w, r, actor)
+	case "payment-methods":
+		e = a.savePaymentMethod(w, r, actor)
+	case "orders/pay":
+		e = a.createPayment(w, r, actor)
 	case "orders":
 		e = a.createOrder(w, r, actor)
 	case "orders/action":
@@ -197,6 +201,8 @@ func (a *App) commerceGet(w http.ResponseWriter, r *http.Request, actor Record, 
 		jsonResponse(w, 200, object{"items": items})
 	case "offers":
 		return a.listOffers(w, actor)
+	case "payment-methods":
+		return a.listPaymentMethods(w, actor)
 	case "orders":
 		return a.listOrders(w, r, actor)
 	default:

@@ -1,6 +1,6 @@
 # Balances, redemption codes, orders and support
 
-Available in **0.21.0+**, on Lite and Pro controllers. Open **Account & services** in either Simple or Professional mode. Members see their own records; administrators manage all members. No external payment provider is required or connected.
+Available in **0.21.0+**, on Lite and Pro controllers. Open **Account & services** in either Simple or Professional mode. Members see their own records; administrators manage all members. The panel works without an external payment provider, and optional signed adapters can be configured for online checkout.
 
 ## Enable the services
 
@@ -8,6 +8,16 @@ Available in **0.21.0+**, on Lite and Pro controllers. Open **Account & services
 2. In **Buy a plan**, create an offer with a plan version and CNY price, then enable sales for that offer.
 3. In **System settings → Balance, redemption codes and support**, enable plan purchases and verify the current administrator password.
 4. Credit members using redemption codes or an administrator balance adjustment.
+
+## Online payments
+
+Administrators can configure payment adapters under **System settings → Commerce and integrations → Online payment methods**. This release includes EPay redirect checkout and a generic JSON Webhook adapter. Secrets are encrypted with the site Vault and are never returned by list or edit responses. A method can be disabled without changing historical orders.
+
+Members create an order and select an enabled checkout method. Amount, currency and the plan snapshot are generated on the server. A browser return never confirms an order; only a provider signature-verified callback marks an attempt paid and starts entitlement provisioning. Events are stored idempotently by provider event ID and payload hash, so retries cannot activate an order twice.
+
+EPay callbacks use `https://panel.example/api/payments/webhook/<payment-method-id>` and accept GET or form POST with the platform MD5 signature. The generic adapter accepts signed JSON POST requests with `X-Guangyue-Signature: sha256=<HMAC-SHA256>` and the fields `event_id`, `merchant_ref`, `external_ref`, `amount`, `currency` and `status`. The generic adapter is intended for an existing checkout or a future adapter and does not currently create redirect links.
+
+Online attempts never hold internal wallet funds. If provisioning fails, the attempt remains marked for manual provider refund instead of being silently credited to the wallet. The existing administrator refund approval flow currently returns wallet balance; provider-native refunds can be added behind the same adapter boundary later.
 
 Upgrades start with sales disabled, redemption and tickets enabled. Existing wallets start at zero; existing plans are not automatically priced or listed. Historic usage is not charged. Disabling an entry point preserves its records. Manual entitlements remain available.
 

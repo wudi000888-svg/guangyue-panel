@@ -53,6 +53,10 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /api/business/connect", a.businessEnroll)
 	mux.HandleFunc("POST /api/business/sync", a.businessSync)
 	mux.HandleFunc("POST /api/fleet-gateway", a.fleetGateway)
+	// Provider callbacks are authenticated by the provider signature, not by
+	// the browser session/origin headers used by the panel API.
+	mux.HandleFunc("POST /api/payments/webhook/{provider}", a.paymentWebhook)
+	mux.HandleFunc("GET /api/payments/webhook/{provider}", a.paymentWebhook)
 	mux.HandleFunc("GET /api/site", a.siteInfo)
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
 		jsonResponse(w, 200, object{"ok": true, "version": version, "edition": a.cfg.edition(), "product": a.cfg.productName(), "site_id": a.cfg.siteID(), "role": a.cfg.deploymentRole()})
@@ -84,7 +88,8 @@ func (a *App) routes() http.Handler {
 		if strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/sub/") || strings.HasPrefix(r.URL.Path, "/public-sub/") {
 			w.Header().Set("Cache-Control", "no-store, private")
 		}
-		if r.Method != "GET" && r.Method != "HEAD" {
+		webhook := strings.HasPrefix(r.URL.Path, "/api/payments/webhook/")
+		if r.Method != "GET" && r.Method != "HEAD" && !webhook {
 			if a.controlReady() != nil {
 				failure(w, 503, "站点控制器暂不可用")
 				return
@@ -98,6 +103,9 @@ func (a *App) routes() http.Handler {
 				failure(w, 403, "请求来源校验失败")
 				return
 			}
+		} else if webhook && a.controlReady() != nil {
+			failure(w, 503, "站点控制器暂不可用")
+			return
 		}
 		mux.ServeHTTP(w, r)
 	})

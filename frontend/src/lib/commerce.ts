@@ -7,7 +7,9 @@ export interface Wallet {user_id:number;available:string;held:string;currency:st
 export const walletRevision = ref(0);
 export interface MoneyTransaction {id:string;kind:string;amount:string;available:string;held:string;reason:string;reference:string;created:number}
 export interface Offer {id:string;version:number;enabled:boolean;price:string;purchase_limit?:number;plan:Plan}
-export interface Order {id:string;user_id:number;state:string;created:number;updated:number;expires:number;offer:Offer;action:string;before_expiry:number;message:string}
+export interface PaymentMethod {id:string;code:string;name:string;enabled:boolean;version:number;base_url?:string;merchant_id?:string;channel?:string;checkout:boolean}
+export interface PaymentAttempt {id:string;order_id:string;user_id:number;provider_id:string;state:string;amount:string;currency:string;merchant_ref:string;external_ref?:string;checkout_url?:string;created:number;updated:number;expires:number}
+export interface Order {id:string;user_id:number;state:string;created:number;updated:number;expires:number;offer:Offer;action:string;before_expiry:number;message:string;payment_attempt_id?:string;payment_provider_id?:string}
 export interface Redemption {id:string;batch_id:string;suffix:string;amount:string;expires:number;state:string;redeemed_by:number;redeemed_at:number;note:string;has_secret?:boolean}
 export interface Ticket {id:string;user_id:number;title:string;category:string;state:string;priority:string;order_id:string;site_id:string;node_id:string;resource:string;created:number;updated:number;closed:number;revision:string}
 export interface TicketReply {id:string;ticket_id:string;user_id:number;sender:string;body:string;internal:boolean;attachments:string[];created:number}
