@@ -2,10 +2,63 @@ package controlplane
 
 import (
 	"context"
+	"encoding/json"
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/wudi000888-svg/guangyue-panel/backend/internal/domain"
 )
+
+func TestReconcileClosedBusinessTrafficKeepsHistoryAndCurrentQuota(t *testing.T) {
+	a := testApp(t)
+	u := testUser(t, a, "member", "user")
+	u.Upload = 100
+	u.Meter = &domain.QuotaMeter{PeriodID: "current", Upload: 120, BaseUpload: 100, InitialUpload: 100}
+	if err := a.store.save(&u); err != nil {
+		t.Fatal(err)
+	}
+	archived := u.User
+	archived.Meter = &domain.QuotaMeter{PeriodID: "closed", Upload: 50, BaseUpload: 10, InitialUpload: 10}
+	doc, err := json.Marshal(archived)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = a.store.db.Exec("INSERT INTO quota_periods(user_id,period_id,doc) VALUES(?,?,?)", u.ID, "closed", doc); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = a.store.db.Exec("INSERT INTO business_node_usage(site_id,user_id,node_id,period_id,rate_revision,rate_milli,upload,download) VALUES(?,?,?,?,?,?,?,?)", "site", u.ID, "vless-main", "closed", "rate", 1000, 5, 2); err != nil {
+		t.Fatal(err)
+	}
+	v := BusinessSite{ID: "site", SentNodes: []Node{{ID: "vless-main", Protocol: "vless"}}}
+	tx, err := a.store.db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	delta, err := a.reconcileClosedBusinessUsage(tx, &v, []NodeUsage{{UserID: u.ID, NodeID: "vless-main", PeriodID: "closed", RateRevision: "rate", RateMilli: 1000, Upload: 8, Download: 4}})
+	if err != nil {
+		tx.Rollback()
+		t.Fatal(err)
+	}
+	if err = tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	got := delta[u.ID]
+	if got.upload != 3 || got.download != 2 || got.quotaUpload != 3 || got.quotaDownload != 2 {
+		t.Fatalf("unexpected late delta: %+v", got)
+	}
+	var updated []byte
+	if err = a.store.db.QueryRow("SELECT doc FROM quota_periods WHERE user_id=? AND period_id=?", u.ID, "closed").Scan(&updated); err != nil {
+		t.Fatal(err)
+	}
+	var historical User
+	if err = json.Unmarshal(updated, &historical); err != nil {
+		t.Fatal(err)
+	}
+	if historical.Upload != archived.Upload+3 || historical.Download != archived.Download+2 || historical.Meter.Upload != archived.Meter.Upload+3 || historical.Meter.Download != archived.Meter.Download+2 {
+		t.Fatalf("closed period was not repaired: %+v", historical)
+	}
+}
 
 func TestBusinessWeightedQuotasSparseAcknowledgementAndReset(t *testing.T) {
 	master := testApp(t)
