@@ -165,6 +165,45 @@ func (a *App) acceptBusinessUsage(v *BusinessSite, in BusinessHeartbeat) error {
 		return err
 	}
 	defer tx.Rollback()
+	closed, err := a.reconcileClosedBusinessUsage(tx, v, in.NodeUsage)
+	if err != nil {
+		return err
+	}
+	// The closed traffic was generated before the current period started. Keep
+	// the site's absolute reservation aligned with its global watermark so the
+	// late sample cannot consume the new period's grant or trigger a false
+	// budget exhaustion.
+	for userID, delta := range closed {
+		inc, e := domain.AddCounter(delta.quotaUpload, delta.quotaDownload)
+		if e != nil || inc == 0 {
+			if e != nil {
+				return e
+			}
+			continue
+		}
+		for i := range v.Grants {
+			if v.Grants[i].UserID == userID && v.Grants[i].Quota > 0 {
+				v.Grants[i].Quota, e = domain.AddCounter(v.Grants[i].Quota, inc)
+				if e != nil {
+					return e
+				}
+			}
+		}
+		for i := range v.SentGrants {
+			if v.SentGrants[i].UserID == userID && v.SentGrants[i].Quota > 0 {
+				v.SentGrants[i].Quota, e = domain.AddCounter(v.SentGrants[i].Quota, inc)
+				if e != nil {
+					return e
+				}
+			}
+		}
+		if issued, ok := v.Issued[userID]; ok && issued > 0 {
+			v.Issued[userID], e = domain.AddCounter(issued, inc)
+			if e != nil {
+				return e
+			}
+		}
+	}
 	for id, next := range in.Usage {
 		if id <= 0 || next.Upload < 0 || next.Download < 0 || next.VLESS < 0 || next.HY2 < 0 || next.Upload > 1<<60 || next.Download > 1<<60 || next.VLESS > 1<<60 || next.HY2 > 1<<60 || next.rawTotal() != next.VLESS+next.HY2 {
 			return errors.New("invalid traffic report")
@@ -237,6 +276,27 @@ func (a *App) acceptBusinessUsage(v *BusinessSite, in BusinessHeartbeat) error {
 		}
 		if u.Meter.Download, err = domain.AddCounter(u.Meter.Download, qd); err != nil {
 			return err
+		}
+		// The live meter stores a global weighted watermark. Rebase the current
+		// period by the portion that belongs to the already closed period, so
+		// historical late traffic is retained without charging the new period.
+		if late := closed[id]; late.quotaUpload > 0 || late.quotaDownload > 0 {
+			u.Meter.BaseUpload, err = domain.AddCounter(u.Meter.BaseUpload, late.quotaUpload)
+			if err != nil {
+				return err
+			}
+			u.Meter.BaseDownload, err = domain.AddCounter(u.Meter.BaseDownload, late.quotaDownload)
+			if err != nil {
+				return err
+			}
+			u.Meter.RawBaseUpload, err = domain.AddCounter(u.Meter.RawBaseUpload, late.upload)
+			if err != nil {
+				return err
+			}
+			u.Meter.RawBaseDownload, err = domain.AddCounter(u.Meter.RawBaseDownload, late.download)
+			if err != nil {
+				return err
+			}
 		}
 		u.Upload += du
 		u.Download += dd
