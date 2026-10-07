@@ -8,4 +8,5 @@ import './management.css'
 import './responsive-shell.css'
 import './console.css'
 import './penpot-theme.css'
+import './shell-ui.css'
 createApp(App).use(createPinia()).use(router).mount('#app')

@@ -61,13 +61,13 @@ svg { vertical-align: middle; }
 .workspace small { display: block; margin-top: 6px; color: #828999; font-size: 9px; overflow-wrap: anywhere; }
 .workspace>svg { color: #697284; flex-shrink: 0; }
 .nav-caption { color: #858c9c; font-size: 10px; padding: 0 14px; margin-bottom: 14px; }
-nav { display: flex; flex-direction: column; gap: 7px; }
-nav button { height: 44px; min-height: 44px; justify-content: flex-start; gap: 12px; padding: 0 14px; border: 0; background: transparent; color: #9ca3b3; font-size: 13px; }
-nav button:hover { color: #e4e8f2; background: #292d36; }
-nav button.selected { color: #d9f995; background: #30372d; font-weight: 550; }
-nav button.selected::after { content: ''; width: 4px; height: 4px; background: #d9f995; border-radius: 50%; margin-left: auto; }
+.grouped-nav { display: flex; flex-direction: column; gap: 7px; }
+.grouped-nav button { height: 44px; min-height: 44px; justify-content: flex-start; gap: 12px; padding: 0 14px; border: 0; background: transparent; color: #9ca3b3; font-size: 13px; }
+.grouped-nav button:hover { color: #e4e8f2; background: #292d36; }
+.grouped-nav button.selected { color: #d9f995; background: #30372d; font-weight: 550; }
+.grouped-nav button.selected::after { content: ''; width: 4px; height: 4px; background: #d9f995; border-radius: 50%; margin-left: auto; }
 .nav-count { margin-left: auto; color: #9aa48d; font-size: 10px; }
-nav button.selected .nav-count { margin-right: -3px; }
+.grouped-nav button.selected .nav-count { margin-right: -3px; }
 .sidebar-bottom { margin-top: auto; padding-top: 50px; }
 .edge-status { display: flex; align-items: center; gap: 8px; margin: 20px 12px; color: #929ba9; font-size: 10px; }
 .edge-status>span:last-child { margin-left: auto; font-family: monospace; color: #838c99; }

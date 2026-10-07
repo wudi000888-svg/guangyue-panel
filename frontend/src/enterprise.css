@@ -209,10 +209,10 @@ small,
   color: var(--muted);
   font-size: 10px;
 }
-nav {
+.grouped-nav {
   gap: 6px;
 }
-nav button {
+.grouped-nav button {
   min-height: 42px;
   height: 42px;
   color: var(--secondary);
@@ -220,16 +220,16 @@ nav button {
   border-radius: 6px;
   padding: 0 15px;
 }
-nav button:hover {
+.grouped-nav button:hover {
   color: var(--text);
   background: var(--surface-hover);
 }
-nav button.selected {
+.grouped-nav button.selected {
   color: var(--accent-text);
   background: var(--accent-soft);
   font-weight: 550;
 }
-nav button.selected::after {
+.grouped-nav button.selected::after {
   display: none;
 }
 .nav-count {
@@ -940,15 +940,15 @@ tbody tr:last-child td {
   .app-shell.collapsed .brand-name,
   .app-shell.collapsed .workspace,
   .app-shell.collapsed .nav-caption,
-  .app-shell.collapsed nav button > span,
+  .app-shell.collapsed .grouped-nav button > span,
   .app-shell.collapsed .edge-status,
   .app-shell.collapsed .sidebar-setting > span {
     display: none;
   }
-  .app-shell.collapsed nav {
+  .app-shell.collapsed .grouped-nav {
     margin-top: 20px;
   }
-  .app-shell.collapsed nav button,
+  .app-shell.collapsed .grouped-nav button,
   .app-shell.collapsed .sidebar-setting {
     justify-content: center;
     padding-left: 0;

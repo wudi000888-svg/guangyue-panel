@@ -11,6 +11,6 @@ defineProps<{ title: string; description?: string }>();
   </section>
 </template>
 <style scoped>
-.table-page-layout{display:flex;flex-direction:column;gap:20px;min-width:0}.table-page-layout .page-heading{margin-bottom:0;justify-content:space-between}.table-page-layout .page-heading>div:first-child{display:block}.table-page-layout h1{font-size:19px}.table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:10px;background:var(--surface)}.page-actions{display:flex;gap:10px;align-items:center}.table-filters{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.table-pagination{display:flex;justify-content:space-between;align-items:center;gap:16px;color:var(--muted);font-size:12px}
-@media(max-width:650px){.table-page-layout .page-heading{align-items:flex-start;flex-wrap:wrap}.page-actions{flex-wrap:wrap}.table-pagination{flex-wrap:wrap}}
+.table-page-layout{display:flex;flex-direction:column;gap:20px;min-width:0}.table-page-layout .page-heading{margin-bottom:0;justify-content:space-between}.table-page-layout .page-heading>div:first-child{display:block}.table-page-layout h1{font-size:26px}.table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:14px;background:var(--surface)}.page-actions{display:flex;gap:10px;align-items:center}.table-filters{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.table-pagination{display:flex;justify-content:space-between;align-items:center;gap:16px;color:var(--muted);font-size:13px}
+@media(max-width:650px){.table-page-layout .page-heading{align-items:flex-start;flex-wrap:wrap}.page-actions{flex-wrap:wrap;width:100%}.page-actions>button{flex-grow:1}.table-page-layout h1{font-size:23px}.table-pagination{flex-wrap:wrap}}
 </style>

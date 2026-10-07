@@ -52,7 +52,7 @@ function editEntitlements(){entitlementUsers.value=localUsers.value.filter(u=>!u
           <div class="toolbar user-toolbar">
             <div class="search">
               <Search :size="17" /><input
-                v-model="userSearch"
+                type="search" v-model="userSearch"
                 :placeholder="t('搜索成员账号')"
                 :aria-label="t('搜索成员')"
               />
@@ -152,7 +152,7 @@ function editEntitlements(){entitlementUsers.value=localUsers.value.filter(u=>!u
                   </td>
                 </tr>
                 <tr v-if="!visibleUsers.length">
-                  <td colspan="9" class="empty">{{ t("没有匹配的成员") }}</td>
+                  <td colspan="9" class="empty"><span>{{ t("没有匹配的成员") }}</span><button v-if="userSearch||userFilter!=='all'||userRole!=='all'" class="text-button empty-reset" @click="userSearch='';userFilter='all';userRole='all'">{{t('清除筛选')}}</button></td>
                 </tr>
               </tbody>
             </table>
