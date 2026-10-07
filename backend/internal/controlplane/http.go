@@ -58,6 +58,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("POST /api/payments/webhook/{provider}", a.paymentWebhook)
 	mux.HandleFunc("GET /api/payments/webhook/{provider}", a.paymentWebhook)
 	mux.HandleFunc("GET /api/site", a.siteInfo)
+	mux.HandleFunc("GET /api/access-status", a.accessStatus)
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
 		jsonResponse(w, 200, object{"ok": true, "version": version, "edition": a.cfg.edition(), "product": a.cfg.productName(), "site_id": a.cfg.siteID(), "role": a.cfg.deploymentRole()})
 	})
@@ -89,6 +90,9 @@ func (a *App) routes() http.Handler {
 			w.Header().Set("Cache-Control", "no-store, private")
 		}
 		webhook := strings.HasPrefix(r.URL.Path, "/api/payments/webhook/")
+		if !a.enforceSiteAccess(w, r) {
+			return
+		}
 		if r.Method != "GET" && r.Method != "HEAD" && !webhook {
 			if a.controlReady() != nil {
 				failure(w, 503, "站点控制器暂不可用")
@@ -133,12 +137,7 @@ func (a *App) rateAllowed(ip string) bool {
 	return true
 }
 func (a *App) login(w http.ResponseWriter, r *http.Request) {
-	ip, _, _ := net.SplitHostPort(r.RemoteAddr)
-	if ip == "127.0.0.1" || ip == "::1" {
-		if x := r.Header.Get("X-Real-IP"); net.ParseIP(x) != nil {
-			ip = x
-		}
-	}
+	ip := requestIP(r)
 	if !a.rateAllowed(ip) {
 		failure(w, 429, "登录尝试过多，请稍后重试")
 		return
@@ -216,6 +215,10 @@ func (a *App) authenticated(w http.ResponseWriter, r *http.Request) {
 }
 func (a *App) dispatchAuthenticated(w http.ResponseWriter, r *http.Request, actor Record) {
 	switch {
+	case r.Method == "GET" && r.URL.Path == "/api/access-check":
+		a.accessCheck(w, r, actor)
+	case (r.Method == "GET" || r.Method == "HEAD") && strings.HasPrefix(r.URL.Path, "/api/clients/download/"):
+		a.clientDownload(w, r, actor)
 	case strings.HasPrefix(r.URL.Path, "/api/support/"):
 		a.supportAPI(w, r, actor)
 	case strings.HasPrefix(r.URL.Path, "/api/commerce/"):

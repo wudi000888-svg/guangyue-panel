@@ -1,6 +1,11 @@
 import type { IPQuality } from "./quality";
 import type { SubscriptionNode } from "./NodeSubscriptionCards.vue";
-import type { SiteSettings } from "./PanelSettings.vue";
+export type SiteSettings = {
+  panel_name: string; organization: string; default_locale: string; support_email: string;
+  login_notice: string; registration_enabled: boolean; registration_captcha: boolean; revision: string;
+  sidebar_admin: string[]; sidebar_member: string[]; client_download_relay: boolean;
+  country_access_enabled: boolean; country_access_blocked: string[]; country_access_reason: string;
+};
 
 export type QuotaMeter = {period_id:string;start:number;end:number;pending_reset:boolean;upload:number;download:number;base_upload:number;base_download:number;raw_base_upload:number;raw_base_download:number};
 export type Entitlement = {plan_id:string;version:number;name:string;group_ids:string[];node_ids:string[];cycle:string;timezone:string;assigned_at:number;revision:string};

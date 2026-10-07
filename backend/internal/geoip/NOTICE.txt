@@ -1,0 +1,18 @@
+IP Geolocation by DB-IP
+DB-IP.com — IP to Country Lite, October 2026
+
+Dataset source: https://db-ip.com/db/download/ip-to-country-lite
+Pinned download: https://download.db-ip.com/free/dbip-country-lite-2026-10.mmdb.gz
+License: Creative Commons Attribution 4.0 International (CC-BY-4.0)
+License URL: https://creativecommons.org/licenses/by/4.0/
+The complete license, including its disclaimer of warranties, is in LICENSE.txt
+in the source directory, or licenses/DB-IP-COUNTRY-LICENSE.txt in an installation.
+
+The original MMDB is decompressed from the upstream gzip and embedded in the
+application without modifying its records. No DB-IP endorsement is implied.
+This dataset keeps its own CC-BY-4.0 license; the panel's LGPL does not replace it.
+
+Original gzip SHA256:
+4cd44536ddfd40fec7eca94a233f7d19f38d470e6522e653cb8d27001f5fe177
+Embedded country.mmdb SHA256:
+dbd70ccfa2a13627eaf4913d19920a1a229f1b3c5439ac01c509995b6364202a

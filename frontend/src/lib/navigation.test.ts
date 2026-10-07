@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { groupNavigation, searchNavigation } from './navigation';
+import { groupNavigation, searchNavigation, sidebarNavigation } from './navigation';
 
 describe('shell navigation', () => {
+  it('hides optional shortcuts without losing search or directory entries', () => {
+    const permitted = ['subscription', 'shop', 'orders', 'wallet', 'clients', 'settings'].map(id => ({id, label:id}));
+    expect(sidebarNavigation(permitted, undefined, false).map(item => item.id)).toEqual(['subscription', 'shop', 'orders', 'settings']);
+    expect(sidebarNavigation(permitted, [], false).map(item => item.id)).toEqual(['settings']);
+    expect(sidebarNavigation(permitted, ['wallet', 'nodes', 'settings', 'wallet'], false).map(item => item.id)).toEqual(['wallet', 'settings']);
+    expect(groupNavigation(permitted, false).flatMap(group => group.items)).toHaveLength(6);
+    expect(searchNavigation(permitted.map(item => ({...item,group:'',description:''})), 'clients')[0]?.id).toBe('clients');
+  });
   it('keeps every permitted route once, including future routes, without adding permissions', () => {
     const items = ['subscription', 'shop', 'nodes', 'fleet', 'future-feature'].map(id => ({ id, label: id }));
     for (const administrator of [true, false]) {

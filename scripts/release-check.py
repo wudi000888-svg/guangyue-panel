@@ -10,6 +10,8 @@ excluded = {'.git', '.cache', 'node_modules', 'build', 'dist', '__pycache__'}
 paths = [p for p in root.rglob('*') if p.is_file() and not excluded.intersection(p.relative_to(root).parts)]
 errors = []
 version = (root / 'VERSION').read_text().strip()
+if (root / 'frontend/src/data/clients.json').read_bytes() != (root / 'backend/internal/clientcatalog/clients.json').read_bytes():
+    errors.append('embedded client catalog is stale; run scripts/sync-client-catalog.py')
 if not re.fullmatch(r'\d+\.\d+\.\d+', version):
     errors.append('invalid VERSION')
 if 'const version = "' + version + '"' not in (root / 'backend/internal/controlplane/config.go').read_text():

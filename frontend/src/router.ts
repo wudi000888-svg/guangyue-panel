@@ -30,7 +30,7 @@ export const router = createRouter({
     { path: '/tickets', component: () => import('./pages/TicketsPage.vue') },
     { path: '/redeem-codes', component: () => import('./pages/RedeemCodesPage.vue'), meta: { owner: true } },
     { path: '/messages', component: () => import('./pages/MessagesPage.vue') },
-    { path: '/settings', component: () => import('./pages/SettingsPage.vue'), meta: { owner: true } },
+    { path: '/settings', component: () => import('./pages/SettingsPage.vue') },
     { path: '/fleet', component: () => import('./pages/BusinessPage.vue'), meta: { owner: true, pro: true } },
     { path: '/fleet/independent', redirect: '/fleet', meta: { owner: true, pro: true } },
     { path: '/pairing', component: () => import('./pages/FleetPage.vue'), meta: { owner: true } },

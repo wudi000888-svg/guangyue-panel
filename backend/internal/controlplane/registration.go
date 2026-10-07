@@ -4,19 +4,31 @@ import (
 	"database/sql"
 	"net"
 	"net/http"
+	"net/netip"
+	"strings"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
 )
 
 func requestIP(r *http.Request) string {
-	ip, _, _ := net.SplitHostPort(r.RemoteAddr)
-	if ip == "127.0.0.1" || ip == "::1" {
-		if x := r.Header.Get("X-Real-IP"); net.ParseIP(x) != nil {
-			ip = x
+	ip, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		ip = r.RemoteAddr
+	}
+	addr, err := netip.ParseAddr(ip)
+	if err != nil {
+		return ""
+	}
+	addr = addr.Unmap()
+	// Only the local Nginx hop may supply a real address. Arbitrary clients
+	// cannot evade country rules or registration throttling with headers.
+	if addr.IsLoopback() {
+		if real, err := netip.ParseAddr(strings.TrimSpace(r.Header.Get("X-Real-IP"))); err == nil {
+			return real.Unmap().String()
 		}
 	}
-	return ip
+	return addr.String()
 }
 
 func (a *App) register(w http.ResponseWriter, r *http.Request) {

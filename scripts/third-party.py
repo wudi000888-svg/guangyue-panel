@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Collect locked dependency license texts and a deterministic SPDX 2.3 inventory."""
+"""Collect locked dependency/data licenses and a deterministic SPDX 2.3 inventory."""
 import datetime
 import hashlib
 import json
@@ -70,6 +70,21 @@ for name, value in lock['packages'].items():
     if not isinstance(license_id, str):
         license_id = 'NOASSERTION'
     collect(meta['name'], value['version'], path, 'npm', license_id)
+geoip = root / 'backend/internal/geoip'
+dataset = json.loads((geoip / 'source.json').read_text())
+for name, field in [('country.mmdb', 'sha256_mmdb'), ('LICENSE.txt', 'sha256_license')]:
+    if hashlib.sha256((geoip / name).read_bytes()).hexdigest() != dataset[field]:
+        raise SystemExit('DB-IP dataset or license checksum mismatch: ' + name)
+collect('db-ip-country-lite', dataset['release'], geoip, 'generic', 'CC-BY-4.0')
+packages['generic:db-ip-country-lite@' + dataset['release']].update(
+    downloadLocation=dataset['download'],
+    supplier='Organization: DB-IP.com',
+    originator='Organization: DB-IP.com',
+    sourceInfo=dataset['attribution'] + '; ' + dataset['source'] + '; ' + dataset['modifications'],
+    checksums=[{'algorithm': 'SHA256', 'checksumValue': dataset['sha256_gzip']}],
+)
+for source, destination in [('LICENSE.txt', 'DB-IP-COUNTRY-LICENSE.txt'), ('NOTICE.txt', 'DB-IP-COUNTRY-NOTICE.txt'), ('source.json', 'DB-IP-COUNTRY-SOURCE.json')]:
+    (out / destination).write_bytes((geoip / source).read_bytes())
 (out / 'DEPENDENCY-LICENSES.txt').write_text('Generated from locked runtime dependencies. SPDX NOASSERTION means not automatically classified.\n' + '\n'.join(texts))
 version = (root / 'VERSION').read_text().strip()
 try:

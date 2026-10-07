@@ -1,0 +1,15 @@
+{
+  "source": "https://db-ip.com/db/download/ip-to-country-lite",
+  "download": "https://download.db-ip.com/free/dbip-country-lite-2026-10.mmdb.gz",
+  "release": "2026-10",
+  "license": "CC-BY-4.0",
+  "sha256_gzip": "4cd44536ddfd40fec7eca94a233f7d19f38d470e6522e653cb8d27001f5fe177",
+  "sha256_mmdb": "dbd70ccfa2a13627eaf4913d19920a1a229f1b3c5439ac01c509995b6364202a",
+  "bytes_mmdb": 8348509,
+  "attribution": "IP Geolocation by DB-IP",
+  "publisher": "DB-IP.com",
+  "license_url": "https://creativecommons.org/licenses/by/4.0/",
+  "license_text_url": "https://creativecommons.org/licenses/by/4.0/legalcode.txt",
+  "sha256_license": "9ba9550ad48438d0836ddab3da480b3b69ffa0aac7b7878b5a0039e7ab429411",
+  "modifications": "Original MMDB decompressed from the pinned upstream gzip and embedded without modifying records."
+}

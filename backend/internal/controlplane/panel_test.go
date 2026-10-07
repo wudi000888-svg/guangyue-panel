@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -48,7 +49,7 @@ func TestPanelSettingsPermissionsPersistenceAndRevision(t *testing.T) {
 	v.SupportEmail = "support@example.com"
 	v.LoginNotice = "Maintenance\nAccess by invitation"
 	saved := decoded[SiteSettings](t, req(t, a, owner, "PUT", "/api/settings", v), 200)
-	if saved.Revision == "" || a.store.siteSettings() != saved || a.store.meta("desired_generation") != before || a.status != "" {
+	if saved.Revision == "" || !reflect.DeepEqual(a.store.siteSettings(), saved) || a.store.meta("desired_generation") != before || a.status != "" {
 		t.Fatal("settings persistence or protocol side effect")
 	}
 	if req(t, a, owner, "PUT", "/api/settings", v).Code != 409 {
@@ -63,7 +64,7 @@ func TestPanelSettingsPermissionsPersistenceAndRevision(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer second.db.Close()
-	if second.siteSettings() != saved {
+	if !reflect.DeepEqual(second.siteSettings(), saved) {
 		t.Fatal("settings do not survive reopening")
 	}
 }

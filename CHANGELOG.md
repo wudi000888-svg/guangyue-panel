@@ -1,5 +1,23 @@
 # 变更记录
 
+## 0.34.0 — 精简导航、用户中心与访问控制
+
+- 管理员和成员侧边栏默认只展示常用入口，可分别配置；其余功能集中到设置中的“更多功能”，保留路由、全局搜索与原有权限。
+- 成员用户中心集中展示套餐、用量、有效期及订单、钱包、客户端下载和支持入口；新增个人设置，统一管理语言、主题与密码。
+- 客户端中心补充本地图标及来源声明，按操作系统和 CPU 架构选择安装包；连接向导保留客户端与设备选择，减少下载错包和配置步骤。
+- 新增默认关闭的 GitHub 客户端下载中继，支持固定官方安装包、限额缓存和并发控制，并保留官方下载入口。
+- 新增默认关闭的国家/地区访问限制，使用本地 DB-IP 数据库，支持自定义提示、当前位置预览和禁止自身地区前的确认；远程子站独立配置，订阅、节点流量和机器接口不受影响。
+- 修复更新弹窗展开“选择版本与回退”后超出屏幕的问题，支持内部滚动、键盘导航、手机可视区域变化及关闭后的焦点恢复。
+
+**English**
+
+- Keep administrator and member sidebars concise and configurable. Other features remain available in Settings → More features, global search, and their existing routes, with permissions preserved.
+- Bring plans, usage, expiry, orders, wallet, downloads, and support into the member center. Add personal settings for language, appearance, and password changes.
+- Add local client icons with attribution and explicit operating-system/CPU package choices. Carry device and client selections into the connection guide.
+- Add an opt-in GitHub installer relay with a fixed official catalog, bounded caching, concurrency limits, and direct official download alternatives.
+- Add opt-in country/region access rules backed by local DB-IP data, custom denial messages, location previews, and confirmation before blocking the administrator's current region. Child sites configure rules independently; subscriptions, node traffic, and machine integrations continue.
+- Keep the expanded version and rollback dialog inside the visible screen, with internal scrolling, keyboard access, mobile viewport handling, and restored focus on close.
+
 ## 0.33.0 — 月庭：完整 Penpot 设计与前端重构
 
 - 通过本机 Penpot 完成 63 个原生可编辑画板（31 桌面、31 手机、1 基础体系），包含颜色 Token、组件和交互流程；设计源与素材许可随源码提供。
