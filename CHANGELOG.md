@@ -1,5 +1,19 @@
 # 变更记录
 
+## 0.34.1 — 侧边栏双向拖拽与即时自动保存
+
+- 管理员可在“更多功能”和管理员侧边栏之间双向拖动入口，移动后立即显示并自动保存；手机与键盘可通过“放入侧边栏”“移到更多功能”按钮完成相同操作。
+- 侧边栏配置中的勾选、取消及恢复默认也自动保存，管理员可分别配置本站管理员与成员入口；设置入口固定保留，成员不开放个人拖拽配置。
+- 显示保存进度与确认结果；请求失败后回读服务器状态，未确认的改动恢复到已确认入口并提供重试，避免将响应丢失误判为保存失败。
+- 专用导航接口原子更新所选角色，管理员与成员配置并发保存互不覆盖；远程子站配置按站点隔离。导航操作不提交其他设置草稿，手动保存仍检查非导航字段的并发冲突。
+
+**English**
+
+- Administrators can drag shortcuts between More features and the administrator sidebar, with immediate display updates and automatic saving. Add/remove buttons provide the same actions on mobile and with a keyboard.
+- Sidebar checkboxes and reset-to-default actions also save automatically. Administrators configure site-wide administrator and member shortcuts separately; Settings stays pinned, and members cannot customize their own sidebar by dragging.
+- Show saving and confirmation states. After a failed request, read back the server state, restore confirmed shortcuts when necessary, and offer retry without treating a lost response as proof that saving failed.
+- A dedicated navigation API atomically updates one role without overwriting concurrent changes to the other. Remote child-site settings stay isolated. Navigation changes do not submit other settings drafts; explicit saves still detect conflicts in non-navigation fields.
+
 ## 0.34.0 — 精简导航、用户中心与访问控制
 
 - 管理员和成员侧边栏默认只展示常用入口，可分别配置；其余功能集中到设置中的“更多功能”，保留路由、全局搜索与原有权限。

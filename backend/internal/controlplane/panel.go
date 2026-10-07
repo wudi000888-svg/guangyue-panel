@@ -33,13 +33,16 @@ func (s *Store) siteSettings() SiteSettings {
 	return v
 }
 func (s *Store) readSiteSettings() (SiteSettings, error) {
-	v := SiteSettings{PanelName: "广月面板", Organization: "跨境电商工作区", DefaultLocale: "zh-CN"}
 	raw, err := s.readMeta("site_settings")
 	if err != nil {
-		return v, err
+		return SiteSettings{}, err
 	}
+	return s.parseSiteSettings(raw)
+}
+func (s *Store) parseSiteSettings(raw string) (SiteSettings, error) {
+	v := SiteSettings{PanelName: "广月面板", Organization: "跨境电商工作区", DefaultLocale: "zh-CN"}
 	if raw != "" {
-		if err = json.Unmarshal([]byte(raw), &v); err != nil {
+		if err := json.Unmarshal([]byte(raw), &v); err != nil {
 			return v, err
 		}
 	}
@@ -64,7 +67,12 @@ func (a *App) siteInfo(w http.ResponseWriter, r *http.Request) {
 }
 func (a *App) panelSettings(w http.ResponseWriter, r *http.Request, actor Record) {
 	if r.Method == "GET" {
-		jsonResponse(w, 200, a.store.siteSettings())
+		v, err := a.store.readSiteSettings()
+		if err != nil {
+			failure(w, 500, "读取系统设置失败")
+			return
+		}
+		jsonResponse(w, 200, v)
 		return
 	}
 	var v SiteSettings
@@ -93,14 +101,28 @@ func (a *App) panelSettings(w http.ResponseWriter, r *http.Request, actor Record
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if a.store.siteSettings().Revision != v.Revision {
+	raw, err := a.store.readMeta("site_settings")
+	if err != nil {
+		failure(w, 500, "读取系统设置失败")
+		return
+	}
+	current, err := a.store.parseSiteSettings(raw)
+	if err != nil {
+		failure(w, 500, "读取系统设置失败")
+		return
+	}
+	if current.Revision != v.Revision {
 		failure(w, 409, "设置已被其他管理员修改，请重新加载")
 		return
 	}
 	v.Revision = randomToken(12)
-	b, _ := json.Marshal(v)
-	if err := a.store.setMeta("site_settings", string(b)); err != nil {
+	saved, err := a.store.compareAndSwapSiteSettings(raw, v)
+	if err != nil {
 		failure(w, 500, "保存系统设置失败")
+		return
+	}
+	if !saved {
+		failure(w, 409, "设置已被其他管理员修改，请重新加载")
 		return
 	}
 	a.store.audit(actor.Username, "update-settings", "panel")

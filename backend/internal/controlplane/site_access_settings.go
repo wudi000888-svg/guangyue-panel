@@ -21,25 +21,23 @@ func normalizeSidebar(items, defaults, permitted []string) ([]string, error) {
 		if !slices.Contains(permitted, id) {
 			return nil, errors.New("侧边栏包含无效的功能入口")
 		}
-		if !slices.Contains(out, id) {
+		if id != "settings" && !slices.Contains(out, id) {
 			out = append(out, id)
 		}
 	}
-	if !slices.Contains(out, "settings") {
-		out = append(out, "settings")
-	}
+	out = append(out, "settings")
 	return out, nil
 }
 
 func validateSiteAccessSettings(v *SiteSettings) error {
-	admin := []string{"overview", "monitor", "users", "plans", "shop", "subscription", "wallet", "orders", "redeem-codes", "nodes", "subsite-nodes", "node-groups", "ips", "public", "public-nodes", "public-subscription", "fleet", "pairing", "tickets", "messages", "clients", "tasks", "system", "settings"}
-	member := []string{"overview", "subscription", "shop", "wallet", "orders", "tickets", "messages", "clients", "settings"}
+	adminDefaults, admin, _ := sidebarDefinition("admin")
+	memberDefaults, member, _ := sidebarDefinition("member")
 	var err error
-	v.SidebarAdmin, err = normalizeSidebar(v.SidebarAdmin, []string{"overview", "users", "plans", "nodes", "fleet", "settings"}, admin)
+	v.SidebarAdmin, err = normalizeSidebar(v.SidebarAdmin, adminDefaults, admin)
 	if err != nil {
 		return err
 	}
-	v.SidebarMember, err = normalizeSidebar(v.SidebarMember, []string{"subscription", "shop", "orders", "settings"}, member)
+	v.SidebarMember, err = normalizeSidebar(v.SidebarMember, memberDefaults, member)
 	if err != nil {
 		return err
 	}
