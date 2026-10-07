@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import PageHeading from "../components/PageHeading.vue";
+import "../styles/admin-ui.css";
 import {computed,nextTick,ref,watch} from 'vue';
 import {Building2,CreditCard,Settings2,SlidersHorizontal,ChevronRight,ShieldCheck} from 'lucide-vue-next';
 import {usePanelContext} from '../composables/panelContext';
@@ -19,8 +21,9 @@ watch(selectedSite,()=>{section.value='site';visited.value=new Set(['site']);});
 async function tabKey(event:KeyboardEvent){const keys=['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'];if(!keys.includes(event.key))return;event.preventDefault();const items=tabs.value,index=items.findIndex(v=>v.id===section.value);choose(items[event.key==='Home'?0:event.key==='End'?items.length-1:(index+(['ArrowRight','ArrowDown'].includes(event.key)?1:-1)+items.length)%items.length].id);const parent=(event.currentTarget as HTMLElement).parentElement;await nextTick();parent?.querySelector<HTMLButtonElement>('[aria-selected="true"]')?.focus();}
 </script>
 <template>
-<section v-if="state" class="settings-hub">
- <header class="page-heading"><div><div class="eyebrow">PREFERENCES</div><h1>{{t('系统设置')}}</h1><p class="section-subtitle">{{t('让每项设置各归其位，专注当前需要。')}}</p></div><span class="settings-context"><Settings2 :size="16"/>{{t(selectedSite?'子站设置':'主站设置')}}</span></header>
+<section v-if="state" class="settings-hub admin-page">
+ <PageHeading :title="t('系统设置')" :description="t('按任务集中配置站点、交易和运行策略。')" eyebrow="SETTINGS"><template #actions><span class="settings-context"><Settings2 :size="16"/>{{t(selectedSite?'子站设置':'主站设置')}}</span></template></PageHeading>
+ <div class="admin-context-strip"><ShieldCheck :size="18"/><div><strong>{{t(selectedSite?'正在配置所选子站':'正在配置当前主站')}}</strong><p>{{t('每个分区独立保存。切换分类会保留草稿，离开页面前请完成保存。')}}</p></div></div>
  <div class="settings-workspace">
   <aside class="settings-sidebar"><nav class="settings-tabs" :style="{'--settings-tab-count':tabs.length}" role="tablist" :aria-label="t('设置分类')"><button v-for="tab in tabs" :key="tab.id" :id="'settings-tab-'+tab.id" role="tab" :aria-selected="section===tab.id" :aria-controls="'settings-panel-'+tab.id" :tabindex="section===tab.id?0:-1" @click="choose(tab.id)" @keydown="tabKey"><span class="settings-tab-icon"><component :is="tab.icon" :size="19"/></span><span class="settings-tab-label"><strong>{{tab.label}}</strong><small>{{tab.description}}</small></span><ChevronRight :size="15" class="settings-tab-arrow"/></button></nav><p class="settings-guidance"><ShieldCheck :size="16"/><span>{{t('切换分类会保留未保存的修改，请在各项设置中保存。')}}</span></p></aside>
   <div class="settings-content">

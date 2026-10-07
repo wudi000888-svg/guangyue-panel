@@ -1,0 +1,782 @@
+{
+  "file": "docs/designs/penpot/guangyue-mooncourt-v0.33.0.penpot",
+  "sha256": "d935115ccdb9c04087a3738d7e89ddba4841d2d215f782f4d04e4feb8f141e7c",
+  "bytes": 9529848,
+  "auditTimeUTC": "2026-10-07T10:30:54.235726+00:00",
+  "scope": "Read-only structural audit of native Penpot ZIP JSON; does not replace rendered visual review or interactive preview.",
+  "summary": {
+    "pages": 5,
+    "topLevelBoards": 63,
+    "desktopBoards": 31,
+    "mobileBoards": 31,
+    "foundationBoards": 1,
+    "interactions": 201,
+    "invalidInteractionTargets": 0,
+    "crossPlatformInteractions": 0,
+    "parentChildInteractionConflicts": 0,
+    "crossPageInteractions": 0,
+    "samePageBoardOverlaps": 0,
+    "minimumTextSize": 12.0,
+    "textRunsBelow12px": 0,
+    "flows": 5,
+    "invalidFlowTargets": 0,
+    "crossPageFlowStarts": 0,
+    "crossPlatformFlowStarts": 0,
+    "duplicateFlowStartingBoards": 0
+  },
+  "actionTypes": {
+    "navigate": 201
+  },
+  "textSizes": {
+    "12.0": 255,
+    "13.0": 582,
+    "14.0": 322,
+    "15.0": 8,
+    "16.0": 49,
+    "17.0": 102,
+    "18.0": 48,
+    "19.0": 32,
+    "20.0": 37,
+    "23.0": 4,
+    "24.0": 3,
+    "25.0": 9,
+    "26.0": 29,
+    "27.0": 1,
+    "28.0": 30,
+    "29.0": 2,
+    "30.0": 4,
+    "32.0": 1,
+    "36.0": 6,
+    "38.0": 2,
+    "40.0": 2
+  },
+  "invalidInteractionTargets": [],
+  "crossPlatformInteractions": [],
+  "parentChildInteractionConflicts": [],
+  "samePageBoardOverlaps": [],
+  "textRunsBelow12px": [],
+  "flows": [
+    {
+      "pageId": "d21335f6-af8f-8016-8008-c0b266189848",
+      "pageName": "02 · 桌面端完整流程",
+      "flowId": "d21335f6-af8f-8016-8008-c0bdb0cb0efb",
+      "flowName": "管理员 · 资源到套餐",
+      "startingFrame": "d21335f6-af8f-8016-8008-c0b266ae060c",
+      "target": {
+        "id": "d21335f6-af8f-8016-8008-c0b266ae060c",
+        "name": "Desktop / 运营工作台",
+        "type": "frame",
+        "pageId": "d21335f6-af8f-8016-8008-c0b266189848",
+        "x": 3080,
+        "y": 0,
+        "width": 1440,
+        "height": 1040
+      }
+    },
+    {
+      "pageId": "d21335f6-af8f-8016-8008-c0b266189848",
+      "pageName": "02 · 桌面端完整流程",
+      "flowId": "d21335f6-af8f-8016-8008-c0bdb0cc00e3",
+      "flowName": "成员 · 购买到连接",
+      "startingFrame": "d21335f6-af8f-8016-8008-c0b300cb6cd3",
+      "target": {
+        "id": "d21335f6-af8f-8016-8008-c0b300cb6cd3",
+        "name": "Desktop / 我的服务",
+        "type": "frame",
+        "pageId": "d21335f6-af8f-8016-8008-c0b266189848",
+        "x": 1540,
+        "y": 2400,
+        "width": 1440,
+        "height": 1040
+      }
+    },
+    {
+      "pageId": "d21335f6-af8f-8016-8008-c0b4cf112f6e",
+      "pageName": "03 · 手机端完整流程",
+      "flowId": "d21335f6-af8f-8016-8008-c0bdb1f76086",
+      "flowName": "手机 · 套餐到连接",
+      "startingFrame": "d21335f6-af8f-8016-8008-c0b51f18a969",
+      "target": {
+        "id": "d21335f6-af8f-8016-8008-c0b51f18a969",
+        "name": "Mobile / 我的服务",
+        "type": "frame",
+        "pageId": "d21335f6-af8f-8016-8008-c0b4cf112f6e",
+        "x": 490,
+        "y": 2480,
+        "width": 390,
+        "height": 844
+      }
+    },
+    {
+      "pageId": "d21335f6-af8f-8016-8008-c0b69281992d",
+      "pageName": "04 · 桌面端资源与管理",
+      "flowId": "d21335f6-af8f-8016-8008-c0bdb5348250",
+      "flowName": "桌面 · 管理工作区",
+      "startingFrame": "d21335f6-af8f-8016-8008-c0b6a22ebb33",
+      "target": {
+        "id": "d21335f6-af8f-8016-8008-c0b6a22ebb33",
+        "name": "Desktop / 选择与挂载节点",
+        "type": "frame",
+        "pageId": "d21335f6-af8f-8016-8008-c0b69281992d",
+        "x": 0,
+        "y": 4960,
+        "width": 1440,
+        "height": 1040
+      }
+    },
+    {
+      "pageId": "d21335f6-af8f-8016-8008-c0b6af07a3d0",
+      "pageName": "05 · 手机端资源与管理",
+      "flowId": "d21335f6-af8f-8016-8008-c0bdb5e317b8",
+      "flowName": "手机 · 管理工作区",
+      "startingFrame": "d21335f6-af8f-8016-8008-c0b6b3680d76",
+      "target": {
+        "id": "d21335f6-af8f-8016-8008-c0b6b3680d76",
+        "name": "Mobile / 选择与挂载节点",
+        "type": "frame",
+        "pageId": "d21335f6-af8f-8016-8008-c0b6af07a3d0",
+        "x": 0,
+        "y": 4960,
+        "width": 390,
+        "height": 980
+      }
+    }
+  ],
+  "invalidFlowTargets": [],
+  "crossPageFlowStarts": [],
+  "crossPlatformFlowStarts": [],
+  "duplicateFlowStartingBoards": [],
+  "topLevelBoards": [
+    {
+      "id": "d21335f6-af8f-8016-8008-c0952932c335",
+      "name": "月庭 / Foundations",
+      "type": "frame",
+      "pageId": "d268a62b-6ba2-801d-8008-c0908578f761",
+      "x": 0,
+      "y": 0,
+      "width": 1440,
+      "height": 1080
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b300cb6cd3",
+      "name": "Desktop / 我的服务",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b266189848",
+      "x": 1540,
+      "y": 2400,
+      "width": 1440,
+      "height": 1040
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b47c7aa4b5",
+      "name": "Desktop / 开始连接",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b266189848",
+      "x": 3080,
+      "y": 2400,
+      "width": 1440,
+      "height": 1040
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b2662273d6",
+      "name": "Desktop / 登录",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b266189848",
+      "x": 0,
+      "y": 0,
+      "width": 1440,
+      "height": 1040
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b4a23031be",
+      "name": "Desktop / 工单帮助",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b266189848",
+      "x": 0,
+      "y": 4800,
+      "width": 1440,
+      "height": 1040
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b47ed435b8",
+      "name": "Desktop / 确认订单",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b266189848",
+      "x": 1540,
+      "y": 3600,
+      "width": 1440,
+      "height": 1040
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b266684cff",
+      "name": "Desktop / 注册",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b266189848",
+      "x": 1540,
+      "y": 0,
+      "width": 1440,
+      "height": 1040
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b2ffed0bfd",
+      "name": "Desktop / 系统设置",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b266189848",
+      "x": 0,
+      "y": 2400,
+      "width": 1440,
+      "height": 1040
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b2ff010304",
+      "name": "Desktop / 本地节点",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b266189848",
+      "x": 3080,
+      "y": 1200,
+      "width": 1440,
+      "height": 1040
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b2fdd5a7e5",
+      "name": "Desktop / 套餐工作区",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b266189848",
+      "x": 1540,
+      "y": 1200,
+      "width": 1440,
+      "height": 1040
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b2675dd38b",
+      "name": "Desktop / 子站工作区",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b266189848",
+      "x": 0,
+      "y": 1200,
+      "width": 1440,
+      "height": 1040
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b4a392506a",
+      "name": "Desktop / 实时监控",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b266189848",
+      "x": 1540,
+      "y": 4800,
+      "width": 1440,
+      "height": 1040
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b47feca34a",
+      "name": "Desktop / 我的钱包",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b266189848",
+      "x": 3080,
+      "y": 3600,
+      "width": 1440,
+      "height": 1040
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b47dc5ba0a",
+      "name": "Desktop / 选购套餐",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b266189848",
+      "x": 0,
+      "y": 3600,
+      "width": 1440,
+      "height": 1040
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b266ae060c",
+      "name": "Desktop / 运营工作台",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b266189848",
+      "x": 3080,
+      "y": 0,
+      "width": 1440,
+      "height": 1040
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b5bdf6a854",
+      "name": "Mobile / 开始连接",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b4cf112f6e",
+      "x": 980,
+      "y": 2480,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b657f39cd7",
+      "name": "Mobile / 实时监控",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b4cf112f6e",
+      "x": 490,
+      "y": 4960,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b50c291b97",
+      "name": "Mobile / 注册",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b4cf112f6e",
+      "x": 490,
+      "y": 0,
+      "width": 390,
+      "height": 980.0000000000001
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b50ca9f536",
+      "name": "Mobile / 子站工作区",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b4cf112f6e",
+      "x": 0,
+      "y": 1240,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b5bf3247df",
+      "name": "Mobile / 确认订单",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b4cf112f6e",
+      "x": 490,
+      "y": 3720,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b51e65b378",
+      "name": "Mobile / 本地节点",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b4cf112f6e",
+      "x": 980,
+      "y": 1240,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b50beccef8",
+      "name": "Mobile / 登录",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b4cf112f6e",
+      "x": 0,
+      "y": 0,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b5bea8bf21",
+      "name": "Mobile / 选购套餐",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b4cf112f6e",
+      "x": 0,
+      "y": 3720,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b51dfdc703",
+      "name": "Mobile / 套餐工作区",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b4cf112f6e",
+      "x": 490,
+      "y": 1240,
+      "width": 390,
+      "height": 1080
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b5bfc0706c",
+      "name": "Mobile / 我的钱包",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b4cf112f6e",
+      "x": 980,
+      "y": 3720,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b50c705c4f",
+      "name": "Mobile / 运营工作台",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b4cf112f6e",
+      "x": 980,
+      "y": 0,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b51ebf8e6e",
+      "name": "Mobile / 系统设置",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b4cf112f6e",
+      "x": 0,
+      "y": 2480,
+      "width": 390,
+      "height": 1080
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b51f18a969",
+      "name": "Mobile / 我的服务",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b4cf112f6e",
+      "x": 490,
+      "y": 2480,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b65728fa08",
+      "name": "Mobile / 工单帮助",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b4cf112f6e",
+      "x": 0,
+      "y": 4960,
+      "width": 390,
+      "height": 844
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b69901b776",
+      "name": "Desktop / 兑换码管理",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b69281992d",
+      "x": 1540,
+      "y": 2480,
+      "width": 1440,
+      "height": 1040
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b6a4893af5",
+      "name": "Desktop / 子站资源预算",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b69281992d",
+      "x": 1540,
+      "y": 4960,
+      "width": 1440,
+      "height": 1040
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b6a22ebb33",
+      "name": "Desktop / 选择与挂载节点",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b69281992d",
+      "x": 0,
+      "y": 4960,
+      "width": 1440,
+      "height": 1040
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b69f8a0b50",
+      "name": "Desktop / 配对令牌",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b69281992d",
+      "x": 3080,
+      "y": 3720,
+      "width": 1440,
+      "height": 1040
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b6a8ec417f",
+      "name": "Desktop / 订阅管理",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b69281992d",
+      "x": 0,
+      "y": 6200,
+      "width": 1440,
+      "height": 1040
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b696d111dd",
+      "name": "Desktop / 套餐上架",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b69281992d",
+      "x": 3080,
+      "y": 1240,
+      "width": 1440,
+      "height": 1040
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b6ac22b1b9",
+      "name": "Desktop / 线路配置",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b69281992d",
+      "x": 1540,
+      "y": 6200,
+      "width": 1440,
+      "height": 1040
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b693422924",
+      "name": "Desktop / 节点组",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b69281992d",
+      "x": 1540,
+      "y": 0,
+      "width": 1440,
+      "height": 1040
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b69acc5f83",
+      "name": "Desktop / 站内信",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b69281992d",
+      "x": 3080,
+      "y": 2480,
+      "width": 1440,
+      "height": 1040
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b692a20fa3",
+      "name": "Desktop / 成员管理",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b69281992d",
+      "x": 0,
+      "y": 0,
+      "width": 1440,
+      "height": 1040
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b695cae741",
+      "name": "Desktop / 订阅来源",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b69281992d",
+      "x": 1540,
+      "y": 1240,
+      "width": 1440,
+      "height": 1040
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b693d72b01",
+      "name": "Desktop / 本地 IP 池",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b69281992d",
+      "x": 3080,
+      "y": 0,
+      "width": 1440,
+      "height": 1040
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b69de3878e",
+      "name": "Desktop / 运维状态",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b69281992d",
+      "x": 1540,
+      "y": 3720,
+      "width": 1440,
+      "height": 1040
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b6947a48cc",
+      "name": "Desktop / 公共资源",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b69281992d",
+      "x": 0,
+      "y": 1240,
+      "width": 1440,
+      "height": 1040
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b6a6b4040d",
+      "name": "Desktop / 节点质量报告",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b69281992d",
+      "x": 3080,
+      "y": 4960,
+      "width": 1440,
+      "height": 1040
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b69c58ba6b",
+      "name": "Desktop / 任务中心",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b69281992d",
+      "x": 0,
+      "y": 3720,
+      "width": 1440,
+      "height": 1040
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b697e581c9",
+      "name": "Desktop / 成员实际权益",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b69281992d",
+      "x": 0,
+      "y": 2480,
+      "width": 1440,
+      "height": 1040
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b6b3680d76",
+      "name": "Mobile / 选择与挂载节点",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b6af07a3d0",
+      "x": 0,
+      "y": 4960,
+      "width": 390,
+      "height": 980
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b6b1f4d314",
+      "name": "Mobile / 任务中心",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b6af07a3d0",
+      "x": 0,
+      "y": 3720,
+      "width": 390,
+      "height": 980
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b6b037f453",
+      "name": "Mobile / 订阅来源",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b6af07a3d0",
+      "x": 490,
+      "y": 1240,
+      "width": 390,
+      "height": 980
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b6b59ca673",
+      "name": "Mobile / 线路配置",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b6af07a3d0",
+      "x": 490,
+      "y": 6200,
+      "width": 390,
+      "height": 980
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b6af21e351",
+      "name": "Mobile / 成员管理",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b6af07a3d0",
+      "x": 0,
+      "y": 0,
+      "width": 390,
+      "height": 980.0000000000001
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b6b19c471e",
+      "name": "Mobile / 站内信",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b6af07a3d0",
+      "x": 980,
+      "y": 2480,
+      "width": 390,
+      "height": 980
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b6afcb1d5f",
+      "name": "Mobile / 公共资源",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b6af07a3d0",
+      "x": 0,
+      "y": 1240,
+      "width": 390,
+      "height": 980
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b6af591f98",
+      "name": "Mobile / 节点组",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b6af07a3d0",
+      "x": 490,
+      "y": 0,
+      "width": 390,
+      "height": 980.0000000000001
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b6b0c76346",
+      "name": "Mobile / 成员实际权益",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b6af07a3d0",
+      "x": 0,
+      "y": 2480,
+      "width": 390,
+      "height": 980
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b6b43feb87",
+      "name": "Mobile / 节点质量报告",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b6af07a3d0",
+      "x": 980,
+      "y": 4960,
+      "width": 390,
+      "height": 980
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b6b251c3a7",
+      "name": "Mobile / 运维状态",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b6af07a3d0",
+      "x": 490,
+      "y": 3720,
+      "width": 390,
+      "height": 980
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b6b2b07d25",
+      "name": "Mobile / 配对令牌",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b6af07a3d0",
+      "x": 980,
+      "y": 3720,
+      "width": 390,
+      "height": 980
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b6b0803d42",
+      "name": "Mobile / 套餐上架",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b6af07a3d0",
+      "x": 980,
+      "y": 1240,
+      "width": 390,
+      "height": 980
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b6af91fca3",
+      "name": "Mobile / 本地 IP 池",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b6af07a3d0",
+      "x": 980,
+      "y": 0,
+      "width": 390,
+      "height": 980.0000000000001
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b6b110bbe1",
+      "name": "Mobile / 兑换码管理",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b6af07a3d0",
+      "x": 490,
+      "y": 2480,
+      "width": 390,
+      "height": 980
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b6b3d4168e",
+      "name": "Mobile / 子站资源预算",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b6af07a3d0",
+      "x": 490,
+      "y": 4960,
+      "width": 390,
+      "height": 980
+    },
+    {
+      "id": "d21335f6-af8f-8016-8008-c0b6b4b0358f",
+      "name": "Mobile / 订阅管理",
+      "type": "frame",
+      "pageId": "d21335f6-af8f-8016-8008-c0b6af07a3d0",
+      "x": 0,
+      "y": 6200,
+      "width": 390,
+      "height": 980
+    }
+  ],
+  "pass": true
+}

@@ -4,13 +4,14 @@ export interface NavigationItem { id: string; label: string }
 // Unknown routes remain reachable when future features are added.
 export function groupNavigation<T extends NavigationItem>(items: T[], administrator: boolean) {
   const sections = administrator ? [
-    { id: 'workspace', label: '工作台', routes: ['overview', 'monitor', 'tasks', 'clients'] },
+    { id: 'operations', label: '运营管理', routes: ['overview', 'monitor', 'users', 'plans', 'shop', 'subscription', 'wallet', 'orders', 'redeem-codes'] },
     { id: 'resources', label: '节点与站点', routes: ['nodes', 'subsite-nodes', 'node-groups', 'ips', 'public', 'public-nodes', 'public-subscription', 'fleet', 'pairing'] },
-    { id: 'access', label: '用户与运营', routes: ['users', 'plans', 'shop', 'subscription', 'wallet', 'orders', 'redeem-codes'] },
-    { id: 'system', label: '系统与支持', routes: ['tickets', 'messages', 'system', 'settings'] },
+    { id: 'support', label: '服务与支持', routes: ['tickets', 'messages', 'clients'] },
+    { id: 'system', label: '系统管理', routes: ['tasks', 'system', 'settings'] },
   ] : [
-    { id: 'service', label: '我的服务', routes: ['subscription', 'shop', 'clients', 'overview'] },
-    { id: 'account', label: '账户与支持', routes: ['wallet', 'orders', 'tickets', 'messages'] },
+    { id: 'service', label: '我的服务', routes: ['subscription', 'shop', 'overview'] },
+    { id: 'account', label: '订单与钱包', routes: ['orders', 'wallet'] },
+    { id: 'support', label: '帮助与支持', routes: ['clients', 'tickets', 'messages'] },
   ];
   const byId = new Map(items.map(item => [item.id, item]));
   const groups = sections.map(section => ({

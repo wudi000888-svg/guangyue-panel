@@ -42,7 +42,7 @@ const state = ref<State | null>(null),
 const access=useAccessStore();
 watch(state,v=>{access.role=v?.me.role||null;access.edition=v?.system.edition||'lite';},{flush:'sync'});
 const site = ref<SiteSettings>({panel_name:'广月面板',organization:'跨境电商工作区',default_locale:'zh-CN',support_email:'',login_notice:'',registration_enabled:false,registration_captcha:false,revision:''});
-watch([site, locale], () => { document.title=site.value.panel_name+' · '+t('企业控制台'); }, {deep:true,immediate:true});
+watch([site, locale], () => { document.title=site.value.panel_name+' · '+t('月庭'); }, {deep:true,immediate:true});
 const login = reactive({ username: "", password: "" });
 const registration = reactive({ username: "", password: "", confirm_password: "", captcha_token: "" });
 const registrationReset = ref(0);
@@ -811,9 +811,15 @@ function editIP(p?: IPResource) {
   modal.value = "ip";
 }
 async function saveIP() {
+  let saved: IPResource | undefined;
   await task(async () => {
     const creating = !ipForm.id;
+    const savingSite = selectedSite.value;
     const p: IPResource = await api("/ips", "POST", ipForm);
+    saved = p;
+    if (state.value && selectedSite.value === savingSite) {
+      state.value.ip_pool = [...(state.value.ip_pool || []).filter(ip => ip.id !== p.id), p];
+    }
     modal.value = "";
     if (creating) go("ips/manual");
     await refresh();
@@ -823,6 +829,7 @@ async function saveIP() {
         : t("IP 资源已保存"),
     );
   });
+  return saved;
 }
 async function detectIP(p: IPResource) {
   await task(async () => {

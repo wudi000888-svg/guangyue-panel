@@ -1,0 +1,37 @@
+@font-face{font-family:'Mooncourt Serif';src:url('/design/noto-serif-brand.ttf') format('truetype');font-weight:500;font-style:normal;font-display:swap}
+/* Mooncourt / 月庭. These semantic values mirror the local Penpot library. */
+:root {
+  --canvas:#f7f8f5; --bg:var(--canvas);
+  --surface:#fff; --surface-raised:#eff3ed; --surface-soft:var(--surface-raised); --surface-muted:var(--surface-raised); --surface-hover:#edf3ed;
+  --text:#203631; --secondary:#53695f; --muted:#66766d;
+  --border:#e1e7df; --input:#fff; --input-bg:var(--input); --input-border:#b9c8bd;
+  --accent:#276a57; --accent-text:#235e4e; --accent-soft:#e6f0e8; --accent-contrast:#fff;
+  --green:var(--accent); --red:#a83f42; --warning:#946425; --info:#376d91;
+  --success:var(--accent-text); --danger:var(--red); --overlay:#102d276b;
+  --success-soft:var(--accent-soft); --danger-soft:#f8e9e8; --warning-soft:#fbf1df; --info-soft:#edf3f8;
+  --nav-bg:#173d36; --nav-text:#c4d5ca; --nav-muted:#9cb8a6; --nav-selected:#e8f3e5;
+  --nav-hover:#ffffff0c; --nav-active:#ffffff13; --nav-border:#ffffff13;
+  --gy-night:var(--nav-bg); --gy-night-deep:#102d27; --gy-moon:#e9d8af; --gy-jade:#aacbb3;
+  --gy-cinnabar:#b65d43; --gy-seal:var(--gy-cinnabar); --gy-bronze:#a27c43; --gy-gold:#eae4c8; --gy-ink:var(--text); --gy-paper:#f9f8f1;
+  --radius-sm:6px; --radius-control:8px; --radius-card:12px; --radius-dialog:16px; --gy-radius:var(--radius-card);
+  --shadow-card:0 2px 6px #20363103; --shadow-popover:0 12px 40px #102d271f; --gy-shadow:var(--shadow-card);
+  --gy-focus:0 0 0 3px #276a5724;
+  --font-body:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif;
+  --font-display:'Mooncourt Serif','Songti SC','STSong','Noto Serif CJK SC',Georgia,serif;
+  --font-mono:ui-monospace,'SFMono-Regular',Consolas,monospace;
+  --space-1:4px; --space-2:8px; --space-3:12px; --space-4:16px; --space-5:20px; --space-6:24px; --space-8:32px;
+  color-scheme:light;
+}
+:root[data-theme='dark'] {
+  --canvas:#101b17; --surface:#182b23; --surface-raised:#20372b; --surface-hover:#284331;
+  --text:#eaf1e9; --secondary:#bed0c2; --muted:#a0b5a7; --border:#354f3e;
+  --input:#13241c; --input-border:#547560;
+  --accent:#a4d5b2; --accent-text:#b2e0bd; --accent-soft:#294834; --accent-contrast:#132c20;
+  --red:#f2a3a3; --warning:#e5be7e; --info:#a3c8e8;
+  --overlay:#0009; --success-soft:#234130; --danger-soft:#402a29; --warning-soft:#3e3524; --info-soft:#263746;
+  --nav-bg:#102d27; --nav-text:#c1d5c7; --nav-muted:#9bb8a5;
+  --gy-cinnabar:#e7a28c; --gy-bronze:#d4b57e; --gy-paper:#eaf1e9;
+  --shadow-card:0 2px 6px #0000000c; --shadow-popover:0 14px 50px #00000045;
+  --gy-focus:0 0 0 3px #a4d5b22b;
+  color-scheme:dark;
+}

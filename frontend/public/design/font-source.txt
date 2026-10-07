@@ -1,0 +1,5 @@
+Noto Serif SC · Google Fonts · SIL Open Font License 1.1
+Upstream: https://github.com/google/fonts/tree/main/ofl/notoserifsc
+Subset delivery: https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@500&display=swap&text=%E5%B9%BF%E6%9C%88%E9%9D%A2%E6%9D%BF%E6%9C%88%E5%BA%AD%E4%B8%80%E5%B1%B1%E6%B0%B4%E9%97%B4%E8%BF%9E%E6%8E%A5%E4%B8%96%E7%95%8C%E4%BD%A0%E7%9A%84%E4%BA%91%E7%AB%AF%E5%B7%A5%E4%BD%9C%E5%8F%B0%E8%AE%A9%E6%AF%8F%E6%AC%A1%E9%83%BD%E6%B8%85%E6%99%B0%E4%BB%8E%E5%AE%B9%E6%AC%A2%E8%BF%8E%E5%9B%9E%E6%9D%A5%E5%BC%80%E5%90%AF%E8%BF%9C%E6%96%B9%E6%97%A5%E5%B8%B8
+Font URL: https://fonts.gstatic.com/l/font?kit=H4cyBXePl9DZ0Xe7gG9cyOj7uK2-n-D2rd4FY7SwqyWv6_gNza1n-dAuOsovbmlg3imNH_Kswt73eXDv4J-W0HjaAaI1tQ1tY1qHU0yA5v21M7kDO9tMhQ99yoKDnx8UZab3qvJRpwOisdzysn7fvpsi1ZfmdepoemDtblcSbNce8kJ8BHVCQmtYvara1PlC0WuxdAw&skey=37fe335b8fd815cc&v=v36
+Glyphs: 广月面板月庭一山水间连接世界你的云端工作台让每次都清晰从容欢迎回来开启远方日常

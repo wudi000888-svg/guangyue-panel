@@ -1,0 +1,33 @@
+{
+  "version": "0.33.0",
+  "tool": "Penpot 2.17.2 (local)",
+  "file": "guangyue-mooncourt-v0.33.0.penpot",
+  "sha256": "d935115ccdb9c04087a3738d7e89ddba4841d2d215f782f4d04e4feb8f141e7c",
+  "bytes": 9529848,
+  "file_id": "d268a62b-6ba2-801d-8008-c0908578f760",
+  "editable": true,
+  "pages": 5,
+  "boards": 63,
+  "desktop_boards": 31,
+  "mobile_boards": 31,
+  "foundation_boards": 1,
+  "interactions": 201,
+  "flows": 5,
+  "colors": 26,
+  "components": 2,
+  "original_art": [
+    "courtyard-day.svg",
+    "courtyard-night.svg",
+    "moon-seal.svg"
+  ],
+  "dependencies": [
+    {
+      "name": "Lucide",
+      "license": "ISC"
+    },
+    {
+      "name": "Noto Serif SC",
+      "license": "SIL Open Font License 1.1"
+    }
+  ]
+}

@@ -1,21 +1,41 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { useModalFocus } from "../composables/useModalFocus";
 import { usePanelContext } from "../composables/panelContext";
-const { plans,state, busy, error, notice, modal, editingID, userForm, nodeForm, ipForm, importMode, importForm, importFile, importFileReading, importIssues, clearPrivateFile, readPrivateFile, importSubscription, ipPool, selectedIP, ipStatus, ipBadge, passwordForm, probeResult, displayedNodeName, confirmation, defaultRealitySNI, editingDefaultDirect, bytes, exitName, go, saveUser, confirmUser, confirmed, editNode, probe, saveIP, saveNode, deleteNode, changePassword } = usePanelContext();
-import { Activity, ArrowUpRight, Check, CircleHelp, Download, Globe2, KeyRound, LoaderCircle, Plus, ShieldCheck, Trash2, X } from "lucide-vue-next";
+const { plans,state, page, busy, error, notice, modal, editingID, userForm, nodeForm, ipForm, importMode, importForm, importFile, importFileReading, importIssues, clearPrivateFile, readPrivateFile, importSubscription, ipPool, selectedIP, ipStatus, ipBadge, passwordForm, probeResult, displayedNodeName, confirmation, defaultRealitySNI, editingDefaultDirect, bytes, exitName, go, editIP, saveUser, confirmUser, confirmed, editNode, probe, saveIP, saveNode, deleteNode, changePassword } = usePanelContext();
+import { Activity, ArrowRight, Check, ChevronDown, CircleHelp, Download, Globe2, KeyRound, LoaderCircle, Plus, ShieldCheck, SlidersHorizontal, Trash2, X } from "lucide-vue-next";
 import { t } from "../i18n";
 import CountryMark from "../CountryMark.vue";
 const hasPlan=computed(()=>!!userForm.plan_id||!editingID.value);
 const nodeRate=computed({get:()=>(nodeForm.rate_milli??1000)/1000,set:(v:number)=>nodeForm.rate_milli=Math.round(v*1000)});
 const editDialog=ref<HTMLElement|null>(null), confirmDialog=ref<HTMLElement|null>(null);
+const returnToNode=ref(false), nodeOrigin=ref('nodes');
+function closeEditor(){
+  if(busy.value)return;
+  if(returnToNode.value&&modal.value==='ip'){
+    returnToNode.value=false;modal.value='node';error.value='';return;
+  }
+  returnToNode.value=false;modal.value='';
+}
+function addNodeExit(){
+  nodeOrigin.value=page.value;returnToNode.value=true;editIP();
+}
+async function saveExit(){
+  const saved=await saveIP();
+  if(saved&&returnToNode.value){
+    const refreshError=error.value;
+    returnToNode.value=false;nodeForm.exit_id=saved.id;go(nodeOrigin.value);modal.value='node';
+    error.value=refreshError;
+  }
+}
+watch(()=>state.value?.me.id,()=>{returnToNode.value=false;});
 useModalFocus(computed(()=>!!modal.value || !!confirmation.value), computed(()=>confirmation.value ? confirmDialog.value : editDialog.value), ()=>{
   if(busy.value)return;
-  if(confirmation.value)confirmation.value=null;else modal.value='';
+  if(confirmation.value)confirmation.value=null;else closeEditor();
 });
 </script>
 <template>
-<div v-if="modal" class="modal-shade" @click.self="!busy && (modal = '')">
+<div v-if="modal" class="modal-shade" @click.self="closeEditor">
     <section
       class="modal"
       ref="editDialog" tabindex="-1" :inert="!!confirmation"
@@ -53,7 +73,7 @@ useModalFocus(computed(()=>!!modal.value || !!confirmation.value), computed(()=>
                     : t("修改密码")
           }}
         </h2>
-        <button class="icon" :title="t('关闭')" :disabled="busy" @click="modal = ''">
+        <button class="icon" :title="t('关闭')" :aria-label="t('关闭')" :disabled="busy" @click="closeEditor">
           <X :size="20" />
         </button>
       </div>
@@ -134,7 +154,7 @@ useModalFocus(computed(()=>!!modal.value || !!confirmation.value), computed(()=>
         <p v-if="error" class="error" role="alert">{{ t(error) }}</p>
         <div v-if="importIssues.length" class="private-import-issues" role="status"><strong>{{t('错误配置')}} · {{importIssues.length}}</strong><p>{{t('未导入任何出口，请修改标记的行后重新选择文件或粘贴。')}}</p><details><summary>{{t('查看错误行')}}</summary><p v-for="issue in importIssues" :key="issue.index">{{t('行 / 项')}} {{issue.index}} · {{t(issue.reason)}}</p></details></div>
         <div class="modal-footer">
-          <button type="button" :disabled="busy" @click="modal = ''">{{ t("取消") }}</button
+          <button type="button" :disabled="busy" @click="closeEditor">{{ t("取消") }}</button
           ><button class="primary" :disabled="busy || importFileReading || (importMode === 'file' && !importFile)">
             <LoaderCircle v-if="busy" class="spin" :size="16" /><Download
               v-else
@@ -193,7 +213,7 @@ useModalFocus(computed(()=>!!modal.value || !!confirmation.value), computed(()=>
             <Trash2 :size="15" />{{ t("删除") }}</button>
         </div>
         <div class="modal-footer">
-          <button type="button" :disabled="busy" @click="modal = ''">{{ t("取消") }}</button
+          <button type="button" :disabled="busy" @click="closeEditor">{{ t("取消") }}</button
           ><button class="primary" :disabled="busy">
             <LoaderCircle v-if="busy" class="spin" :size="16" /><Check
               v-else
@@ -201,7 +221,8 @@ useModalFocus(computed(()=>!!modal.value || !!confirmation.value), computed(()=>
             />{{ t("保存成员") }}</button>
         </div>
       </form>
-      <form v-else-if="modal === 'ip'" @submit.prevent="saveIP">
+      <form v-else-if="modal === 'ip'" @submit.prevent="saveExit">
+        <div v-if="returnToNode" class="dialog-context" role="status"><Globe2 :size="18"/><div><strong>{{t('添加这条线路的出口')}}</strong><p>{{t('节点设置已保留。保存出口后会自动返回，并选中新增的出口。')}}</p></div></div>
         <label
           >{{ t("备注名称") }}<input
             v-model="ipForm.label"
@@ -292,7 +313,7 @@ useModalFocus(computed(()=>!!modal.value || !!confirmation.value), computed(()=>
         <p v-if="ipForm.exit === 'http'" class="field-caption">{{ t("HTTP CONNECT 出口不支持任意 UDP 流量。") }}</p>
         <p v-if="error" class="error" role="alert">{{ t(error) }}</p>
         <div class="modal-footer">
-          <button type="button" :disabled="busy" @click="modal = ''">{{ t("取消") }}</button
+          <button type="button" :disabled="busy" @click="closeEditor">{{ t("取消") }}</button
           ><button class="primary" :disabled="busy">
             <LoaderCircle v-if="busy" class="spin" :size="16" /><Check
               v-else
@@ -301,7 +322,9 @@ useModalFocus(computed(()=>!!modal.value || !!confirmation.value), computed(()=>
           </button>
         </div>
       </form>
-      <form v-else-if="modal === 'node'" @submit.prevent="saveNode">
+      <form v-else-if="modal === 'node'" class="node-setup" @submit.prevent="saveNode">
+        <div class="node-setup-intro"><span class="dialog-eyebrow">{{t('线路配置')}}</span><p>{{t('选择出口，检查配置，检测并应用。成员能否使用由套餐决定。')}}</p></div>
+        <div class="node-route" :aria-label="t('流量路径')"><span>{{t('客户端')}}</span><ArrowRight :size="16"/><span>{{t('主站节点')}}</span><ArrowRight :size="16"/><strong>{{selectedIP?.label||selectedIP?.name||t('本机出口')}}</strong></div>
         <div class="auto-node-name">
           <span class="field-caption"
             >{{ t("节点名称") }}<span class="badge neutral">{{ t("自动") }}</span></span
@@ -316,10 +339,12 @@ useModalFocus(computed(()=>!!modal.value || !!confirmation.value), computed(()=>
         </div>
         <section class="node-dns-settings"><label>{{t('节点倍率')}}<input v-model.number="nodeRate" type="number" min="0" max="100" step="0.01" required/></label><p class="field-help">{{t('实际使用 1 GiB 消耗对应倍率的配额；0×免扣配额，仍统计实际流量。')}}</p><p class="field-help">{{t('本地节点自动加入默认本地节点组，用户使用权限由套餐决定。')}}</p></section>
         <div v-if="editingDefaultDirect" class="default-direct-notice"><ShieldCheck :size="18"/><div><strong>{{t('保留服务器默认直连入口')}}</strong><p>{{t('此节点固定使用本机出口，保持启用，不能删除或绑定其他出口。')}}</p><button type="button" class="text-button" :disabled="busy" @click="editNode(undefined, nodeForm.protocol)"><Plus :size="14"/>{{t('绑定 IP 池出口请新增节点')}}</button></div></div>
+        <details v-if="nodeForm.protocol === 'vless'" class="node-protocol-settings"><summary><SlidersHorizontal :size="17"/><span>{{t('Reality 伪装域名')}}</span><ChevronDown :size="16"/></summary><div class="node-protocol-body">
         <div v-if="nodeForm.protocol === 'vless'" class="node-sni-setting">
           <label for="node-reality-sni">{{t('Reality SNI（可选）')}}<input id="node-reality-sni" v-model="nodeForm.reality_sni" type="text" inputmode="url" autocomplete="off" autocapitalize="none" :spellcheck="false" maxlength="63" :disabled="busy" :placeholder="defaultRealitySNI" aria-describedby="node-reality-sni-help"/></label>
           <p id="node-reality-sni-help">{{t('仅填写域名，留空继承默认值')}} <strong>{{defaultRealitySNI}}</strong><br/>{{t('保存时校验公网 TLS 伪装目标；修改后请更新客户端订阅。')}}</p>
         </div>
+        </div></details>
         <label v-if="!editingDefaultDirect"
           >{{ t("节点出口") }}<select v-model="nodeForm.exit_id" :aria-label="t('节点出口')">
             <option value="">{{ t("本机直连（默认）") }}</option>
@@ -334,7 +359,7 @@ useModalFocus(computed(()=>!!modal.value || !!confirmation.value), computed(()=>
             </option>
           </select></label
         >
-        <section v-if="nodeForm.dns" class="node-dns-settings">
+        <details v-if="nodeForm.dns" class="node-protocol-settings"><summary><ShieldCheck :size="17"/><span>{{t('出口 DNS 防护')}}</span><ChevronDown :size="16"/></summary><section class="node-dns-settings">
           <div class="dns-setting-title"><ShieldCheck :size="17"/><strong>{{t('出口 DNS 防护')}}</strong><span class="badge neutral">IPv4 / IPv6</span></div>
           <label>{{t('DNS 模式')}}<select v-model="nodeForm.dns.mode" :disabled="busy" @change="nodeForm.dns.mode === 'secure' && Object.assign(nodeForm.dns,{doh:nodeForm.dns.doh || 'https://1.1.1.1/dns-query',ipv6:nodeForm.dns.ipv6 || 'block'})"><option value="secure">{{t('经出口加密解析（推荐）')}}</option><option value="system">{{t('常规解析（兼容模式）')}}</option></select></label>
           <template v-if="nodeForm.dns.mode === 'secure'">
@@ -347,7 +372,7 @@ useModalFocus(computed(()=>!!modal.value || !!confirmation.value), computed(()=>
           </template>
           <p v-else>{{t('沿用核心与出口的解析方式，不强制 DNS 防护。')}}</p>
           <small>{{t('DNS 检测可能显示递归 DNS 服务商的地址；客户端绕过代理的 DNS 需在客户端开启 TUN / DNS 接管。')}}</small>
-        </section>
+        </section></details>
         <div v-if="selectedIP && !editingDefaultDirect" class="pool-option-preview">
           <div class="user-cell">
             <CountryMark
@@ -396,15 +421,13 @@ useModalFocus(computed(()=>!!modal.value || !!confirmation.value), computed(()=>
           </div>
         </div>
         <div v-if="!editingDefaultDirect" class="pool-select-footer">
-          <span>{{ t("需要添加或修改出口") }}</span
+          <span>{{ t("出口池里没有需要的线路？") }}</span
           ><button
             type="button"
             class="text-button"
-            @click="
-              modal = '';
-              go('ips');
-            "
-          >{{ t("前往 IP 管理") }}<ArrowUpRight :size="15" />
+            :disabled="busy"
+            @click="addNodeExit"
+          >{{ t("添加出口并返回") }}<Plus :size="15" />
           </button>
         </div>
         <p v-if="!editingDefaultDirect || nodeForm.protocol === 'vless'" class="decision-note">
@@ -442,7 +465,7 @@ useModalFocus(computed(()=>!!modal.value || !!confirmation.value), computed(()=>
           >
             <Trash2 :size="17" /></button
           ><span class="spacer"></span
-          ><button type="button" :disabled="busy" @click="modal = ''">{{ t("取消") }}</button
+          ><button type="button" :disabled="busy" @click="closeEditor">{{ t("取消") }}</button
           ><button class="primary" :disabled="busy">
             <LoaderCircle v-if="busy" class="spin" :size="16" /><Check
               v-else
@@ -474,7 +497,7 @@ useModalFocus(computed(()=>!!modal.value || !!confirmation.value), computed(()=>
         /></label><p class="field-help">{{t('密码至少 1 位，无复杂度要求，最多 72 字节。')}}</p>
         <p v-if="error" class="error" role="alert">{{ t(error) }}</p>
         <div class="modal-footer">
-          <button type="button" @click="modal = ''">{{ t("取消") }}</button
+          <button type="button" @click="closeEditor">{{ t("取消") }}</button
           ><button class="primary" :disabled="busy">
             <KeyRound :size="16" />{{ t("修改密码") }}</button>
         </div>
@@ -497,3 +520,6 @@ useModalFocus(computed(()=>!!modal.value || !!confirmation.value), computed(()=>
     <Check :size="17" />{{ t(notice) }}
   </div>
 </template>
+<style scoped>
+.dialog-eyebrow{font-size:12px;font-weight:700;letter-spacing:.08em;color:var(--accent-text)}.node-setup-intro{margin-bottom:16px}.node-setup-intro p{margin:6px 0 0;color:var(--secondary);font-size:13px;line-height:1.7}.node-route{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:14px 16px;background:var(--surface-raised);border:1px solid var(--border);border-radius:10px;margin-bottom:20px;font-size:13px}.node-route>svg{color:var(--muted);flex-shrink:0}.node-route>strong{color:var(--accent-text);overflow-wrap:anywhere}.node-protocol-settings{margin:16px 0;border:1px solid var(--border);border-radius:10px;background:var(--surface)}.node-protocol-settings>summary{display:flex;align-items:center;gap:9px;min-height:48px;padding:12px 14px;cursor:pointer;font-size:13px;font-weight:650;list-style:none}.node-protocol-settings>summary::-webkit-details-marker{display:none}.node-protocol-settings>summary>span{flex:1}.node-protocol-settings[open]>summary>svg:last-child{transform:rotate(180deg)}.node-protocol-body{padding:0 14px 14px}.node-protocol-settings>.node-dns-settings{border:0;margin:0;border-top:1px solid var(--border);border-radius:0;background:transparent}.dialog-context{display:flex;gap:12px;align-items:flex-start;padding:14px;background:var(--accent-soft);border-radius:10px;color:var(--accent-text);margin-bottom:18px}.dialog-context>svg{flex-shrink:0;margin-top:2px}.dialog-context strong{font-size:14px}.dialog-context p{margin:4px 0 0;font-size:13px;line-height:1.6}.node-setup .node-dns-settings label{margin-top:0}@media(max-width:600px){.node-route{gap:8px;padding:12px}.node-protocol-settings>summary{min-height:48px}.pool-select-footer{align-items:stretch;flex-direction:column}}
+</style>

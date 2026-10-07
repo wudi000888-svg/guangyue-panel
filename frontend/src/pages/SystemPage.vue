@@ -1,18 +1,14 @@
 <script setup lang="ts">
+import PageHeading from "../components/PageHeading.vue";
+import "../styles/admin-ui.css";
 import { usePanelContext } from "../composables/panelContext";
 const { state, selectedSite, bytes, date, duration, backup, actionName } = usePanelContext();
 import { Download, Server, Settings2 } from "lucide-vue-next";
 import { t } from "../i18n";
 </script>
 <template>
-<section v-if="state">
-          <div class="page-heading">
-            <div>
-              <div class="eyebrow">SYSTEM</div>
-              <h1>{{ t("运维状态") }}</h1>
-            </div>
-            <button v-if="!selectedSite" @click="backup"><Download :size="17" />{{ t("下载备份") }}</button>
-          </div>
+<section v-if="state" class="admin-page">
+ <PageHeading :title="t('运维状态')" :description="t('检查服务应用结果、证书与最近操作。')" eyebrow="SYSTEM HEALTH"><template #actions><button v-if="!selectedSite" @click="backup"><Download :size="17"/>{{t('下载备份')}}</button></template></PageHeading>
           <div class="metrics system-metrics">
             <div>
               <span>{{ t("控制程序内存堆") }}</span
