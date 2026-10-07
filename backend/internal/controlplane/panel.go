@@ -10,25 +10,52 @@ import (
 	"unicode/utf8"
 )
 
-// Presentation settings do not touch protocol configuration or credentials.
+// Panel settings do not change proxy credentials or node configuration.
 type SiteSettings struct {
-	PanelName           string `json:"panel_name"`
-	Organization        string `json:"organization"`
-	DefaultLocale       string `json:"default_locale"`
-	SupportEmail        string `json:"support_email"`
-	LoginNotice         string `json:"login_notice"`
-	RegistrationEnabled bool   `json:"registration_enabled"`
-	RegistrationCaptcha bool   `json:"registration_captcha"`
-	Revision            string `json:"revision"`
+	PanelName            string   `json:"panel_name"`
+	Organization         string   `json:"organization"`
+	DefaultLocale        string   `json:"default_locale"`
+	SupportEmail         string   `json:"support_email"`
+	LoginNotice          string   `json:"login_notice"`
+	RegistrationEnabled  bool     `json:"registration_enabled"`
+	RegistrationCaptcha  bool     `json:"registration_captcha"`
+	SidebarAdmin         []string `json:"sidebar_admin"`
+	SidebarMember        []string `json:"sidebar_member"`
+	ClientDownloadRelay  bool     `json:"client_download_relay"`
+	CountryAccessEnabled bool     `json:"country_access_enabled"`
+	CountryAccessBlocked []string `json:"country_access_blocked"`
+	CountryAccessReason  string   `json:"country_access_reason"`
+	Revision             string   `json:"revision"`
 }
 
 func (s *Store) siteSettings() SiteSettings {
+	v, _ := s.readSiteSettings()
+	return v
+}
+func (s *Store) readSiteSettings() (SiteSettings, error) {
 	v := SiteSettings{PanelName: "广月面板", Organization: "跨境电商工作区", DefaultLocale: "zh-CN"}
-	_ = json.Unmarshal([]byte(s.meta("site_settings")), &v)
+	raw, err := s.readMeta("site_settings")
+	if err != nil {
+		return v, err
+	}
+	if raw != "" {
+		if err = json.Unmarshal([]byte(raw), &v); err != nil {
+			return v, err
+		}
+	}
 	if s.edition == "pro" && v.PanelName == "广月面板" {
 		v.PanelName = "广月面板 Pro"
 	}
-	return v
+	if v.SidebarAdmin == nil {
+		v.SidebarAdmin = []string{"overview", "users", "plans", "nodes", "fleet", "settings"}
+	}
+	if v.SidebarMember == nil {
+		v.SidebarMember = []string{"subscription", "shop", "orders", "settings"}
+	}
+	if v.CountryAccessBlocked == nil {
+		v.CountryAccessBlocked = []string{}
+	}
+	return v, nil
 }
 func (a *App) siteInfo(w http.ResponseWriter, r *http.Request) {
 	v := a.store.siteSettings()
@@ -48,6 +75,11 @@ func (a *App) panelSettings(w http.ResponseWriter, r *http.Request, actor Record
 	v.Organization = strings.TrimSpace(v.Organization)
 	v.SupportEmail = strings.TrimSpace(v.SupportEmail)
 	v.LoginNotice = strings.TrimSpace(v.LoginNotice)
+	v.CountryAccessReason = strings.TrimSpace(v.CountryAccessReason)
+	if err := validateSiteAccessSettings(&v); err != nil {
+		failure(w, 400, err.Error())
+		return
+	}
 	if v.PanelName == "" || utf8.RuneCountInString(v.PanelName) > 40 || v.Organization == "" || utf8.RuneCountInString(v.Organization) > 60 || utf8.RuneCountInString(v.LoginNotice) > 500 || (v.DefaultLocale != "zh-CN" && v.DefaultLocale != "en") {
 		failure(w, 400, "面板名称、组织名称或语言设置无效")
 		return

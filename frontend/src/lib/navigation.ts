@@ -1,5 +1,22 @@
 export interface NavigationItem { id: string; label: string }
 
+export const DEFAULT_ADMIN_SIDEBAR = ['overview', 'users', 'plans', 'nodes', 'fleet', 'settings'];
+export const DEFAULT_MEMBER_SIDEBAR = ['subscription', 'shop', 'orders', 'settings'];
+export const MEMBER_NAVIGATION: NavigationItem[] = [
+  { id: 'subscription', label: '我的服务' }, { id: 'shop', label: '选购套餐' },
+  { id: 'orders', label: '我的订单' }, { id: 'wallet', label: '我的钱包' },
+  { id: 'clients', label: '使用指南' }, { id: 'tickets', label: '联系支持' },
+  { id: 'messages', label: '消息通知' }, { id: 'settings', label: '个人设置' },
+];
+export const MEMBER_NAVIGATION_LABELS = Object.fromEntries(MEMBER_NAVIGATION.map(item => [item.id, item.label]));
+
+/** Display preferences never determine route access or remove search entries. */
+export function sidebarNavigation<T extends NavigationItem>(items: T[], configured: readonly string[] | undefined, administrator: boolean): T[] {
+  const selected = new Set(configured ?? (administrator ? DEFAULT_ADMIN_SIDEBAR : DEFAULT_MEMBER_SIDEBAR));
+  selected.add('settings');
+  return items.filter(item => selected.has(item.id));
+}
+
 // Regroup only routes already admitted by the panel's permission checks.
 // Unknown routes remain reachable when future features are added.
 export function groupNavigation<T extends NavigationItem>(items: T[], administrator: boolean) {
@@ -12,6 +29,7 @@ export function groupNavigation<T extends NavigationItem>(items: T[], administra
     { id: 'service', label: '我的服务', routes: ['subscription', 'shop', 'overview'] },
     { id: 'account', label: '订单与钱包', routes: ['orders', 'wallet'] },
     { id: 'support', label: '帮助与支持', routes: ['clients', 'tickets', 'messages'] },
+    { id: 'preferences', label: '设置与更多', routes: ['settings'] },
   ];
   const byId = new Map(items.map(item => [item.id, item]));
   const groups = sections.map(section => ({

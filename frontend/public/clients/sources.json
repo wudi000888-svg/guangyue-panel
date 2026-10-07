@@ -1,0 +1,57 @@
+[
+  {
+    "id": "clash-verge",
+    "repo": "clash-verge-rev/clash-verge-rev",
+    "commit": "07b0e71cc698cafbad4b463f390c33f8549e2504",
+    "path": "src-tauri/icons/128x128.png",
+    "source": "https://github.com/clash-verge-rev/clash-verge-rev/blob/07b0e71cc698cafbad4b463f390c33f8549e2504/src-tauri/icons/128x128.png",
+    "license_source": "https://github.com/clash-verge-rev/clash-verge-rev/blob/07b0e71cc698cafbad4b463f390c33f8549e2504/LICENSE",
+    "license": "GPL-3.0",
+    "sha256": "5fb11bbfe51a8be273d159ab10877e9a102c4958d3d15fd230fceff61ffe2091",
+    "bytes": 14241
+  },
+  {
+    "id": "flclash",
+    "repo": "chen08209/FlClash",
+    "commit": "4b59eca853778d4e7be3de26589252889c899bc5",
+    "path": "macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_128.png",
+    "source": "https://github.com/chen08209/FlClash/blob/4b59eca853778d4e7be3de26589252889c899bc5/macos/Runner/Assets.xcassets/AppIcon.appiconset/app_icon_128.png",
+    "license_source": "https://github.com/chen08209/FlClash/blob/4b59eca853778d4e7be3de26589252889c899bc5/LICENSE",
+    "license": "GPL-3.0",
+    "sha256": "a9d4816fb92c9348364014b0f19a37fd9d8ddcb065bd0544a04e6962038f1ec7",
+    "bytes": 14026
+  },
+  {
+    "id": "v2rayn",
+    "repo": "2dust/v2rayN",
+    "commit": "5ea8ae6420a4d89ff2945c35f4b87c6c1c307a6b",
+    "path": "v2rayN/v2rayN.Desktop/v2rayN.png",
+    "source": "https://github.com/2dust/v2rayN/blob/5ea8ae6420a4d89ff2945c35f4b87c6c1c307a6b/v2rayN/v2rayN.Desktop/v2rayN.png",
+    "license_source": "https://github.com/2dust/v2rayN/blob/5ea8ae6420a4d89ff2945c35f4b87c6c1c307a6b/LICENSE",
+    "license": "GPL-3.0",
+    "sha256": "dc5577105e8806e4ac70137052ddb796734b773888d7bc39a454cb0f1c0d7f31",
+    "bytes": 8771
+  },
+  {
+    "id": "v2rayng",
+    "repo": "2dust/v2rayNG",
+    "commit": "6fe3893bfd37865dc677111fa48aef14c0a41efd",
+    "path": "fastlane/metadata/android/en-US/images/icon.png",
+    "source": "https://github.com/2dust/v2rayNG/blob/6fe3893bfd37865dc677111fa48aef14c0a41efd/fastlane/metadata/android/en-US/images/icon.png",
+    "license_source": "https://github.com/2dust/v2rayNG/blob/6fe3893bfd37865dc677111fa48aef14c0a41efd/LICENSE",
+    "license": "GPL-3.0",
+    "sha256": "756fd268343e16794922a0d2792bb94f302531e894cef1d8d666e84e5d35ee99",
+    "bytes": 11854
+  },
+  {
+    "id": "cfa",
+    "repo": "MetaCubeX/ClashMetaForAndroid",
+    "commit": "94ebfd648abae76d32ae2191cfc413482d654c66",
+    "path": "app/src/main/res/mipmap-xxxhdpi/ic_launcher.png",
+    "source": "https://github.com/MetaCubeX/ClashMetaForAndroid/blob/94ebfd648abae76d32ae2191cfc413482d654c66/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png",
+    "license_source": "https://github.com/MetaCubeX/ClashMetaForAndroid/blob/94ebfd648abae76d32ae2191cfc413482d654c66/LICENSE",
+    "license": "GPL-3.0",
+    "sha256": "0269c0a4851a36da097bd86e8c3bfee7baabe5ae3af59d6f62529f793afbd344",
+    "bytes": 4973
+  }
+]

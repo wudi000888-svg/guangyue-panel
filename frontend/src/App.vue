@@ -8,11 +8,13 @@ import PanelUpdater from "./components/PanelUpdater.vue";
 import HeaderBalance from "./components/HeaderBalance.vue";
 import { Bell, ArrowUpRight, ArrowLeft, ChevronRight, Eye, EyeOff, KeyRound, LoaderCircle, LogOut, Menu, Moon, Sun, PanelLeftClose, PanelLeftOpen, Building2, RefreshCw, Search, ShieldCheck, SlidersHorizontal, X } from "lucide-vue-next";
 import { t } from "./i18n";
-import { groupNavigation, searchNavigation } from "./lib/navigation";
+import { groupNavigation, searchNavigation, sidebarNavigation, MEMBER_NAVIGATION_LABELS } from "./lib/navigation";
 import { allowedRoute } from "./lib/access";
 import { router } from "./router";
 import LanguageSwitcher from "./LanguageSwitcher.vue";
 import RegistrationCaptcha from "./components/RegistrationCaptcha.vue";
+import AccessBlocked from "./components/AccessBlocked.vue";
+import { onAccessDenied, isSiteAccessStatus, type AccessDenial, type SiteAccessStatus } from "./lib/api";
 
 const panel = usePanel();
 provide(panelKey, panel);
@@ -22,16 +24,36 @@ const registerMode = ref(false), showPassword = ref(false), showConfirmPassword 
 const mobileTools = ref(false), drawer = ref<HTMLElement | null>(null), toolsDialog = ref<HTMLElement | null>(null);
 const commandOpen = ref(false), commandQuery = ref(''), commandIndex = ref(0);
 const commandDialog = ref<HTMLElement | null>(null), commandInput = ref<HTMLInputElement | null>(null), pageContent = ref<HTMLElement | null>(null);
-const memberLabels: Record<string, string> = { subscription: '我的服务', shop: '选购套餐', clients: '使用指南', orders: '我的订单', wallet: '我的钱包', tickets: '联系支持', messages: '消息通知' };
-const visibleNav = computed(() => nav.value.filter(item => allowedRoute(router.resolve('/' + item.id).meta, {
+const accessDenial = ref<AccessDenial | null>(null), accessRetrying = ref(false), accessError = ref('');
+const removeAccessListener = onAccessDenied(status => {
+  accessDenial.value = status;
+  accessError.value = '';
+  closeOverlays();
+  panel.clearSession();
+});
+async function retryAccess() {
+  if (accessRetrying.value) return;
+  accessRetrying.value = true;
+  accessError.value = '';
+  try {
+    const status = await api<SiteAccessStatus>('/access-status');
+    if (!isSiteAccessStatus(status)) throw new Error(t('服务器响应无效，请稍后重试'));
+    if (status.allowed) window.location.reload();
+    else accessDenial.value = { ...status, access_denied: true } as AccessDenial;
+  } catch (reason) { accessError.value = reason instanceof Error ? reason.message : t('请求失败'); }
+  finally { accessRetrying.value = false; }
+}
+const permittedNav = computed(() => nav.value.filter(item => allowedRoute(router.resolve('/' + item.id).meta, {
   role: state.value?.me.role || null, edition: state.value?.system.edition || 'lite', publicFeatures: publicFeaturesEnabled.value,
-})).map(item => ({ ...item, label: !owner.value && memberLabels[item.id] ? t(memberLabels[item.id]!) : item.label })));
-const shellTitle = computed(() => visibleNav.value.find(item => item.id === page.value)?.label || pageTitle.value);
+})).map(item => ({ ...item, label: !owner.value && MEMBER_NAVIGATION_LABELS[item.id] ? t(MEMBER_NAVIGATION_LABELS[item.id]!) : item.label })));
+const visibleNav = computed(() => sidebarNavigation(permittedNav.value, owner.value ? site.value.sidebar_admin : site.value.sidebar_member, owner.value));
+const allShellGroups = computed(() => groupNavigation(permittedNav.value, owner.value).map(group => ({ ...group, label: t(group.label) })));
+const shellTitle = computed(() => permittedNav.value.find(item => item.id === page.value)?.label || pageTitle.value);
 const shellGroups = computed(() => groupNavigation(visibleNav.value, owner.value).map(group => ({ ...group, label: t(group.label) })));
-const shellGroup = computed(() => shellGroups.value.find(group => group.items.some(item => item.id === page.value))?.label || '');
-const searchEntries = computed(() => shellGroups.value.flatMap(group => group.items.map(item => ({ ...item, group: group.label, description: item.id === 'shop' && owner.value ? t('管理套餐上架与销售规则') : t(pageDescriptions[item.id] || '') }))));
+const shellGroup = computed(() => allShellGroups.value.find(group => group.items.some(item => item.id === page.value))?.label || '');
+const searchEntries = computed(() => allShellGroups.value.flatMap(group => group.items.map(item => ({ ...item, group: group.label, description: item.id === 'shop' && owner.value ? t('管理套餐上架与销售规则') : t(pageDescriptions[item.id] || '') }))));
 const commandResults = computed(() => searchNavigation(searchEntries.value, commandQuery.value));
-const quickNav = computed(() => (owner.value ? ['overview', 'nodes', 'users', 'fleet', 'subscription'] : ['subscription', 'shop', 'wallet', 'orders', 'tickets']).flatMap(id => visibleNav.value.filter(item => item.id === id)));
+const quickNav = computed(() => [...visibleNav.value.filter(item => item.id !== 'settings').slice(0, 4), ...visibleNav.value.filter(item => item.id === 'settings')]);
 const mobileLayer = computed(() => mobileNav.value || mobileTools.value);
 const overlayOpen = computed(() => mobileLayer.value || commandOpen.value);
 const roleLabel = computed(() => t(state.value?.system.role === 'controller' || !state.value?.system.role && state.value?.system.edition === 'pro' ? '主站' : state.value?.system.role === 'business' ? '子站' : '独立站'));
@@ -99,11 +121,12 @@ function shellKeys(e: KeyboardEvent) {
 let desktop: MediaQueryList;
 function onDesktop() { isDesktop.value = desktop.matches; if (desktop.matches) closeMobile(); }
 onMounted(() => { desktop = matchMedia('(min-width: 901px)'); desktop.addEventListener('change', onDesktop); document.addEventListener('keydown', shellKeys); });
-onBeforeUnmount(() => { closeOverlays(); desktop?.removeEventListener('change', onDesktop); document.removeEventListener('keydown', shellKeys); });
+onBeforeUnmount(() => { removeAccessListener(); closeOverlays(); desktop?.removeEventListener('change', onDesktop); document.removeEventListener('keydown', shellKeys); });
 </script>
 <template>
 
-  <div v-if="!ready" class="loading-screen" role="status" aria-live="polite">
+  <AccessBlocked v-if="accessDenial" :status="accessDenial" :busy="accessRetrying" :error="accessError" @retry="retryAccess"/>
+  <div v-else-if="!ready" class="loading-screen" role="status" aria-live="polite">
     <div class="shell-loading"><img src="/design/moon-seal.svg" alt="" width="56" height="56"/><strong>{{site.panel_name}}</strong><span><LoaderCircle class="spin" :size="16"/>{{t('正在准备你的工作台')}}</span></div>
   </div>
   <main v-else-if="!state" class="login-screen">
@@ -348,5 +371,5 @@ onBeforeUnmount(() => { closeOverlays(); desktop?.removeEventListener('change', 
       </section>
     </div>
   </Teleport>
-  <PanelDialogs />
+  <PanelDialogs v-if="!accessDenial" />
 </template>

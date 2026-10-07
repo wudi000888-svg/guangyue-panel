@@ -10,8 +10,11 @@
 | Lucide | 以 package-lock.json 为准 | ISC | 编译进入前端 |
 | QRCode | 以 package-lock.json 为准 | MIT | 编译进入前端 |
 | Go / SQLite 生态 | 以 go.mod/go.sum 为准 | 各自许可 | 编译进入应用 |
+| DB-IP IP to Country Lite | [2026-10](https://db-ip.com/db/download/ip-to-country-lite) | CC-BY-4.0 | MMDB 原始记录嵌入应用；[来源与署名](docs/SITE-ACCESS.md#数据来源与许可)，完整许可随安装包提供 |
 
-`python3 scripts/third-party.py` 从已锁定和下载的 Go/npm 依赖收集许可证文本，生成 `build/notices/` 及 SPDX JSON 依赖清单，随应用包提供。无法自动判断的 SPDX license 字段为 `NOASSERTION`，许可证原文单独保留，不声称自动扫描是法律审核。
+`python3 scripts/third-party.py` 从已锁定和下载的 Go/npm 依赖及固定 DB-IP 数据集收集许可证文本，生成 `build/notices/` 及 SPDX JSON 依赖清单，随应用包提供。无法自动判断的 SPDX license 字段为 `NOASSERTION`，许可证原文单独保留，不声称自动扫描是法律审核。
+
+[IP Geolocation by DB-IP](https://db-ip.com/)：国家判断使用 DB-IP 的 CC-BY-4.0 数据，不修改上游记录。该数据集保留自身许可，面板 LGPL 许可不替代它；来源、完整许可及「按现状提供」条款见对应署名和许可证文件。
 
 面板 LGPL-3.0-only 许可不替代第三方组件。如果你自行制作包含 Mihomo 的镜像、二进制集合或修改版本，需要自行满足 GPL 对相应源码、构建材料和许可的要求，不能把整个集合标成单一面板许可。Xray 的分发和修改同样遵循 MPL。官方源码地址、tag、校验和与构建脚本为可审计来源。
 

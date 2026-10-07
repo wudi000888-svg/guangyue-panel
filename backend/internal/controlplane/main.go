@@ -20,6 +20,8 @@ import (
 )
 
 type App struct {
+	clientDownloadMu       sync.Mutex
+	clientDownloads        *clientDownloadRelay
 	mountSyncMu            [64]sync.Mutex
 	ticketProcessor        func(context.Context, []byte, string) ([]byte, error)
 	updateClient           *http.Client
@@ -157,6 +159,7 @@ func Run() {
 		log.Fatal(err)
 	}
 	a := &App{controllerLease: lease, gatewaySlots: make(chan struct{}, 8), cfg: cfg, store: store, status: "pending", started: time.Now(), loginSlots: make(chan struct{}, 2), limits: map[string][]time.Time{}}
+	defer a.closeClientDownloads()
 	a.cache, err = cachepkg.New(cfg.RedisURL, cfg.siteID())
 	if err != nil {
 		log.Fatal(err)
