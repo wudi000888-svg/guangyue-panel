@@ -1,159 +1,58 @@
 <script setup lang="ts">
-import { usePanelContext } from "../composables/panelContext";
-import {quotaUsed,rawPeriodUsed} from "../lib/quota";
+import { computed } from 'vue';
+import { ArrowRight, CalendarDays, Copy, Download, KeyRound, LoaderCircle, QrCode, RefreshCw, Sparkles } from 'lucide-vue-next';
+import { usePanelContext } from '../composables/panelContext';
+import { quotaUsed, rawPeriodUsed } from '../lib/quota';
+import { t } from '../i18n';
+import UsageDetails from '../components/UsageDetails.vue';
+import NodeSubscriptionCards from '../NodeSubscriptionCards.vue';
+import '../styles/member-ui.css';
 const { state, busy, sub, subUser, format, subProtocol, subSource, qr, qrError, subLoading, subError, owner, publicSubPage, userStatus, subURL, bytes, date, confirmUser, loadSub, copy, downloadSub } = usePanelContext();
-import { Copy, Download, KeyRound, LoaderCircle, QrCode, RefreshCw } from "lucide-vue-next";
-import { t } from "../i18n";
-import UsageDetails from "../components/UsageDetails.vue";
-import NodeSubscriptionCards from "../NodeSubscriptionCards.vue";
-const queuedExpiry=(slot:{expires:number;paused_at:number})=>slot.expires?Math.floor(Date.now()/1000)+Math.max(0,slot.expires-slot.paused_at):0;
-const queuedRemainingDays=(slot:{expires:number;paused_at:number})=>slot.expires&&slot.paused_at?Math.max(0,Math.ceil((slot.expires-slot.paused_at)/86400)):0;
+const usagePercent = computed(() => sub.value?.user.quota ? Math.min(100, Math.max(0, quotaUsed(sub.value.user) / sub.value.user.quota * 100)) : 0);
+const remainingDays = computed(() => sub.value?.user.expires ? Math.max(0, Math.ceil((sub.value.user.expires - Date.now() / 1000) / 86400)) : null);
+const queuedExpiry = (slot: { expires: number; paused_at: number }) => slot.expires ? Math.floor(Date.now() / 1000) + Math.max(0, slot.expires - slot.paused_at) : 0;
+const queuedRemainingDays = (slot: { expires: number; paused_at: number }) => slot.expires && slot.paused_at ? Math.max(0, Math.ceil((slot.expires - slot.paused_at) / 86400)) : 0;
 </script>
 <template>
-<section v-if="state">
-          <div class="page-heading">
-            <div>
-              <div class="eyebrow">SUBSCRIPTION</div>
-              <h1>
-                {{ t("订阅管理") }}
-              </h1>
-            </div>
-            <select v-if="owner" v-model="subUser" :aria-label="t('订阅成员')">
-              <option v-for="u in state.users" :key="u.id" :value="u.id">
-                {{ u.username }}
-              </option>
-            </select>
+  <section v-if="state" class="member-page subscription-page">
+    <header class="member-heading">
+      <div><span class="member-eyebrow"><Sparkles :size="14"/>YOUR CONNECTION</span><h1>{{ owner ? t('订阅管理') : t('我的订阅') }}</h1><p>{{ publicSubPage ? t('公共节点仅在系统设置开启公共功能后使用。') : owner ? t('套餐决定订阅内容与账号有效期。') : t('查看套餐用量，复制订阅，即刻连接。') }}</p></div>
+      <div class="member-actions"><select v-if="owner" v-model="subUser" :aria-label="t('订阅成员')"><option v-for="u in state.users" :key="u.id" :value="u.id">{{ u.username }}</option></select><RouterLink v-else to="/shop">{{ t('购买套餐') }}<ArrowRight :size="16"/></RouterLink><button :disabled="subLoading" @click="loadSub(true)"><RefreshCw :size="16" :class="{spin:subLoading}"/>{{t('刷新')}}</button></div>
+    </header>
+    <div v-if="owner" class="member-hint subscription-admin-filter"><label>{{t('订阅包含范围')}}<select v-model="subSource"><option v-if="!publicSubPage" value="mixed">{{t('混合订阅（优先）')}}</option><option v-if="!publicSubPage" value="local">{{t('本站本地节点')}}</option><option v-if="!publicSubPage" value="subsite">{{t('子站节点池（挂载）')}}</option><option v-if="publicSubPage" value="public">{{t('公共节点')}}</option></select></label><p>{{t('套餐决定账号额度、有效期和节点组；混合订阅按节点组过滤全部已授权来源。')}}</p></div>
+    <div v-if="subError" class="error member-feedback" role="alert">{{t(subError)}}<button :disabled="subLoading" @click="loadSub(true)"><RefreshCw :size="14"/>{{t('重试')}}</button></div>
+    <div v-if="subLoading && !sub" class="member-empty" role="status"><LoaderCircle :size="24" class="spin"/><p>{{t('正在读取订阅节点…')}}</p></div>
+    <template v-if="sub">
+      <article class="member-panel plan-overview">
+        <div class="member-panel-title"><div><span class="member-label">{{t('当前套餐')}} · {{sub.user.username}}</span><h2>{{sub.user.entitlement?.name || t('暂无套餐')}}</h2></div><span :class="['member-status',sub.active?'active':'failed']">{{userStatus(sub.user)}}</span></div>
+        <div class="member-stats">
+          <div class="plan-usage"><span class="member-label">{{t('配额用量')}}</span><div class="member-metric">{{bytes(quotaUsed(sub.user))}}<small> / {{sub.user.quota?bytes(sub.user.quota):t('不限')}}</small></div><div v-if="sub.user.quota" class="plan-progress" role="progressbar" :aria-label="t('配额用量')" :aria-valuenow="Math.round(usagePercent)" :aria-valuemin="0" :aria-valuemax="100"><span :style="{width:usagePercent+'%'}"/></div><span v-else class="member-label">{{t('不限')}}</span></div>
+          <div><span class="member-label">{{t('剩余有效期')}}</span><div class="member-metric">{{remainingDays===null?t('永久有效'):remainingDays}}<small v-if="remainingDays!==null"> {{t('天')}}</small></div><span class="member-label">{{t('到期时间')}} · {{date(sub.user.expires)}}</span></div>
+          <div class="plan-primary-action"><button class="primary" :disabled="!subURL || busy" @click="copy(subURL)"><Copy :size="17"/>{{t('复制订阅地址')}}</button><RouterLink class="member-link" to="/clients">{{t('下载客户端')}}<ArrowRight :size="16"/></RouterLink></div>
+        </div>
+        <div class="plan-meta"><span>{{t('下次重置')}} · {{sub.user.meter?.end?date(sub.user.meter.end):t('不自动重置')}}</span><span>{{t('实际周期流量')}} · {{bytes(rawPeriodUsed(sub.user))}}</span><template v-if="owner&&sub.user.entitlement"><span>{{t('套餐版本')}} · v{{sub.user.entitlement.version}}</span><span>{{t('节点组')}} · {{sub.user.entitlement.group_ids.length}}</span><span>{{t('单独节点')}} · {{sub.user.entitlement.node_ids?.length||0}}</span></template></div>
+      </article>
+      <div v-if="sub.user.plan_queue?.length" class="member-hint plan-queue"><CalendarDays :size="20"/><div><strong>{{owner?t('套餐队列'):t('待恢复套餐')}}</strong><p v-for="slot in [...sub.user.plan_queue].reverse()" :key="slot.entitlement.revision"><b>{{slot.entitlement.name}}</b> · <template v-if="owner">{{slot.expires?date(queuedExpiry(slot)):t('不限')}}</template><template v-else>{{t('剩余有效期')}} {{slot.expires?queuedRemainingDays(slot):t('不限')}}{{slot.expires?t('天'):''}} · {{t('当前套餐结束后恢复')}}</template></p></div></div>
+      <article class="member-panel subscription-setup">
+        <div class="member-panel-title"><div><h2>{{t('订阅配置')}}</h2><p>{{t('选择客户端支持的格式，复制地址或扫描二维码导入。')}}</p></div><QrCode :size="22"/></div>
+        <div class="subscription-layout">
+          <div class="subscription-controls">
+            <div class="member-tabs" role="group" :aria-label="t('订阅格式')"><button v-for="f in [{id:'mihomo',name:'Mihomo'},{id:'base64',name:'Base64'},{id:'raw',name:t('原始链接')}]" :key="f.id" :aria-pressed="format===f.id" @click="format=f.id">{{f.name}}</button></div>
+            <label>{{t('协议')}}<select v-model="subProtocol"><option value="">{{t('全部协议')}}</option><option value="vless">VLESS</option><option value="hy2">Hysteria2</option></select></label>
+            <label>{{t('订阅地址')}}<div class="copy-field"><input :value="subURL" readonly :aria-label="t('订阅地址')" @focus="($event.target as HTMLInputElement).select()"/><button class="icon" :title="t('复制订阅地址')" :aria-label="t('复制订阅地址')" :disabled="!subURL" @click="copy(subURL)"><Copy :size="17"/></button></div></label>
+            <div class="member-actions"><button class="primary" :disabled="!sub.active||busy" @click="downloadSub"><Download :size="17"/>{{t('下载订阅')}}</button><button :disabled="!subURL" @click="copy(subURL)"><Copy :size="17"/>{{t('复制地址')}}</button></div>
+            <p class="subscription-visit">{{(state.runtime?.mode==='no_logs'||state.runtime?.subscription_access_enabled===false)?(sub.user.last_sub?t('最近记录 ')+date(sub.user.last_sub,true)+' · ':'')+t('访问时间已停止记录'):sub.user.last_sub?t('最近访问 ')+date(sub.user.last_sub,true):t('尚未访问')}}</p>
           </div>
-          <div class="pool-intro"><QrCode :size="21"/><div><strong>{{publicSubPage?t('公共订阅'):t('套餐订阅')}}</strong><p>{{publicSubPage?t('公共节点仅在系统设置开启公共功能后使用。'):(owner?t('套餐决定订阅内容与账号有效期。'):t('订阅内容按当前套餐提供，下载后即可使用。'))}}</p></div></div>
-          <label v-if="owner" class="sub-source">{{t('订阅包含范围')}}<select v-model="subSource"><option v-if="!publicSubPage" value="mixed">{{t('混合订阅（优先）')}}</option><option v-if="!publicSubPage" value="local">{{t('本站本地节点')}}</option><option v-if="!publicSubPage" value="subsite">{{t('子站节点池（挂载）')}}</option><option v-if="publicSubPage" value="public">{{t('公共节点')}}</option></select></label>
-          <p v-if="owner" class="field-help">{{t('套餐决定账号额度、有效期和节点组；混合订阅按节点组过滤全部已授权来源。')}}</p>
-          <p v-if="subError" class="error" role="alert">{{ t(subError) }} <button :disabled="subLoading" @click="loadSub(true)"><RefreshCw :size="14"/>{{t('重试')}}</button></p>
-          <div v-if="subLoading && !sub" class="empty" role="status"><LoaderCircle :size="20" class="spin"/> {{t('正在读取订阅节点…')}}</div>
-          <template v-if="sub"
-            ><div class="sub-summary">
-              <div class="user-cell">
-                <span class="avatar">{{
-                  sub.user.username.slice(0, 1).toUpperCase()
-                }}</span>
-                <div>
-                  <strong>{{ sub.user.username }}</strong
-                  ><small>{{
-                    t("当前套餐") + " · " + (sub.user.entitlement?.name || t("暂无套餐"))
-                  }}</small>
-                </div>
-              </div>
-              <span :class="['badge', sub.active ? 'success' : 'danger']">{{
-                userStatus(sub.user)
-              }}</span
-              ><span class="spacer"></span>
-              <div>
-                <small>{{ t("配额用量") }}</small
-                ><strong
-                  >{{ bytes(quotaUsed(sub.user))
-                  }}<em>
-                    / {{ sub.user.quota ? bytes(sub.user.quota) : t("不限") }}</em
-                  ></strong
-                >
-              </div>
-              <div>
-                <small>{{ t("到期时间") }}</small
-                ><strong>{{ date(sub.user.expires) }}</strong>
-              </div>
-            </div>
-            <div v-if="owner&&sub.user.entitlement" class="plan-meta"><span>{{t('套餐版本')}} · v{{sub.user.entitlement.version}}</span><span>{{t('节点组')}} · {{sub.user.entitlement.group_ids.length}}</span><span>{{t('单独节点')}} · {{sub.user.entitlement.node_ids?.length||0}}</span></div>
-            <div v-if="sub.user.plan_queue?.length" class="plan-queue"><template v-if="owner"><strong>{{t('套餐队列')}}</strong><span v-for="slot in [...sub.user.plan_queue].reverse()" :key="slot.entitlement.revision">{{slot.entitlement.name}} · {{slot.expires?date(queuedExpiry(slot)):t('不限')}}</span></template><template v-else><strong>{{t('已购买新套餐')}}</strong><span v-for="slot in [...sub.user.plan_queue].reverse()" :key="slot.entitlement.revision">{{t('当前套餐结束后恢复')}} · {{slot.expires?queuedRemainingDays(slot):t('不限')}}{{slot.expires?t('天'):''}}</span></template></div>
-            <div class="quota-detail"><span>{{t("实际周期流量")}} · {{bytes(rawPeriodUsed(sub.user))}}</span><span>{{t("下次重置")}} · {{sub.user.meter?.end?date(sub.user.meter.end):t("不自动重置")}}</span><span>{{t("所有订阅来源共用账号配额")}}</span></div>
- <UsageDetails :user="sub.user"/><div class="section-head">
-              <h2>{{ t("订阅配置") }}</h2>
-              <span class="muted">{{
-                (state.runtime?.mode === 'no_logs' || state.runtime?.subscription_access_enabled === false)
-                  ? (sub.user.last_sub ? t("最近记录 ") + date(sub.user.last_sub, true) + ' · ' : '') + t("访问时间已停止记录")
-                  : sub.user.last_sub
-                  ? t("最近访问 ") + date(sub.user.last_sub, true)
-                  : t("尚未访问")
-              }}</span>
-            </div>
-            <div class="subscription-layout">
-              <div class="subscription-controls">
-                <div class="segmented">
-                  <button
-                    v-for="f in [
-                      { id: 'mihomo', name: 'Mihomo' },
-                      { id: 'base64', name: 'Base64' },
-                      { id: 'raw', name: t('原始链接') },
-                    ]"
-                    :key="f.id"
-                    :class="{ selected: format === f.id }"
-                    @click="format = f.id"
-                  >
-                    {{ f.name }}
-                  </button>
-                </div>
-                <label
-                  >{{ t("协议") }}<select v-model="subProtocol">
-                    <option value="">{{ t("全部协议") }}</option>
-                    <option value="vless">VLESS</option>
-                    <option value="hy2">Hysteria2</option>
-                  </select></label
-                ><label
-                  >{{ t("订阅地址") }}<div class="copy-field">
-                    <input
-                      :value="subURL"
-                      readonly
-                      :aria-label="t('订阅地址')"
-                      @focus="($event.target as HTMLInputElement).select()"
-                    /><button
-                      class="icon"
-                      :title="t('复制订阅地址')"
-                      @click="copy(subURL)"
-                    >
-                      <Copy :size="17" />
-                    </button></div
-                ></label>
-                <div class="button-row">
-                  <button
-                    class="primary"
-                    :disabled="!sub.active || busy"
-                    @click="downloadSub"
-                  >
-                    <Download :size="17" />{{ t("下载订阅") }}</button
-                  ><button @click="copy(subURL)">
-                    <Copy :size="17" />{{ t("复制地址") }}</button>
-                </div>
-              </div>
-              <div class="qr-area">
-                <img
-                  v-if="qr"
-                  :src="qr"
-                  width="220"
-                  height="220"
-                  :alt="t('当前订阅地址二维码')"
-                /><p v-else-if="qrError" class="error" role="alert">{{qrError}}</p><span
-                  >{{
-                    format === "mihomo"
-                      ? "Mihomo"
-                      : format === "base64"
-                        ? "Base64"
-                        : "URI"
-                  }}{{ t("订阅") }}</span
-                >
-              </div>
-            </div>
-            <NodeSubscriptionCards :key="sub.user.id + ':' + sub.pool + ':' + subProtocol" :nodes="sub.nodes" :active="sub.active" :pool="sub.pool" :loading="subLoading" @refresh="loadSub()"/>
-            <div v-if="owner" class="subscription-security">
-              <h2>{{ t("凭据管理") }}</h2>
-              <button @click="confirmUser(sub.user, 'rotate-all-sub')">
-                <RefreshCw :size="16" />{{ t("重置订阅地址") }}</button
-              ><button
-                class="danger-button"
-                @click="confirmUser(sub.user, 'revoke')"
-              >
-                <KeyRound :size="16" />{{ t("撤销全部旧配置") }}</button>
-            </div></template
-          >
-        </section>
+          <div class="qr-area"><img v-if="qr" :src="qr" width="200" height="200" :alt="t('当前订阅地址二维码')"/><p v-else-if="qrError" class="error" role="alert">{{qrError}}</p><LoaderCircle v-else :size="24" class="spin"/><span>{{format==='mihomo'?'Mihomo':format==='base64'?'Base64':'URI'}} · {{t('订阅')}}</span></div>
+        </div>
+      </article>
+      <UsageDetails :user="sub.user"/>
+      <NodeSubscriptionCards :key="sub.user.id+':'+sub.pool+':'+subProtocol" :nodes="sub.nodes" :active="sub.active" :pool="sub.pool" :loading="subLoading" @refresh="loadSub()"/>
+      <div v-if="owner" class="member-panel subscription-security"><h2>{{t('凭据管理')}}</h2><div class="member-actions"><button @click="confirmUser(sub.user,'rotate-all-sub')"><RefreshCw :size="16"/>{{t('重置订阅地址')}}</button><button class="danger-button" @click="confirmUser(sub.user,'revoke')"><KeyRound :size="16"/>{{t('撤销全部旧配置')}}</button></div></div>
+    </template>
+  </section>
 </template>
-
 <style scoped>
-.plan-meta,.plan-queue{display:flex;flex-wrap:wrap;gap:8px 18px;color:var(--muted);font-size:12px;padding:12px 0 0}.plan-queue{padding:10px 12px;border:1px solid var(--border);border-radius:9px;background:var(--surface-hover)}.plan-queue strong{color:var(--text)}.quota-detail{display:flex;flex-wrap:wrap;gap:12px 24px;color:var(--muted);font-size:12px;padding:0 0 20px}.quota-detail span{line-height:1.7}
+.plan-overview{position:relative;overflow:hidden;background:radial-gradient(ellipse at 100% 0%,var(--accent-soft),transparent 55%),var(--surface)}.plan-overview .member-panel-title{margin-bottom:28px}.plan-overview h2{margin-top:7px;font-size:25px}.plan-overview .member-stats{grid-template-columns:1.2fr 1fr auto;align-items:center}.plan-progress{height:6px;background:var(--border);border-radius:9px;overflow:hidden;margin:12px 0 4px;max-width:320px}.plan-progress span{height:100%;display:block;border-radius:9px;background:var(--accent)}.plan-primary-action{display:flex;flex-direction:column;gap:6px;min-width:180px}.plan-primary-action .primary{min-height:46px}.plan-meta{display:flex;flex-wrap:wrap;gap:8px 24px;padding-top:20px;margin-top:24px;border-top:1px solid var(--border);font-size:12px;color:var(--secondary);line-height:1.7}.plan-queue strong{display:block;margin-bottom:5px;color:var(--text)}.plan-queue b{font-weight:550}.subscription-admin-filter{align-items:center;flex-wrap:wrap}.subscription-admin-filter label{display:flex;gap:12px;align-items:center;flex-shrink:0}.subscription-admin-filter p{flex:1;min-width:200px}.subscription-setup .subscription-layout{display:grid;grid-template-columns:minmax(0,1fr) 240px;gap:40px;padding:0;background:none;border:0}.subscription-controls{display:flex;flex-direction:column;gap:18px;min-width:0}.subscription-controls label{display:flex;flex-direction:column;gap:8px}.subscription-controls select{max-width:260px}.subscription-controls .copy-field{display:flex}.subscription-controls .copy-field input{min-width:0;flex:1}.subscription-controls .copy-field button{flex-shrink:0}.qr-area{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;border:1px solid var(--border);border-radius:16px;padding:18px;background:var(--surface-raised);font-size:13px;color:var(--secondary);min-width:0}.qr-area img{max-width:100%;height:auto;background:#fff;border-radius:10px}.subscription-visit{margin:0;color:var(--secondary);font-size:12px;line-height:1.7}.subscription-security{display:flex;align-items:center;justify-content:space-between;gap:20px;margin:0}.subscription-security h2{margin:0}.subscription-page :deep(.usage-details){margin:0}.subscription-page :deep(.subscription-nodes){margin-top:0;border-radius:20px}.subscription-page :deep(.subscription-node-card h3){font-size:15px}.subscription-page :deep(.subscription-nodes-heading p),.subscription-page :deep(.subscription-nodes-note),.subscription-page :deep(.subscription-node-sni),.subscription-page :deep(.subscription-node-report),.subscription-page :deep(.subscription-node-card>header p){font-size:12px}.subscription-page :deep(.subscription-node-card>footer button),.subscription-page :deep(.subscription-nodes-tools button),.subscription-page :deep(.subscription-node-search input){font-size:13px;min-height:44px}
+@media(max-width:900px){.plan-overview .member-stats{grid-template-columns:1fr 1fr}.plan-primary-action{grid-column:1/-1;flex-direction:row;align-items:center;gap:18px}.subscription-setup .subscription-layout{grid-template-columns:minmax(0,1fr) 205px;gap:22px}}@media(max-width:650px){.plan-overview .member-stats{grid-template-columns:1fr}.plan-primary-action{flex-wrap:wrap}.plan-primary-action .primary{flex:1}.plan-overview h2{font-size:23px}.subscription-setup .subscription-layout{grid-template-columns:1fr}.qr-area{max-width:260px;width:100%;box-sizing:border-box;justify-self:center}.subscription-security{flex-direction:column;align-items:flex-start}.subscription-admin-filter label{align-items:flex-start;flex-direction:column;width:100%}.subscription-admin-filter select{width:100%}.subscription-controls select{max-width:none}}
 </style>

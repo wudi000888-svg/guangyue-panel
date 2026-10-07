@@ -69,7 +69,7 @@ const {page:listPage,pages:listPages,rows:listRows}=usePagination(filteredIPs);
           <div class="toolbar pool-toolbar">
             <div class="search">
               <Search :size="17" /><input
-                v-model="ipSearch"
+                type="search" v-model="ipSearch"
                 :placeholder="t('搜索国家、IP、备注或代理地址')"
                 :aria-label="t('搜索 IP')"
               />

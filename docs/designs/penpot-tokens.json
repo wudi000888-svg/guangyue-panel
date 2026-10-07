@@ -1,23 +1,112 @@
 {
-  "name": "Guangyue Courtyard",
-  "source": "Penpot shared library",
+  "name": "Guangyue Courtyard · 0.32",
+  "source": "Repository design tokens for Penpot library import",
   "colors": {
-    "canvas": { "light": "#F3EEE5", "dark": "#101B1F" },
-    "surface": { "light": "#FFFAF2", "dark": "#17282C" },
-    "surfaceRaised": { "light": "#F8F1E6", "dark": "#1D3336" },
-    "text": { "light": "#24373A", "dark": "#EDF2E8" },
-    "secondary": { "light": "#53696A", "dark": "#C1D1C5" },
-    "accent": { "light": "#1E756A", "dark": "#8FC8A9" },
-    "cinnabar": { "light": "#BB614D", "dark": "#EE9B83" },
-    "moon": { "light": "#F5DCA5", "dark": "#F5DCA5" },
-    "border": { "light": "#E2D5C3", "dark": "#31504D" }
+    "canvas": {
+      "light": "#F5F6F2",
+      "dark": "#111D19"
+    },
+    "surface": {
+      "light": "#FFFFFF",
+      "dark": "#192A23"
+    },
+    "surfaceRaised": {
+      "light": "#F1F4EF",
+      "dark": "#21362B"
+    },
+    "text": {
+      "light": "#213B32",
+      "dark": "#E9F0E8"
+    },
+    "secondary": {
+      "light": "#516359",
+      "dark": "#BED0C1"
+    },
+    "muted": {
+      "light": "#69786E",
+      "dark": "#A0B3A4"
+    },
+    "accent": {
+      "light": "#286756",
+      "dark": "#9FD4B3"
+    },
+    "accentText": {
+      "light": "#235E4F",
+      "dark": "#ACE0BE"
+    },
+    "accentContrast": {
+      "light": "#FFFFFF",
+      "dark": "#132D21"
+    },
+    "accentSoft": {
+      "light": "#E6F1E9",
+      "dark": "#294535"
+    },
+    "cinnabar": {
+      "light": "#AD6350",
+      "dark": "#E8A08D"
+    },
+    "moon": {
+      "light": "#E7D5A6",
+      "dark": "#E7D5A6"
+    },
+    "border": {
+      "light": "#DDE5DC",
+      "dark": "#354C3E"
+    },
+    "inputBorder": {
+      "light": "#B7C6BA",
+      "dark": "#52705B"
+    }
   },
-  "radii": { "sm": 10, "md": 14, "lg": 16, "xl": 20, "pill": 999 },
-  "spacing": { "1": 4, "2": 8, "3": 12, "4": 16, "5": 20, "6": 24, "8": 32, "10": 40 },
+  "radii": {
+    "sm": 6,
+    "control": 9,
+    "md": 12,
+    "lg": 14,
+    "xl": 16,
+    "pill": 999
+  },
+  "spacing": {
+    "1": 4,
+    "2": 8,
+    "3": 12,
+    "4": 16,
+    "5": 20,
+    "6": 24,
+    "8": 32,
+    "10": 40
+  },
   "typography": {
-    "display": { "family": "Noto Serif SC", "size": 30, "weight": 650, "lineHeight": 1.4 },
-    "body": { "family": "Noto Sans SC", "size": 14, "weight": 400, "lineHeight": 1.6 },
-    "caption": { "family": "Noto Sans SC", "size": 11, "weight": 500, "lineHeight": 1.4 }
+    "display": {
+      "family": "Songti SC / Georgia",
+      "size": 30,
+      "weight": 650,
+      "lineHeight": 1.4
+    },
+    "body": {
+      "family": "System UI / PingFang SC",
+      "size": 14,
+      "weight": 400,
+      "lineHeight": 1.6
+    },
+    "caption": {
+      "family": "System UI / PingFang SC",
+      "size": 12,
+      "weight": 500,
+      "lineHeight": 1.4
+    }
   },
-  "breakpoints": { "mobile": 650, "shell": 900, "wide": 1200 }
+  "breakpoints": {
+    "mobile": 650,
+    "shell": 900,
+    "wide": 1200
+  },
+  "interaction": {
+    "desktopControlMinHeight": 40,
+    "mobileControlMinHeight": 44,
+    "mobileInputFontSize": 16,
+    "focusOutlineWidth": 2,
+    "focusOutlineOffset": 3
+  }
 }

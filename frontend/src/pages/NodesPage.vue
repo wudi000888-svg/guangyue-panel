@@ -52,7 +52,7 @@ onMounted(loadEntitlements);
           <div class="toolbar node-toolbar">
             <div class="search">
               <Search :size="17" /><input
-                v-model="nodeSearch"
+                type="search" v-model="nodeSearch"
                 :placeholder="t('搜索国家、IP 或出口地址')"
                 :aria-label="t('搜索节点')"
               />
@@ -170,7 +170,7 @@ onMounted(loadEntitlements);
                   </td>
                 </tr>
                 <tr v-if="!visibleNodes.length">
-                  <td colspan="8" class="empty">{{ t("没有匹配的节点") }}</td>
+                  <td colspan="8" class="empty"><span>{{ t("没有匹配的节点") }}</span><button v-if="nodeSearch||nodeProtocol!=='all'||nodeStatus!=='all'||groupFilter!=='all'" class="text-button empty-reset" @click="nodeSearch='';nodeProtocol='all';nodeStatus='all';groupFilter='all'">{{t('清除筛选')}}</button></td>
                 </tr>
               </tbody>
             </table>
@@ -274,7 +274,7 @@ onMounted(loadEntitlements);
                 </button>
               </div>
             </article>
-            <p v-if="!visibleNodes.length" class="empty">{{ t("没有匹配的节点") }}</p>
+            <p v-if="!visibleNodes.length" class="empty"><span>{{ t("没有匹配的节点") }}</span><button v-if="nodeSearch||nodeProtocol!=='all'||nodeStatus!=='all'||groupFilter!=='all'" class="text-button empty-reset" @click="nodeSearch='';nodeProtocol='all';nodeStatus='all';groupFilter='all'">{{t('清除筛选')}}</button></p>
           </div>
           </template>
           </ListTable>
