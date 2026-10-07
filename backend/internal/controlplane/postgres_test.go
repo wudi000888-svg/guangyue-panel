@@ -55,6 +55,8 @@ func TestPostgresBehaviors(t *testing.T) {
 		{"business_quota", TestBusinessAllocationsAndCounterRollback},
 		{"shared_quality", TestDirectQualitySharedAcrossProtocols},
 		{"authentication", TestUserIsolationAndCSRF},
+		{"navigation_partial_save", TestPanelNavigationPartialSaveAndRevisions},
+		{"navigation_concurrent", TestPanelNavigationConcurrentWriters},
 		{"traffic_checkpoints", TestTrafficCheckpointRestartAndQuota},
 		{"no_logs_accounting", TestRuntimeNoLogsPreservesAccountingAndExistingHistory},
 		{"subscription_rotation", TestSubscriptionsAndCredentialRotation},

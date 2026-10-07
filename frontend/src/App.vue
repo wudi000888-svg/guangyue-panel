@@ -6,7 +6,7 @@ import { panelKey } from "./composables/panelContext";
 import PanelDialogs from "./components/PanelDialogs.vue";
 import PanelUpdater from "./components/PanelUpdater.vue";
 import HeaderBalance from "./components/HeaderBalance.vue";
-import { Bell, ArrowUpRight, ArrowLeft, ChevronRight, Eye, EyeOff, KeyRound, LoaderCircle, LogOut, Menu, Moon, Sun, PanelLeftClose, PanelLeftOpen, Building2, RefreshCw, Search, ShieldCheck, SlidersHorizontal, X } from "lucide-vue-next";
+import { Bell, ArrowUpRight, ArrowLeft, ChevronRight, Eye, EyeOff, KeyRound, LoaderCircle, LogOut, Menu, Moon, Sun, PanelLeftClose, PanelLeftOpen, Building2, RefreshCw, Search, ShieldCheck, SlidersHorizontal, X, GripVertical, Grid2X2, FolderInput } from "lucide-vue-next";
 import { t } from "./i18n";
 import { groupNavigation, searchNavigation, sidebarNavigation, MEMBER_NAVIGATION_LABELS } from "./lib/navigation";
 import { allowedRoute } from "./lib/access";
@@ -17,6 +17,7 @@ import AccessBlocked from "./components/AccessBlocked.vue";
 import { onAccessDenied, isSiteAccessStatus, type AccessDenial, type SiteAccessStatus } from "./lib/api";
 
 const panel = usePanel();
+const { sidebarCustomization } = panel;
 provide(panelKey, panel);
 const { selectedSite, selectedSiteName, switchSite, api, state, ready, busy, error, page, mobileNav, site, login, registration, registrationReset, modal, theme, sideCollapsed, toggleTheme, confirmation, owner, pendingHY, pageTitle, pageDescriptions, nav, publicFeaturesEnabled, refresh, task, signIn, signOut, registerAccount, go } = panel;
 const isDesktop = ref(matchMedia('(min-width: 901px)').matches);
@@ -46,7 +47,7 @@ async function retryAccess() {
 const permittedNav = computed(() => nav.value.filter(item => allowedRoute(router.resolve('/' + item.id).meta, {
   role: state.value?.me.role || null, edition: state.value?.system.edition || 'lite', publicFeatures: publicFeaturesEnabled.value,
 })).map(item => ({ ...item, label: !owner.value && MEMBER_NAVIGATION_LABELS[item.id] ? t(MEMBER_NAVIGATION_LABELS[item.id]!) : item.label })));
-const visibleNav = computed(() => sidebarNavigation(permittedNav.value, owner.value ? site.value.sidebar_admin : site.value.sidebar_member, owner.value));
+const visibleNav = computed(() => sidebarNavigation(permittedNav.value, sidebarCustomization.selected(owner.value ? 'admin' : 'member'), owner.value));
 const allShellGroups = computed(() => groupNavigation(permittedNav.value, owner.value).map(group => ({ ...group, label: t(group.label) })));
 const shellTitle = computed(() => permittedNav.value.find(item => item.id === page.value)?.label || pageTitle.value);
 const shellGroups = computed(() => groupNavigation(visibleNav.value, owner.value).map(group => ({ ...group, label: t(group.label) })));
@@ -54,6 +55,10 @@ const shellGroup = computed(() => allShellGroups.value.find(group => group.items
 const searchEntries = computed(() => allShellGroups.value.flatMap(group => group.items.map(item => ({ ...item, group: group.label, description: item.id === 'shop' && owner.value ? t('管理套餐上架与销售规则') : t(pageDescriptions[item.id] || '') }))));
 const commandResults = computed(() => searchNavigation(searchEntries.value, commandQuery.value));
 const quickNav = computed(() => [...visibleNav.value.filter(item => item.id !== 'settings').slice(0, 4), ...visibleNav.value.filter(item => item.id === 'settings')]);
+const dragPreviewStyle = computed(() => {
+  const position = sidebarCustomization.pointerPosition.value;
+  return position ? { left: Math.max(8, Math.min(position.x + 14, window.innerWidth - 250)) + 'px', top: Math.max(8, Math.min(position.y + 14, window.innerHeight - 65)) + 'px' } : {};
+});
 const mobileLayer = computed(() => mobileNav.value || mobileTools.value);
 const overlayOpen = computed(() => mobileLayer.value || commandOpen.value);
 const roleLabel = computed(() => t(state.value?.system.role === 'controller' || !state.value?.system.role && state.value?.system.edition === 'pro' ? '主站' : state.value?.system.role === 'business' ? '子站' : '独立站'));
@@ -73,6 +78,22 @@ function navigate(id: string) {
   go(id);
   closeOverlays();
   void nextTick(() => pageContent.value?.focus({ preventScroll: true }));
+}
+function openDirectory() {
+  sidebarCustomization.directoryRequest.value++;
+  navigate('settings');
+}
+async function unpinSidebar(event: MouseEvent, id: string) {
+  const focused = document.activeElement;
+  const links = Array.from(drawer.value?.querySelectorAll<HTMLButtonElement>('.nav-route') || []);
+  const entry = (event.currentTarget as HTMLElement).closest('.nav-entry');
+  const position = links.findIndex(link => entry?.contains(link));
+  sidebarCustomization.setPinned(id, false);
+  await nextTick();
+  if (event.detail === 0 && focused && !focused.isConnected) {
+    const remaining = Array.from(drawer.value?.querySelectorAll<HTMLButtonElement>('.nav-route') || []);
+    remaining[Math.min(Math.max(0, position), remaining.length - 1)]?.focus();
+  }
 }
 async function refreshPanel() {
   if (refreshing.value) return;
@@ -101,6 +122,7 @@ watch(() => commandResults.value.map(item => item.id).join('|'), () => { command
 watch(commandIndex, async () => { await nextTick(); document.getElementById(`navigation-result-${commandIndex.value}`)?.scrollIntoView({ block: 'nearest' }); });
 function shellKeys(e: KeyboardEvent) {
   if (modal.value || confirmation.value || document.getElementById('app')?.inert) return;
+  if (e.key === 'Escape' && sidebarCustomization.dragging.value) { e.preventDefault(); sidebarCustomization.endDrag(); return; }
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k' && state.value) { e.preventDefault(); if (commandOpen.value) commandOpen.value = false; else openSearch(); return; }
   if (!overlayOpen.value) return;
   if (e.key === 'Escape') { e.preventDefault(); closeOverlays(); return; }
@@ -184,7 +206,7 @@ onBeforeUnmount(() => { removeAccessListener(); closeOverlays(); desktop?.remove
   </main>
   <div
     v-else
-    :class="['app-shell', { collapsed: sideCollapsed }]"
+    :class="['app-shell', { collapsed: sideCollapsed && !sidebarCustomization.error.value }]"
     :inert="!!modal || !!confirmation || commandOpen"
   >
     <a class="skip-link" href="#main-content" @click.prevent="pageContent?.focus()">{{t('跳到主要内容')}}</a>
@@ -211,15 +233,22 @@ onBeforeUnmount(() => { removeAccessListener(); closeOverlays(); desktop?.remove
         <ShieldCheck v-else :size="16"/>
       </div>
       <button class="navigation-search" :title="t('搜索功能')+' · '+shortcut" :aria-label="t('搜索功能')" aria-haspopup="dialog" @click="openSearch"><Search :size="17"/><span>{{t('搜索功能')}}</span><kbd>{{shortcut}}</kbd></button>
-      <nav :aria-label="t('主导航')" class="grouped-nav">
+      <nav :aria-label="t('主导航')" data-sidebar-drop-target="sidebar" :class="['grouped-nav', {'sidebar-drop-active':sidebarCustomization.target.value==='sidebar'}]" @dragover="sidebarCustomization.acceptDrag($event,'sidebar')" @drop="sidebarCustomization.drop($event,'sidebar')">
+        <p v-if="owner&&sidebarCustomization.dragging.value?.source==='directory'" class="sidebar-drop-hint" role="status">{{t('拖到这里，立即放入侧边栏')}}</p>
         <div v-for="group in shellGroups" :key="group.id" :class="['nav-group','nav-group-'+group.id]">
           <div class="nav-caption">{{group.label}}</div>
-          <button v-for="item in group.items" :key="item.id" :class="{selected:page===item.id}" :title="item.label" :aria-label="item.label" :aria-current="page===item.id?'page':undefined" @click="navigate(item.id)">
-            <component :is="item.icon" :size="18"/><span>{{item.label}}</span>
-            <span v-if="item.id==='messages' && state.unread_messages" class="nav-count unread-count">{{state.unread_messages>99?'99+':state.unread_messages}}</span>
-          </button>
+          <div v-for="item in group.items" :key="item.id" :class="['nav-entry',{selected:page===item.id,draggable:owner&&item.id!=='settings','nav-entry-dragging':sidebarCustomization.dragging.value?.id===item.id}]" :draggable="owner&&item.id!=='settings'" :data-navigation-id="item.id" @dragstart="sidebarCustomization.startDrag($event,item.id,'sidebar')" @dragend="sidebarCustomization.endDrag()">
+            <GripVertical v-if="owner&&item.id!=='settings'" class="nav-drag-grip" :size="13" aria-hidden="true" @pointerdown="sidebarCustomization.startPointer($event,item.id,'sidebar')"/>
+            <button class="nav-route" :class="{selected:page===item.id}" :title="item.label" :aria-label="item.label" :aria-current="page===item.id?'page':undefined" @click="navigate(item.id)">
+              <component :is="item.icon" :size="18"/><span>{{item.label}}</span>
+              <span v-if="item.id==='messages' && state.unread_messages" class="nav-count unread-count">{{state.unread_messages>99?'99+':state.unread_messages}}</span>
+            </button>
+            <button v-if="owner&&item.id!=='settings'" class="nav-unpin" :title="t('移到更多功能')+' · '+item.label" :aria-label="t('移到更多功能')+' · '+item.label" @click="unpinSidebar($event,item.id)"><FolderInput :size="15"/></button>
+          </div>
         </div>
       </nav>
+      <button v-if="owner" :aria-label="t('更多功能')" :title="t('更多功能')" data-sidebar-drop-target="directory" :class="['sidebar-setting','sidebar-directory',{'directory-drop-active':sidebarCustomization.target.value==='directory'}]" @click="openDirectory" @dragover="sidebarCustomization.acceptDrag($event,'directory')" @drop="sidebarCustomization.drop($event,'directory')"><Grid2X2 :size="17"/><span>{{sidebarCustomization.dragging.value?.source==='sidebar'?t('拖到这里，移至更多功能'):t('更多功能')}}</span></button>
+      <div v-if="owner&&(sidebarCustomization.saving.value||sidebarCustomization.error.value||sidebarCustomization.saved.value)" class="sidebar-save-status" :title="sidebarCustomization.saving.value?t('正在自动保存侧边栏…'):sidebarCustomization.error.value||t('侧边栏已自动保存')" :role="sidebarCustomization.error.value?'alert':'status'" aria-live="polite"><LoaderCircle v-if="sidebarCustomization.saving.value" :size="15" class="spin" aria-hidden="true"/><ShieldCheck v-else-if="!sidebarCustomization.error.value" :size="15" aria-hidden="true"/><span v-if="sidebarCustomization.saving.value">{{t('正在自动保存侧边栏…')}}</span><template v-else-if="sidebarCustomization.error.value"><span>{{sidebarCustomization.error.value}}</span><button @click="sidebarCustomization.retry()">{{t('重试保存')}}</button></template><span v-else>{{t('侧边栏已自动保存')}}</span></div>
       <div class="sidebar-bottom">
         <div class="sidebar-version"><span>{{t('版本与更新')}}</span><PanelUpdater v-if="owner && !selectedSite" :version="state.system.version.split('-')[0]" @open="closeOverlays"/><small v-else>v{{state.system.version.split('-')[0]}}</small></div>
         <button class="sidebar-setting mobile-account" :title="t('账户与密码')" @click="modal='password';mobileNav=false"><KeyRound :size="18"/><span>{{t('账户与密码')}}</span></button>
@@ -347,6 +376,8 @@ onBeforeUnmount(() => { removeAccessListener(); closeOverlays(); desktop?.remove
     </div>
   </div>
   <Teleport to="body">
+    <div v-if="sidebarCustomization.dragging.value&&sidebarCustomization.pointerPosition.value" class="sidebar-drag-preview" aria-hidden="true" :style="dragPreviewStyle"><GripVertical :size="15"/>{{permittedNav.find(item=>item.id===sidebarCustomization.dragging.value?.id)?.label}}</div>
+    <div v-if="owner&&!isDesktop&&sidebarCustomization.dragging.value?.source==='directory'" data-sidebar-drop-target="sidebar" :class="['sidebar-mobile-drop',{'active':sidebarCustomization.target.value==='sidebar'}]" role="status"><Grid2X2 :size="22"/>{{t('拖到这里，立即放入侧边栏')}}</div>
     <div v-if="commandOpen && state" class="navigation-shade" @click.self="commandOpen=false">
       <section ref="commandDialog" class="navigation-palette" role="dialog" aria-modal="true" :aria-label="t('搜索功能')" tabindex="-1">
         <div class="navigation-palette-input"><Search :size="21"/><input ref="commandInput" v-model="commandQuery" :placeholder="t('搜索页面、节点、套餐…')" :aria-label="t('搜索功能')" role="combobox" aria-autocomplete="list" aria-expanded="true" aria-controls="navigation-results" :aria-activedescendant="commandResults.length?'navigation-result-'+commandIndex:undefined" autocomplete="off"/><button class="icon" :aria-label="t('关闭')" @click="commandOpen=false"><X :size="19"/></button></div>

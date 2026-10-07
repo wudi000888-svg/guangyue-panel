@@ -634,6 +634,8 @@ func (a *App) admin(w http.ResponseWriter, r *http.Request, actor Record) {
 		a.importSources(w, r, actor)
 	case r.URL.Path == "/api/settings" && (r.Method == "GET" || r.Method == "PUT"):
 		a.panelSettings(w, r, actor)
+	case r.URL.Path == "/api/settings/navigation" && (r.Method == "GET" || r.Method == "PUT"):
+		a.panelNavigation(w, r, actor)
 	case r.URL.Path == "/api/runtime-settings" && (r.Method == "GET" || r.Method == "PUT"):
 		a.runtimeSettings(w, r, actor)
 	case r.Method == "GET" && r.URL.Path == "/api/public-pool":
