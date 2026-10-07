@@ -1,71 +1,296 @@
 {
-  "name": "Guangyue Courtyard · 0.32",
-  "source": "Repository design tokens for Penpot library import",
+  "name": "Guangyue Mooncourt · 0.33.0",
+  "version": "0.33.0",
+  "kind": "implementation-token-reference",
+  "source": {
+    "runtime": "frontend/src/styles/tokens.css",
+    "globalEntry": "frontend/src/styles/index.css",
+    "penpotBuilder": "docs/designs/penpot/build-penpot.js",
+    "note": "Implementation reference snapshot; this JSON is not a native Penpot export. Native editable boards, library tokens, components and prototypes are maintained in local Penpot using the repository build scripts."
+  },
   "colors": {
     "canvas": {
-      "light": "#F5F6F2",
-      "dark": "#111D19"
+      "cssVariable": "--canvas",
+      "light": "#F7F8F5",
+      "dark": "#101B17"
+    },
+    "bg": {
+      "cssVariable": "--bg",
+      "light": "#F7F8F5",
+      "dark": "#101B17"
     },
     "surface": {
+      "cssVariable": "--surface",
       "light": "#FFFFFF",
-      "dark": "#192A23"
+      "dark": "#182B23"
     },
-    "surfaceRaised": {
-      "light": "#F1F4EF",
-      "dark": "#21362B"
+    "surface-raised": {
+      "cssVariable": "--surface-raised",
+      "light": "#EFF3ED",
+      "dark": "#20372B"
+    },
+    "surface-soft": {
+      "cssVariable": "--surface-soft",
+      "light": "#EFF3ED",
+      "dark": "#20372B"
+    },
+    "surface-muted": {
+      "cssVariable": "--surface-muted",
+      "light": "#EFF3ED",
+      "dark": "#20372B"
+    },
+    "surface-hover": {
+      "cssVariable": "--surface-hover",
+      "light": "#EDF3ED",
+      "dark": "#284331"
     },
     "text": {
-      "light": "#213B32",
-      "dark": "#E9F0E8"
+      "cssVariable": "--text",
+      "light": "#203631",
+      "dark": "#EAF1E9"
     },
     "secondary": {
-      "light": "#516359",
-      "dark": "#BED0C1"
+      "cssVariable": "--secondary",
+      "light": "#53695F",
+      "dark": "#BED0C2"
     },
     "muted": {
-      "light": "#69786E",
-      "dark": "#A0B3A4"
-    },
-    "accent": {
-      "light": "#286756",
-      "dark": "#9FD4B3"
-    },
-    "accentText": {
-      "light": "#235E4F",
-      "dark": "#ACE0BE"
-    },
-    "accentContrast": {
-      "light": "#FFFFFF",
-      "dark": "#132D21"
-    },
-    "accentSoft": {
-      "light": "#E6F1E9",
-      "dark": "#294535"
-    },
-    "cinnabar": {
-      "light": "#AD6350",
-      "dark": "#E8A08D"
-    },
-    "moon": {
-      "light": "#E7D5A6",
-      "dark": "#E7D5A6"
+      "cssVariable": "--muted",
+      "light": "#66766D",
+      "dark": "#A0B5A7"
     },
     "border": {
-      "light": "#DDE5DC",
-      "dark": "#354C3E"
+      "cssVariable": "--border",
+      "light": "#E1E7DF",
+      "dark": "#354F3E"
     },
-    "inputBorder": {
-      "light": "#B7C6BA",
-      "dark": "#52705B"
+    "input": {
+      "cssVariable": "--input",
+      "light": "#FFFFFF",
+      "dark": "#13241C"
+    },
+    "input-bg": {
+      "cssVariable": "--input-bg",
+      "light": "#FFFFFF",
+      "dark": "#13241C"
+    },
+    "input-border": {
+      "cssVariable": "--input-border",
+      "light": "#B9C8BD",
+      "dark": "#547560"
+    },
+    "accent": {
+      "cssVariable": "--accent",
+      "light": "#276A57",
+      "dark": "#A4D5B2"
+    },
+    "accent-text": {
+      "cssVariable": "--accent-text",
+      "light": "#235E4E",
+      "dark": "#B2E0BD"
+    },
+    "accent-soft": {
+      "cssVariable": "--accent-soft",
+      "light": "#E6F0E8",
+      "dark": "#294834"
+    },
+    "accent-contrast": {
+      "cssVariable": "--accent-contrast",
+      "light": "#FFFFFF",
+      "dark": "#132C20"
+    },
+    "green": {
+      "cssVariable": "--green",
+      "light": "#276A57",
+      "dark": "#A4D5B2"
+    },
+    "red": {
+      "cssVariable": "--red",
+      "light": "#A83F42",
+      "dark": "#F2A3A3"
+    },
+    "warning": {
+      "cssVariable": "--warning",
+      "light": "#946425",
+      "dark": "#E5BE7E"
+    },
+    "info": {
+      "cssVariable": "--info",
+      "light": "#376D91",
+      "dark": "#A3C8E8"
+    },
+    "success": {
+      "cssVariable": "--success",
+      "light": "#235E4E",
+      "dark": "#B2E0BD"
+    },
+    "danger": {
+      "cssVariable": "--danger",
+      "light": "#A83F42",
+      "dark": "#F2A3A3"
+    },
+    "overlay": {
+      "cssVariable": "--overlay",
+      "light": "#102D276B",
+      "dark": "#00000099"
+    },
+    "success-soft": {
+      "cssVariable": "--success-soft",
+      "light": "#E6F0E8",
+      "dark": "#234130"
+    },
+    "danger-soft": {
+      "cssVariable": "--danger-soft",
+      "light": "#F8E9E8",
+      "dark": "#402A29"
+    },
+    "warning-soft": {
+      "cssVariable": "--warning-soft",
+      "light": "#FBF1DF",
+      "dark": "#3E3524"
+    },
+    "info-soft": {
+      "cssVariable": "--info-soft",
+      "light": "#EDF3F8",
+      "dark": "#263746"
+    },
+    "nav-bg": {
+      "cssVariable": "--nav-bg",
+      "light": "#173D36",
+      "dark": "#102D27"
+    },
+    "nav-text": {
+      "cssVariable": "--nav-text",
+      "light": "#C4D5CA",
+      "dark": "#C1D5C7"
+    },
+    "nav-muted": {
+      "cssVariable": "--nav-muted",
+      "light": "#9CB8A6",
+      "dark": "#9BB8A5"
+    },
+    "nav-selected": {
+      "cssVariable": "--nav-selected",
+      "light": "#E8F3E5",
+      "dark": "#E8F3E5"
+    },
+    "nav-hover": {
+      "cssVariable": "--nav-hover",
+      "light": "#FFFFFF0C",
+      "dark": "#FFFFFF0C"
+    },
+    "nav-active": {
+      "cssVariable": "--nav-active",
+      "light": "#FFFFFF13",
+      "dark": "#FFFFFF13"
+    },
+    "nav-border": {
+      "cssVariable": "--nav-border",
+      "light": "#FFFFFF13",
+      "dark": "#FFFFFF13"
+    },
+    "gy-night": {
+      "cssVariable": "--gy-night",
+      "light": "#173D36",
+      "dark": "#102D27"
+    },
+    "gy-night-deep": {
+      "cssVariable": "--gy-night-deep",
+      "light": "#102D27",
+      "dark": "#102D27"
+    },
+    "gy-moon": {
+      "cssVariable": "--gy-moon",
+      "light": "#E9D8AF",
+      "dark": "#E9D8AF"
+    },
+    "gy-jade": {
+      "cssVariable": "--gy-jade",
+      "light": "#AACBB3",
+      "dark": "#AACBB3"
+    },
+    "gy-cinnabar": {
+      "cssVariable": "--gy-cinnabar",
+      "light": "#B65D43",
+      "dark": "#E7A28C"
+    },
+    "gy-seal": {
+      "cssVariable": "--gy-seal",
+      "light": "#B65D43",
+      "dark": "#E7A28C"
+    },
+    "gy-bronze": {
+      "cssVariable": "--gy-bronze",
+      "light": "#A27C43",
+      "dark": "#D4B57E"
+    },
+    "gy-gold": {
+      "cssVariable": "--gy-gold",
+      "light": "#EAE4C8",
+      "dark": "#EAE4C8"
+    },
+    "gy-ink": {
+      "cssVariable": "--gy-ink",
+      "light": "#203631",
+      "dark": "#EAF1E9"
+    },
+    "gy-paper": {
+      "cssVariable": "--gy-paper",
+      "light": "#F9F8F1",
+      "dark": "#EAF1E9"
     }
   },
+  "aliases": {
+    "light": {
+      "bg": "canvas",
+      "surface-soft": "surface-raised",
+      "surface-muted": "surface-raised",
+      "input-bg": "input",
+      "green": "accent",
+      "success": "accent-text",
+      "danger": "red",
+      "success-soft": "accent-soft",
+      "gy-night": "nav-bg",
+      "gy-seal": "gy-cinnabar",
+      "gy-ink": "text",
+      "gy-radius": "radius-card",
+      "gy-shadow": "shadow-card"
+    },
+    "dark": {
+      "bg": "canvas",
+      "surface-soft": "surface-raised",
+      "surface-muted": "surface-raised",
+      "input-bg": "input",
+      "green": "accent",
+      "success": "accent-text",
+      "danger": "red",
+      "gy-night": "nav-bg",
+      "gy-seal": "gy-cinnabar",
+      "gy-ink": "text",
+      "gy-radius": "radius-card",
+      "gy-shadow": "shadow-card"
+    }
+  },
+  "penpotFoundationMapping": {
+    "canvas": "--canvas",
+    "surface": "--surface",
+    "raised": "--surface-raised",
+    "ink": "--text",
+    "muted": "--muted",
+    "border": "--border",
+    "pine": "--nav-bg",
+    "accent": "--accent",
+    "soft": "--accent-soft",
+    "clay": "--gy-cinnabar",
+    "gold": "--gy-gold",
+    "danger": "--red",
+    "warning": "--warning"
+  },
   "radii": {
-    "sm": 6,
-    "control": 9,
-    "md": 12,
-    "lg": 14,
-    "xl": 16,
-    "pill": 999
+    "small": 6,
+    "control": 8,
+    "card": 12,
+    "dialog": 16
   },
   "spacing": {
     "1": 4,
@@ -74,39 +299,67 @@
     "4": 16,
     "5": 20,
     "6": 24,
-    "8": 32,
-    "10": 40
+    "8": 32
   },
   "typography": {
-    "display": {
-      "family": "Songti SC / Georgia",
-      "size": 30,
-      "weight": 650,
-      "lineHeight": 1.4
+    "brand": {
+      "cssVariable": "--font-display",
+      "family": "'Mooncourt Serif','Songti SC','STSong','Noto Serif CJK SC',Georgia,serif",
+      "localFont": "frontend/public/design/noto-serif-brand.ttf",
+      "weight": 500
     },
     "body": {
-      "family": "System UI / PingFang SC",
+      "cssVariable": "--font-body",
+      "family": "-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif",
       "size": 14,
       "weight": 400,
-      "lineHeight": 1.6
+      "lineHeight": 1.5
+    },
+    "page": {
+      "desktopSize": 28,
+      "mobileSize": 24,
+      "weight": 650,
+      "lineHeight": 1.3
+    },
+    "section": {
+      "size": 18,
+      "weight": 650,
+      "lineHeight": 1.45
     },
     "caption": {
-      "family": "System UI / PingFang SC",
-      "size": 12,
-      "weight": 500,
-      "lineHeight": 1.4
+      "minSize": 12
+    },
+    "monospace": {
+      "cssVariable": "--font-mono",
+      "family": "ui-monospace,'SFMono-Regular',Consolas,monospace"
     }
   },
+  "layout": {
+    "sidebarWidth": 224,
+    "desktopTopbarHeight": 68,
+    "mobileTopbarHeight": 64
+  },
   "breakpoints": {
-    "mobile": 650,
+    "sharedDetail": 650,
     "shell": 900,
-    "wide": 1200
+    "note": "Feature layouts retain additional breakpoints where required; these values describe shared layout behavior."
   },
   "interaction": {
-    "desktopControlMinHeight": 40,
+    "desktopButtonMinHeight": 40,
     "mobileControlMinHeight": 44,
+    "desktopIconControlSize": 36,
+    "mobileIconControlSize": 44,
+    "loginButtonMinHeight": 48,
     "mobileInputFontSize": 16,
     "focusOutlineWidth": 2,
-    "focusOutlineOffset": 3
-  }
+    "focusOutlineOffset": 3,
+    "sidebarFocusOutlineOffset": 2
+  },
+  "styleLayers": [
+    "tokens.css",
+    "base.css",
+    "controls.css",
+    "layouts.css",
+    "shell.css"
+  ]
 }

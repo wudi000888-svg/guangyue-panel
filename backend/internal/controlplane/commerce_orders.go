@@ -204,6 +204,12 @@ func (a *App) listOrders(w http.ResponseWriter, r *http.Request, actor Record) e
 	query := "SELECT doc FROM commerce_orders"
 	args := []any{}
 	clauses := []string{}
+	// Deep links and status refreshes must find an order outside the first page.
+	// Keep the same user scope below for exact reads as for ordinary listing.
+	if id := strings.TrimSpace(r.URL.Query().Get("id")); id != "" {
+		clauses = append(clauses, "id=?")
+		args = append(args, id)
+	}
 	// Do not use an artificial first-page cursor. Order IDs are opaque text and
 	// the ordering of '~' relative to letters differs between SQLite and
 	// PostgreSQL collations; the old sentinel could hide every order on a new

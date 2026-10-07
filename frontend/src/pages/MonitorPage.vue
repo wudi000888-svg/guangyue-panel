@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import PageHeading from "../components/PageHeading.vue";
+import "../styles/admin-ui.css";
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { Activity, RefreshCw, Pause, Play } from 'lucide-vue-next';
 import { useApi, isCancelled } from '../lib/api';
@@ -35,8 +37,8 @@ onMounted(()=>{void load();poll.start();clock=setInterval(()=>now.value=Date.now
 onUnmounted(()=>{poll.stop();requests.cancel();clearInterval(clock);clearTimeout(debounce);});
 </script>
 <template>
-  <section class="monitor-page">
-    <header class="page-heading"><div><h1>{{t('实时监控')}}</h1><p class="section-subtitle">{{t('查看每位用户的活跃连接与实时流量')}}</p></div><div class="monitor-actions"><button @click="paused=!paused"><component :is="paused?Play:Pause" :size="15"/>{{paused?t('继续刷新'):t('暂停刷新')}}</button><button :disabled="busy" @click="load"><RefreshCw :size="15"/>{{t('刷新')}}</button></div></header>
+  <section class="monitor-page admin-page">
+    <PageHeading :title="t('实时监控')" :description="t('查看每位用户的活跃连接与实时流量')" eyebrow="LIVE TRAFFIC"><template #actions><button @click="paused=!paused"><component :is="paused?Play:Pause" :size="16"/>{{paused?t('继续刷新'):t('暂停刷新')}}</button><button :disabled="busy" @click="load"><RefreshCw :size="16"/>{{t('刷新')}}</button></template></PageHeading>
     <div class="monitor-status"><span :class="['badge',fresh?'success':'neutral']"><Activity :size="13"/>{{paused?t('已暂停'):fresh?t('实时采样'):t('等待采样')}}</span><span>{{t('最近采样')}} {{sampled}} · {{t('每 5 秒刷新')}}</span><span>{{t('当前站点')}} · {{snapshot?.site_id||state?.system.site_id}}</span></div>
     <p v-if="error" class="error" role="alert">{{t(error)}}</p>
     <p v-if="snapshot&&(!fresh||!snapshot.connections_available.every(Boolean)||!snapshot.traffic_available.every(Boolean))" class="monitor-note" role="status">{{t('部分数据暂不可用。请检查核心服务；旧版 Xray 需随面板升级后才能统计会话，恢复后等待两次采样。')}}</p>

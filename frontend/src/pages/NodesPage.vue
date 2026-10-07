@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import PageHeading from "../components/PageHeading.vue";
+import "../styles/admin-ui.css";
 import {computed,onMounted,ref,watch} from "vue";
 import {rateText} from "../lib/quota";
 import NodePolicyDialog from "../components/NodePolicyDialog.vue";
@@ -20,19 +22,8 @@ watch(visibleNodes,ns=>selectedNodeIDs.value=selectedNodeIDs.value.filter(id=>ns
 onMounted(loadEntitlements);
 </script>
 <template>
-<section v-if="state">
-          <div class="page-heading">
-            <div>
-              <div class="eyebrow">ROUTING</div>
-              <h1>{{publicNodePage ? t("公共节点") : t("本地节点")}}</h1>
-            </div>
-            <div v-if="!publicNodePage" class="node-create-actions">
-              <button @click="editNode(undefined, 'vless')">
-                <Plus :size="17" />{{ t("新建 VLESS 节点") }}</button
-              ><button class="primary" @click="editNode(undefined, 'hy2')">
-                <Plus :size="17" />{{ t("新建 HY2 节点") }}</button>
-            </div>
-          </div>
+<section v-if="state" class="admin-page">
+ <PageHeading :title="publicNodePage?t('公共节点'):t('本地节点')" :description="t('节点决定接入方式与出口，套餐决定成员访问权限。')" eyebrow="ACCESS NODES"><template #actions><div v-if="!publicNodePage" class="node-create-actions"><button @click="editNode(undefined,'vless')"><Plus :size="17"/>{{t('新建 VLESS 节点')}}</button><button class="primary" @click="editNode(undefined,'hy2')"><Plus :size="17"/>{{t('新建 HY2 节点')}}</button></div></template></PageHeading>
           <div v-if="publicNodePage" class="pool-intro"><Globe2 :size="21"/><div><strong>{{ t("公共节点独立维护") }}</strong><p>{{ t("节点由公共池自动维护，订阅在“订阅管理”中统一选择来源。") }}</p></div><span class="spacer"/><button @click="go('public')">{{ t("采集与黑名单") }}</button><button class="primary" @click="go('subscription')">{{ t("订阅管理") }}</button></div>
           <div class="endpoint-band">
             <span class="endpoint-icon"><Globe2 :size="23" /></span>

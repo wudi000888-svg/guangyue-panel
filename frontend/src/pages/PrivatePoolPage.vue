@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import PageHeading from "../components/PageHeading.vue";
+import "../styles/admin-ui.css";
 import { usePanelContext } from "../composables/panelContext";
 const { canMountSubsites,state, busy, speedRunning, qualityRunning, qualityTest, importReport, openImport, speedTest, ipSearch, ipType, ipState, privateTab, privateSourcesReady, privateSourcesLoading, privateSourcesError, receivePrivateSources, loadPrivateSources, isSubscribedResource, privateTabs, sourceLabel, selectPrivateTab, viewSourceResources, sourceChanged, poolStats, ipStatus, ipBadge, sourceFilter, filteredIPs, detecting, date, exitName, go, editIP, detectIP, deleteIP, selectedIPIDs, selectAll, batchAction } = usePanelContext();
 import { ArrowUpRight, Download, Gauge, LoaderCircle, Database, Pencil, Plus, RefreshCw, Search, Trash2, X } from "lucide-vue-next";
@@ -14,16 +16,8 @@ import ListTable from "../components/ListTable.vue";
 const {page:listPage,pages:listPages,rows:listRows}=usePagination(filteredIPs);
 </script>
 <template>
-<section v-if="state" class="private-pool-page">
-          <div class="page-heading">
-            <div><h1>{{ t("本地 IP 池") }}</h1><p class="resource-page-description">{{t("按来源管理本地主机出口，统一检测与分配")}}</p></div>
-            <div v-if="privateTab!=='subsites'" class="heading-actions">
-              <button @click="openImport()">
-                <Download :size="17" />{{ t("导入订阅 / 节点") }}</button
-              ><button class="primary" @click="editIP()">
-                <Plus :size="17" />{{ t("添加 IP 资源") }}</button>
-            </div>
-          </div>
+<section v-if="state" class="private-pool-page admin-page">
+ <PageHeading :title="t(privateTab==='subsites'?'子站 IP 池':'本地 IP 池')" :description="t(privateTab==='subsites'?'客户端 → 主站节点 → 子站出口。流量经过主站中转。':'管理出口资源，再关联到本地节点提供访问。')" eyebrow="EGRESS RESOURCES"><template #actions><div v-if="privateTab!=='subsites'" class="heading-actions"><button @click="openImport()"><Download :size="17"/>{{t('导入订阅 / 节点')}}</button><button class="primary" @click="editIP()"><Plus :size="17"/>{{t('添加 IP 资源')}}</button></div></template></PageHeading>
           <div v-if="privateTab!=='subsites'" class="user-stat-grid">
             <div>
               <span>{{ t("IP 池资源") }}</span><strong>{{ poolStats.total }}</strong>
