@@ -162,6 +162,122 @@ class InfrastructureBundleTests(unittest.TestCase):
             subprocess.run([sys.executable,str(root/'infrastructure.py'),'--help'],check=True,capture_output=True)
             self.assertFalse((root/'__pycache__').exists())
 
+
+class PostgresRecoveryTests(unittest.TestCase):
+    toc = b'''; Archive created by pg_dump
+6; 2615 16400 SCHEMA - gy_site_a guangyue
+201; 1259 16401 TABLE gy_site_a users guangyue
+202; 1259 16402 SEQUENCE gy_site_a users_id_seq guangyue
+203; 0 0 SEQUENCE OWNED BY gy_site_a users_id_seq guangyue
+204; 2604 16403 DEFAULT gy_site_a users id guangyue
+205; 0 16401 TABLE DATA gy_site_a users guangyue
+206; 0 0 SEQUENCE SET gy_site_a users_id_seq guangyue
+207; 2606 16404 CONSTRAINT gy_site_a users users_pkey guangyue
+208; 1259 16405 INDEX gy_site_a users_name guangyue
+209; 2606 16406 FK CONSTRAINT gy_site_a users parent_fk guangyue
+210; 0 0 ACL - SCHEMA gy_site_a guangyue
+211; 0 0 COMMENT gy_site_a TABLE users guangyue
+'''
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.snapshot = Path(self.temp.name) / 'postgres.dump'
+        self.snapshot.write_bytes(b'fixture archive')
+        self.config = {'site_id': 'site_a', 'database': {'driver': 'postgres',
+                       'dsn': 'postgres://fixture:private-fixture-password@127.0.0.1:25433/fixture'}}
+
+    def test_invalid_site_or_archive_path_cannot_start_recovery(self):
+        with patch.object(infrastructure.subprocess, 'run') as command:
+            for site in ['site_a; DROP SCHEMA public', 'site_a\n', 'SiteA', '*', '../other', '', None, 'a' * 41]:
+                with self.subTest(site=site), self.assertRaises(ValueError):
+                    infrastructure.restore_postgres(dict(self.config, site_id=site), self.snapshot)
+            link = Path(self.temp.name) / 'link.dump'
+            link.symlink_to(self.snapshot)
+            with self.assertRaises(ValueError):
+                infrastructure.restore_postgres(self.config, link)
+            command.assert_not_called()
+
+    def test_wrong_site_global_objects_and_unsupported_ddl_are_rejected_before_psql(self):
+        dangerous = [
+            self.toc.replace(b'gy_site_a', b'gy_other'),
+            self.toc + b'212; 2615 19990 SCHEMA - public owner\n',
+            self.toc + b'212; 1259 19991 TABLE public unrelated owner\n',
+            self.toc + b'212; 1262 19992 DATABASE - fixture owner\n',
+            self.toc + b'212; 0 19993 BLOB - 19993 owner\n',
+            self.toc + b'212; 3079 19994 EXTENSION - pgcrypto owner\n',
+            self.toc + b'212; 1255 19995 FUNCTION gy_site_a unsafe() owner\n',
+            self.toc + b'212; 0 0 TABLE ATTACH gy_site_a partition owner\n',
+            self.toc + b'212; 0 0 ACL - DATABASE fixture owner\n',
+            self.toc + b'201; 1259 16401 TABLE gy_site_a users guangyue\n',
+            b'6; 2615 16400 SCHEMA - gy_site_a guangyue\n',
+        ]
+        for listing in dangerous:
+            with self.subTest(listing=listing[-90:]), patch.object(infrastructure.subprocess, 'run',
+                    return_value=subprocess.CompletedProcess([], 0, stdout=listing)) as command:
+                with self.assertRaises(ValueError):
+                    infrastructure.restore_postgres(self.config, self.snapshot)
+                self.assertEqual(command.call_count, 1)
+                self.assertEqual(command.call_args.args[0][:2], ['pg_restore', '--list'])
+
+    def test_scope_cleanup_and_restore_are_one_transaction_without_cascade(self):
+        calls, scripts = [], []
+
+        def command(args, **kwargs):
+            calls.append(args)
+            self.assertNotIn('private-fixture-password', ' '.join(args))
+            self.assertEqual(kwargs['env']['PGPASSWORD'], 'private-fixture-password')
+            if args[:2] == ['pg_restore', '--list']:
+                return subprocess.CompletedProcess(args, 0, stdout=self.toc)
+            if args[0] == 'pg_restore':
+                self.assertIn('--file=-', args)
+                self.assertFalse(any(arg == '-n' or arg.startswith('--schema') for arg in args))
+                self.assertNotIn('--clean', args)
+                kwargs['stdout'].write(b'CREATE SCHEMA gy_site_a;\nCREATE TABLE gy_site_a.users(id bigint);\n')
+            else:
+                self.assertEqual(args[0], 'psql')
+                self.assertIn('-X', args)
+                self.assertIn('--single-transaction', args)
+                self.assertIn('--set=ON_ERROR_STOP=1', args)
+                self.assertTrue(kwargs['capture_output'])
+                script = Path(args[args.index('--file') + 1])
+                scripts.append(script)
+                self.assertEqual(script.stat().st_mode & 0o777, 0o600)
+                self.assertEqual(script.parent.stat().st_mode & 0o777, 0o700)
+                sql = script.read_text()
+                self.assertNotIn('CASCADE', sql)
+                self.assertIn("EXECUTE 'DROP TABLE ' || objects || ' RESTRICT'", sql)
+                self.assertIn("EXECUTE 'DROP SCHEMA gy_site_a RESTRICT'", sql)
+                self.assertIn('CREATE SCHEMA gy_site_a;', sql)
+                self.assertLess(sql.index('DROP SCHEMA gy_site_a'), sql.index('CREATE SCHEMA gy_site_a'))
+            return subprocess.CompletedProcess(args, 0, stdout=b'')
+
+        with patch.object(infrastructure.subprocess, 'run', side_effect=command):
+            infrastructure.restore_postgres(self.config, self.snapshot)
+        self.assertEqual([args[0] for args in calls], ['pg_restore', 'pg_restore', 'psql'])
+        self.assertTrue(scripts)
+        self.assertTrue(all(not script.parent.exists() for script in scripts))
+
+    def test_corrupt_archive_or_sql_failure_is_private_and_export_failure_never_connects(self):
+        for stage in ['list', 'export', 'apply']:
+            calls = []
+
+            def command(args, **kwargs):
+                calls.append(args)
+                current = 'list' if args[:2] == ['pg_restore', '--list'] else 'apply' if args[0] == 'psql' else 'export'
+                if current == stage:
+                    raise subprocess.CalledProcessError(1, args, stderr=b'private-fixture-password; secret-row-value')
+                if current == 'export':
+                    kwargs['stdout'].write(b'CREATE SCHEMA gy_site_a;\n')
+                return subprocess.CompletedProcess(args, 0, stdout=self.toc if current == 'list' else b'')
+
+            with self.subTest(stage=stage), patch.object(infrastructure.subprocess, 'run', side_effect=command):
+                with self.assertRaises(ValueError) as error:
+                    infrastructure.restore_postgres(self.config, self.snapshot)
+                self.assertNotIn('secret', str(error.exception))
+                self.assertNotIn('private-fixture-password', str(error.exception))
+                self.assertEqual(any(args[0] == 'psql' for args in calls), stage == 'apply')
+
 class BusinessDeploymentTests(unittest.TestCase):
     def test_business_role_accepts_token_without_registration_file(self):
         config=infrastructure.edition_config({},'lite','site_tokyo',role='business',controller_url='https://control.example.com',connect_token='gye_'+'A'*43)

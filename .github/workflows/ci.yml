@@ -109,4 +109,14 @@ jobs:
       - name: Real systemd installation, certificate rotation, edition migration and rollback
         env:
           GY_INTEGRATION_EDITION: ${{ matrix.edition }}
-        run: sudo --preserve-env=GITHUB_ACTIONS,GY_INTEGRATION_EDITION python3 deploy/tests/integration.py "$(realpath build/releases/guangyue-panel-${{ matrix.asset || matrix.edition }}-*-linux-amd64)"
+        run: |
+          # Privileged upgrade code must come from a root-owned directory.
+          # Keep the same trust boundary used by production CLI upgrades.
+          bundle=$(realpath build/releases/guangyue-panel-${{ matrix.asset || matrix.edition }}-*-linux-amd64)
+          # Hosted images allow runner writes to /opt; privileged helpers need
+          # the protected parent permissions used by standard deployments.
+          sudo chmod go-w /opt
+          sudo install -d -m 0700 /root/guangyue-ci-bundle
+          sudo cp -R "$bundle" /root/guangyue-ci-bundle/release
+          sudo chown -R root:root /root/guangyue-ci-bundle/release
+          sudo --preserve-env=GITHUB_ACTIONS,GY_INTEGRATION_EDITION python3 deploy/tests/integration.py /root/guangyue-ci-bundle/release

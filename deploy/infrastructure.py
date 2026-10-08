@@ -11,6 +11,7 @@ import sys
 sys.dont_write_bytecode = True
 from urllib.parse import urlparse, unquote, parse_qs
 import subprocess
+import tempfile
 from pathlib import Path
 from common import deployment_lock
 
@@ -111,8 +112,127 @@ def dump_postgres(config, path):
         subprocess.run(['pg_dump','--format=custom','--schema=gy_'+config.get('site_id','default')],env=env,stdout=output,stderr=subprocess.PIPE,check=True)
 
 def restore_postgres(config, path):
+    """Restore a trusted, site-scoped snapshot without cascading into other sites.
+
+    All application tables are dropped in one RESTRICT statement, so their
+    mutual foreign keys do not obstruct recovery. External dependencies and
+    unsupported custom objects instead abort the enclosing transaction.
+    """
+    site = config.get('site_id', 'default')
+    if not isinstance(site, str) or not re.fullmatch(r'[a-z][a-z0-9_]{0,39}', site):
+        raise ValueError('invalid PostgreSQL recovery site ID')
+    schema = 'gy_' + site
+    path = Path(path)
+    if path.is_symlink() or not path.is_file():
+        raise ValueError('PostgreSQL recovery requires a regular snapshot file')
     env=postgres_env(config)
-    subprocess.run(['pg_restore','--dbname='+env['PGDATABASE'],'--clean','--if-exists','--no-owner','--single-transaction','--exit-on-error',str(path)],env=env,capture_output=True,check=True)
+    try:
+        listing = subprocess.run(['pg_restore', '--list', str(path)], env=env,
+                                 capture_output=True, check=True).stdout.decode('utf-8')
+    except (subprocess.CalledProcessError, UnicodeError):
+        raise ValueError('PostgreSQL snapshot could not be validated') from None
+    # A full-database archive, large objects, extensions, executable routines,
+    # partition attachments and objects belonging to another site are refused.
+    # This is scope validation of our own trusted pg_dump snapshots, not a
+    # sandbox for executing arbitrary third-party PostgreSQL archives.
+    kinds = sorted(['SCHEMA', 'TABLE', 'TABLE DATA', 'SEQUENCE', 'SEQUENCE SET',
+                    'SEQUENCE OWNED BY', 'DEFAULT', 'CONSTRAINT', 'FK CONSTRAINT',
+                    'INDEX', 'COMMENT', 'ACL', 'DEFAULT ACL',
+                    'ENCODING', 'STDSTRINGS', 'SEARCHPATH'], key=len, reverse=True)
+    seen, schemas, tables = set(), 0, 0
+    for line in listing.splitlines():
+        if not line.strip() or line.lstrip().startswith(';'):
+            continue
+        match = re.fullmatch(r'(\d+);\s+\d+\s+\d+\s+(.+)', line)
+        if not match or match[1] in seen:
+            raise ValueError('PostgreSQL snapshot table of contents is invalid')
+        seen.add(match[1])
+        entry = match[2]
+        kind = next((kind for kind in kinds if entry.startswith(kind + ' ')), None)
+        if kind is None:
+            raise ValueError('PostgreSQL snapshot contains unsupported recovery objects')
+        fields = entry[len(kind):].strip().split()
+        if len(fields) < 2:
+            raise ValueError('PostgreSQL snapshot table of contents is incomplete')
+        namespace = fields[0]
+        if kind == 'SCHEMA':
+            if namespace != '-' or fields[1] != schema:
+                raise ValueError('PostgreSQL snapshot contains another schema')
+            schemas += 1
+        elif kind in {'ENCODING', 'STDSTRINGS', 'SEARCHPATH'}:
+            if namespace != '-':
+                raise ValueError('PostgreSQL snapshot metadata is invalid')
+        elif namespace == '-' and kind in {'COMMENT', 'ACL'}:
+            if len(fields) < 3 or fields[1:3] != ['SCHEMA', schema]:
+                raise ValueError('PostgreSQL snapshot contains objects outside this site')
+        elif namespace != schema:
+            raise ValueError('PostgreSQL snapshot contains objects outside this site')
+        elif kind == 'TABLE':
+            tables += 1
+    if schemas != 1 or tables == 0:
+        raise ValueError('PostgreSQL snapshot does not contain one complete site schema')
+
+    # Keep scope-changing DDL and restored data in one server transaction. Never
+    # use CASCADE: it can remove a different site's FK, view or extension member.
+    # Unknown custom objects cause DROP SCHEMA RESTRICT to fail and roll back.
+    cleanup = f"""SET LOCAL search_path = pg_catalog;
+DO $guangyue_restore$
+DECLARE
+    site_namespace oid := pg_catalog.to_regnamespace('{schema}');
+    objects text;
+BEGIN
+    IF site_namespace IS NOT NULL THEN
+        IF EXISTS (
+            SELECT 1 FROM pg_catalog.pg_class c
+            WHERE c.relnamespace = site_namespace
+              AND (c.relkind NOT IN ('r', 'i', 'S', 't') OR c.relispartition)
+        ) OR EXISTS (
+            SELECT 1 FROM pg_catalog.pg_inherits i
+            JOIN pg_catalog.pg_class c ON c.oid IN (i.inhrelid, i.inhparent)
+            WHERE c.relnamespace = site_namespace
+        ) THEN
+            RAISE EXCEPTION 'unsupported site objects prevent isolated recovery';
+        END IF;
+        SELECT pg_catalog.string_agg(pg_catalog.format('%I.%I', '{schema}', c.relname), ', ' ORDER BY c.oid)
+        INTO objects FROM pg_catalog.pg_class c
+        WHERE c.relnamespace = site_namespace AND c.relkind = 'r';
+        IF objects IS NOT NULL THEN
+            EXECUTE 'DROP TABLE ' || objects || ' RESTRICT';
+        END IF;
+        SELECT pg_catalog.string_agg(pg_catalog.format('%I.%I', '{schema}', c.relname), ', ' ORDER BY c.oid)
+        INTO objects FROM pg_catalog.pg_class c
+        WHERE c.relnamespace = site_namespace AND c.relkind = 'S';
+        IF objects IS NOT NULL THEN
+            EXECUTE 'DROP SEQUENCE ' || objects || ' RESTRICT';
+        END IF;
+        EXECUTE 'DROP SCHEMA {schema} RESTRICT';
+    END IF;
+END;
+$guangyue_restore$;
+"""
+    with tempfile.TemporaryDirectory(prefix='guangyue-postgres-recovery-') as temp:
+        script = Path(temp) / 'restore.sql'
+        descriptor = os.open(script, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(descriptor, 'wb') as output:
+            output.write(cleanup.encode('utf-8'))
+            output.flush()
+            try:
+                # Namespace filtering omits the SCHEMA TOC item. The whole
+                # archive was scoped above, so restore it including CREATE
+                # SCHEMA and its privileges rather than filtering a second time.
+                subprocess.run(['pg_restore', '--file=-', '--no-owner', '--exit-on-error',
+                                str(path)], env=env,
+                               stdout=output, stderr=subprocess.PIPE, check=True)
+            except subprocess.CalledProcessError:
+                raise ValueError('PostgreSQL snapshot could not be decoded; database was not changed') from None
+        try:
+            subprocess.run(['psql', '-X', '--no-password', '--set=ON_ERROR_STOP=1',
+                            '--single-transaction', '--file', str(script)], env=env,
+                           capture_output=True, check=True)
+        except subprocess.CalledProcessError:
+            # SQL errors can echo sensitive row values. Never expose raw psql
+            # output, connection details or the recovery SQL in diagnostics.
+            raise ValueError('PostgreSQL site recovery failed; inspect the private snapshot and database state') from None
 
 def provision():
     if PROFILE.exists():
