@@ -10,6 +10,7 @@
 | Lucide | 以 package-lock.json 为准 | ISC | 编译进入前端 |
 | QRCode | 以 package-lock.json 为准 | MIT | 编译进入前端 |
 | Trust Wallet Core | [4.8.4 / d40d24a6](https://github.com/trustwallet/wallet-core/tree/d40d24a63d92619167903369308bf0e2f7eb3a59)，官方 `@trustwallet/wallet-core@4.8.4` | 上游 Core Apache-2.0；npm 元数据声明 MIT；其内第三方组件各自许可 | 官方未修改 WASM 与 JavaScript glue 作为浏览器资产；原始许可及上游第三方声明随包提供，不需要生产 Node 服务 |
+| go-ethereum | go.mod/go.sum 锁定的 v1.17.7 | 链接的库代码 LGPL-3.0-or-later；原始其他声明保留 | 交易编码、签名与哈希链接进入应用；固定完整库源码、原始 COPYING/COPYING.LESSER 和重链接说明随安装包提供，见 [构建来源](docs/CRYPTO_BUILD.md) |
 | Go / SQLite 生态 | 以 go.mod/go.sum 为准 | 各自许可 | 编译进入应用 |
 | DB-IP IP to Country Lite | [2026-10](https://db-ip.com/db/download/ip-to-country-lite) | CC-BY-4.0 | MMDB 原始记录嵌入应用；[来源与署名](docs/SITE-ACCESS.md#数据来源与许可)，完整许可随安装包提供 |
 

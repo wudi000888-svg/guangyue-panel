@@ -12,6 +12,12 @@ func (s *Store) validateCommerce(deep bool) error {
 	if err := s.validateCryptoWallets(deep); err != nil {
 		return err
 	}
+	if err := s.validateCryptoPayments(deep); err != nil {
+		return err
+	}
+	if err := s.validateCryptoSweeps(deep); err != nil {
+		return err
+	}
 	checks := []string{
 		"SELECT COUNT(*) FROM (SELECT t.id FROM money_transactions t LEFT JOIN money_entries e ON e.transaction_id=t.id GROUP BY t.id HAVING COUNT(e.account)<2 OR COALESCE(SUM(e.amount),1)<>0) bad",
 		"SELECT COUNT(*) FROM wallet_accounts w LEFT JOIN users u ON u.id=w.user_id WHERE u.id IS NULL OR w.available<0 OR w.held<0 OR w.available+w.held>100000000000 OR w.revision<>(SELECT COUNT(*) FROM money_transactions t WHERE t.user_id=w.user_id)",

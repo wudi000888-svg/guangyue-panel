@@ -12,6 +12,16 @@ import (
 )
 
 func (a *App) listPaymentMethods(w http.ResponseWriter, actor Record) error {
+	if actor.Role != "owner" {
+		enabled, e := a.paymentModuleEnabled()
+		if e != nil {
+			return e
+		}
+		if !enabled {
+			jsonResponse(w, 200, object{"items": []PaymentMethod{}})
+			return nil
+		}
+	}
 	providers, err := a.store.paymentProviders(actor.Role != "owner")
 	if err != nil {
 		return err
@@ -49,6 +59,11 @@ func (a *App) savePaymentMethod(w http.ResponseWriter, r *http.Request, actor Re
 	}
 	if _, err := a.commerceActor(actor, true, in.Password); err != nil {
 		return err
+	}
+	if in.Enabled {
+		if e := a.requirePaymentModule(); e != nil {
+			return e
+		}
 	}
 	in.Code = strings.ToLower(strings.TrimSpace(in.Code))
 	in.Name = strings.TrimSpace(in.Name)

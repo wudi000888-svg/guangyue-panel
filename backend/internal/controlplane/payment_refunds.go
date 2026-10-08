@@ -75,6 +75,12 @@ func (a *App) paymentRefundAction(w http.ResponseWriter, r *http.Request, actor 
 	if in.Action != "request" && in.Action != "confirm_manual" {
 		return commerceFail(400, "退款操作无效")
 	}
+	// Token quantities and chain transfer evidence do not have the semantics of
+	// the CNY platform refund ledger. A text/hash supplied by an administrator
+	// cannot make a crypto transfer final, or complete a fiat refund record.
+	if p.Code != "stripe" && p.Code != "epay" && p.Code != "webhook" {
+		return commerceFail(409, "该渠道不能使用法币退款确认；加密货币退款需核对链上实际转出，不能仅填写交易哈希确认")
+	}
 	if in.Action == "request" && p.Code != "stripe" {
 		return commerceFail(409, "易支付需先在商户后台完成原路退款，再填写真实退款凭据确认；系统不会转入站内余额")
 	}
@@ -92,6 +98,11 @@ func (a *App) paymentRefundAction(w http.ResponseWriter, r *http.Request, actor 
 		return err
 	}
 	defer tx.Rollback()
+	if receipt.OrderID != "" {
+		if _, err = tx.Exec("UPDATE commerce_orders SET updated=updated WHERE id=?", receipt.OrderID); err != nil {
+			return err
+		}
+	}
 	if _, err = tx.Exec("UPDATE payment_attempts SET updated=updated WHERE id=?", receipt.AttemptID); err != nil {
 		return err
 	}
@@ -169,6 +180,15 @@ func (a *App) paymentRefundWork(ctx context.Context) error {
 			problems = append(problems, e)
 			continue
 		}
+		if p.Code != "stripe" {
+			// Never dispatch a recovered non-Stripe responsibility to Stripe.
+			// Keep the receipt unresolved rather than pretending funds were sent.
+			_, e = a.store.db.Exec("UPDATE payment_refunds SET state='failed',message='此渠道不支持 Stripe 自动退款，请核对对应渠道的真实资金转出',updated=? WHERE id=? AND state='processing'", time.Now().Unix(), refund.ID)
+			if e != nil {
+				problems = append(problems, e)
+			}
+			continue
+		}
 		var remote stripeRefund
 		if refund.ExternalRef != "" {
 			e = a.stripeAPI(ctx, p, "GET", "/v1/refunds/"+url.PathEscape(refund.ExternalRef), "", nil, &remote)
@@ -203,6 +223,11 @@ func (a *App) recordStripeRefund(p PaymentProvider, event verifiedPaymentEvent) 
 	}
 	if err != nil {
 		return err
+	}
+	if receipt.OrderID != "" {
+		if _, err = tx.Exec("UPDATE commerce_orders SET updated=updated WHERE id=?", receipt.OrderID); err != nil {
+			return err
+		}
 	}
 	if _, err = tx.Exec("UPDATE payment_attempts SET updated=updated WHERE id=?", receipt.AttemptID); err != nil {
 		return err

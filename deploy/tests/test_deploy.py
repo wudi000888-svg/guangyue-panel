@@ -52,6 +52,14 @@ class RenderTests(unittest.TestCase):
         self.assertNotIn('add_header', restore)
         self.assertIn('add_header Strict-Transport-Security', panel)
         self.assertEqual(render.wallet_restore_location(panel), panel)
+
+        treasury = render.CRYPTO_TREASURY_LOCATION
+        self.assertEqual(panel.count(treasury), 1)
+        self.assertIn('proxy_read_timeout 100s;', treasury)
+        self.assertNotIn('add_header', treasury)
+        self.assertNotIn('client_max_body_size', treasury)
+        legacy = panel.replace(restore, '').replace(treasury, '')
+        self.assertEqual(render.wallet_restore_location(legacy).replace(restore, '').replace(treasury, ''), legacy)
         custom = panel.replace(restore, '').replace('access_log off;', '# preserve custom settings\n    access_log off;', 1)
         self.assertEqual(render.wallet_restore_location(custom).replace(restore, ''), custom)
         with self.assertRaises(ValueError):

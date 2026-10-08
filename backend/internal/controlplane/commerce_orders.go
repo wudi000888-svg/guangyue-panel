@@ -254,6 +254,9 @@ func (a *App) listOrders(w http.ResponseWriter, r *http.Request, actor Record) e
 	return nil
 }
 func (a *App) createOrder(w http.ResponseWriter, r *http.Request, actor Record) error {
+	if e := a.requirePaymentModule(); e != nil {
+		return e
+	}
 	var in struct {
 		OfferID      string `json:"offer_id"`
 		OfferVersion int    `json:"offer_version"`
@@ -367,6 +370,11 @@ func (a *App) orderAction(w http.ResponseWriter, r *http.Request, actor Record) 
 	kind := ""
 	switch in.Action {
 	case "confirm":
+		if o.PaymentAttemptID == "" {
+			if e := a.requirePaymentModule(); e != nil {
+				return e
+			}
+		}
 		if actor.ID != o.UserID {
 			return commerceFail(403, "订单需由所属用户确认")
 		}
@@ -485,6 +493,25 @@ func (a *App) orderAction(w http.ResponseWriter, r *http.Request, actor Record) 
 		return e
 	}
 	defer tx.Rollback()
+	if in.Action == "confirm" && o.PaymentProviderID == "crypto" {
+		if e = cryptoLockOrderPayment(tx, o); e != nil {
+			return e
+		}
+	}
+	if _, e = tx.Exec("UPDATE commerce_orders SET updated=updated WHERE id=?", o.ID); e != nil {
+		return e
+	}
+	var lockedDoc []byte
+	var lockedOrder Order
+	if e = tx.QueryRow("SELECT doc FROM commerce_orders WHERE id=?", o.ID).Scan(&lockedDoc); e != nil {
+		return e
+	}
+	if e = json.Unmarshal(lockedDoc, &lockedOrder); e != nil {
+		return e
+	}
+	if lockedOrder.State != old || lockedOrder.PaymentAttemptID != o.PaymentAttemptID || lockedOrder.PaymentProviderID != o.PaymentProviderID {
+		return errCommerceConflict
+	}
 	if in.Action == "confirm" && o.PaymentAttemptID != "" {
 		locked, err := tx.Exec("UPDATE payment_attempts SET updated=updated WHERE id=? AND state='paid'", o.PaymentAttemptID)
 		if err != nil {
@@ -567,6 +594,10 @@ func (a *App) commerceWork(now int64) error {
 			continue
 		}
 		if o.State == "pending" {
+			// Crypto eligibility follows finalized block time, not RPC discovery time.
+			if o.PaymentProviderID == "crypto" {
+				continue
+			}
 			if o.Expires <= now {
 				if o.PaymentAttemptID != "" {
 					var state string
@@ -590,6 +621,16 @@ func (a *App) commerceWork(now int64) error {
 				}
 			}
 			continue
+		}
+		if o.State == "provisioning" && o.PaymentProviderID == "crypto" {
+			invoice, err := a.store.scanCryptoInvoice(a.store.db.QueryRow("SELECT "+cryptoInvoiceColumns+" FROM crypto_invoices WHERE attempt_id=?", o.PaymentAttemptID))
+			if err == nil {
+				err = a.store.cryptoChainAvailable(a.store.db, invoice.ChainID)
+			}
+			if err != nil {
+				problems = append(problems, err)
+				continue
+			}
 		}
 		if o.State == "provisioning" && now-o.Started >= 1800 {
 			e = a.failProvisioning(o, "开通超时，冻结余额已退回")
@@ -640,6 +681,9 @@ func (a *App) failProvisioning(o Order, message string) error {
 		return e
 	}
 	defer tx.Rollback()
+	if _, e = tx.Exec("UPDATE commerce_orders SET updated=updated WHERE id=?", o.ID); e != nil {
+		return e
+	}
 	// A provider-paid order has no wallet hold to release.  Keep the paid
 	// attempt visible for an operator to refund through the provider instead of
 	// silently crediting the user's internal balance.
@@ -777,6 +821,27 @@ func (a *App) fulfilOrder(o Order, now int64) error {
 		return e
 	}
 	defer tx.Rollback()
+	if oldState == "provisioning" && o.PaymentProviderID == "crypto" {
+		if e = cryptoLockOrderPayment(tx, o); e != nil {
+			return e
+		}
+	}
+	if _, e = tx.Exec("UPDATE commerce_orders SET updated=updated WHERE id=?", o.ID); e != nil {
+		return e
+	}
+	var storedState, storedAttempt string
+	var lockedRaw []byte
+	if e = tx.QueryRow("SELECT state,doc FROM commerce_orders WHERE id=?", o.ID).Scan(&storedState, &lockedRaw); e != nil {
+		return e
+	}
+	var currentOrder Order
+	if e = json.Unmarshal(lockedRaw, &currentOrder); e != nil {
+		return e
+	}
+	storedAttempt = currentOrder.PaymentAttemptID
+	if storedState != oldState || storedAttempt != o.PaymentAttemptID {
+		return errCommerceConflict
+	}
 	if !u.Enabled && oldState == "provisioning" {
 		o.State = "failed"
 		o.Message = "账号已停用，冻结余额已退回"
@@ -1024,4 +1089,12 @@ func (a *App) purchaseSiteBudgets(u Record, sites []BusinessSite) (map[string]in
 		remaining -= budget
 	}
 	return out, nil
+}
+
+func cryptoLockOrderPayment(tx *persistence.Tx, o Order) error {
+	var chainID int64
+	if e := tx.QueryRow("SELECT chain_id FROM crypto_invoices WHERE attempt_id=? AND order_id=?", o.PaymentAttemptID, o.ID).Scan(&chainID); e != nil {
+		return e
+	}
+	return cryptoLockChain(tx, chainID)
 }

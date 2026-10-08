@@ -94,6 +94,7 @@ export type State = {
   totals: { upload: number; download: number; active: number };
   system: {
     node_save_receipts?: boolean;
+    payment_module_enabled?: boolean;
     edition?: 'lite' | 'pro';
     role?: 'standalone' | 'controller' | 'business';
     site_id?: string;

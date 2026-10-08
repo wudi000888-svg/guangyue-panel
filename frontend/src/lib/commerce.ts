@@ -7,7 +7,7 @@ export interface Wallet {user_id:number;available:string;held:string;currency:st
 export const walletRevision = ref(0);
 export interface MoneyTransaction {id:string;kind:string;amount:string;available:string;held:string;reason:string;reference:string;created:number}
 export interface Offer {id:string;version:number;enabled:boolean;price:string;purchase_limit?:number;plan:Plan}
-export interface PaymentMethod {id:string;code:string;name:string;enabled:boolean;version:number;archived?:boolean;base_url?:string;merchant_id?:string;channel?:string;checkout:boolean;has_secret?:boolean;has_webhook_secret?:boolean;mode?:'test'|'live';webhook_url?:string}
+export interface PaymentMethod {id:string;code:string;purposes?:Array<'order'|'topup'>;name:string;enabled:boolean;version:number;archived?:boolean;base_url?:string;merchant_id?:string;channel?:string;checkout:boolean;has_secret?:boolean;has_webhook_secret?:boolean;mode?:'test'|'live';webhook_url?:string}
 export interface PaymentAttempt {id:string;purpose?:'order'|'topup';order_id:string;user_id:number;provider_id:string;state:string;amount:string;currency:string;merchant_ref:string;external_ref?:string;checkout_url?:string;message?:string;refund_status?:string;created:number;updated:number;expires:number}
 export interface PaymentReceipt {id:string;provider_id:string;external_ref:string;attempt_id:string;order_id:string;user_id:number;amount:string;currency:string;state:string;reason:string;created:number;updated:number}
 export interface PaymentCheckout {attempt:PaymentAttempt;checkout_url:string;type:'redirect'}

@@ -15,6 +15,15 @@ import (
 )
 
 func (a *App) commerceAPI(w http.ResponseWriter, r *http.Request, actor Record) {
+	if a.paymentModuleGate(w, r) {
+		return
+	}
+	if a.cryptoSweepAPIRoute(w, r, actor) {
+		return
+	}
+	if a.cryptoPaymentAPIRoute(w, r, actor) {
+		return
+	}
 	if a.cryptoWalletAPIRoute(w, r, actor) {
 		return
 	}
@@ -66,7 +75,28 @@ func (a *App) commerceAPI(w http.ResponseWriter, r *http.Request, actor Record) 
 				}
 			}
 			if e == nil {
-				_, e = a.store.db.Exec("INSERT INTO meta(key,value) VALUES('commerce_settings',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", string(jsonBytes(s)))
+				if s.PaymentModuleEnabled != nil && *s.PaymentModuleEnabled && a.cfg.businessAgent() {
+					e = commerceFail(409, "请先切换到令牌自主管理模式，再启用本站支付")
+				} else {
+					var txErr error
+					tx, txErr := a.store.db.Begin()
+					if txErr != nil {
+						e = txErr
+					} else {
+						defer tx.Rollback()
+						_, e = tx.Exec("INSERT INTO meta(key,value) VALUES('commerce_settings',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", string(jsonBytes(s)))
+						if e == nil && s.PaymentModuleEnabled != nil {
+							value := "false"
+							if *s.PaymentModuleEnabled {
+								value = "true"
+							}
+							_, e = tx.Exec("INSERT INTO meta(key,value) VALUES('payment_module_enabled',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", value)
+						}
+						if e == nil {
+							e = tx.Commit()
+						}
+					}
+				}
 			}
 		}
 		if e == nil {
@@ -134,6 +164,11 @@ func (a *App) commerceGet(w http.ResponseWriter, r *http.Request, actor Record, 
 		if e != nil {
 			return e
 		}
+		enabled, e := a.paymentModuleEnabled()
+		if e != nil {
+			return e
+		}
+		v.PaymentModuleEnabled = &enabled
 		jsonResponse(w, 200, v)
 	case "wallet":
 		u, e := requestedUser(r, actor)

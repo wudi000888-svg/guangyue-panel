@@ -1,0 +1,9 @@
+import {expect,it} from 'vitest';
+import {hasCryptoBalance,previewFundingFees,previewGasFees,canSignSweep,sweepFinished,sweepJobStateText,previewFundingShortfall,type CryptoBalance,type SweepPreview,type SweepJob} from './cryptoTreasury';
+it('keeps gas and token balances exact and never confuses dust with zero',()=>{expect(hasCryptoBalance({native_atoms:'0',tokens:[{balance_atoms:'1'}]} as CryptoBalance)).toBe(true);expect(hasCryptoBalance({native_atoms:'0',tokens:[]} as unknown as CryptoBalance)).toBe(false);const preview={items:[{funding_gas_atoms:'900719925474099300',gas_fee_atoms:'900719925474099301'},{funding_gas_atoms:'1',gas_fee_atoms:'2'}]} as SweepPreview;expect(previewFundingFees(preview)).toBe('900719925474099301');expect(previewGasFees(preview)).toBe('900719925474099303')});
+it('watch-only and unsupported networks cannot sign even with a funded address',()=>{expect(canSignSweep('watch_only',true)).toBe(false);expect(canSignSweep('hot',false)).toBe(false);expect(canSignSweep('hot',true)).toBe(true)});
+it('broadcast and waiting receipts are never presented as complete',()=>{for(const state of ['gas_pending','sweep_pending','queued'])expect(sweepFinished({state:'complete',items:[{state}]} as SweepJob)).toBe(false);expect(sweepFinished({state:'complete',items:[{state:'complete'}]} as SweepJob)).toBe(true)});
+
+it('shows the exact funding shortage while retaining the full fee preview',()=>{expect(previewFundingShortfall({required_funding_atoms:'2000000000000000001',funding_balance_atoms:'1000000000000000000'} as SweepPreview)).toBe('1000000000000000001');expect(previewFundingShortfall({required_funding_atoms:'1',funding_balance_atoms:'2'} as SweepPreview)).toBe('0')});
+
+it('does not label inconsistent task totals as complete when receipts are still pending',()=>{expect(sweepJobStateText({state:'complete',items:[{state:'sweep_pending'}]} as SweepJob)).toBe('需要核对')});
