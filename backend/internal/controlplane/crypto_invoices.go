@@ -86,7 +86,10 @@ func (s *Store) scanCryptoInvoice(row cryptoScanner) (CryptoInvoice, error) {
 	v.CNYPerToken = p.CNYPerToken
 	v.RateUpdatedAt = p.RateUpdatedAt
 	v.RateExpiresAt = p.RateExpiresAt
-	v.RateSource = "管理员手动汇率"
+	v.RateSource = p.RateSource
+	if v.RateSource == "" {
+		v.RateSource = "管理员手动汇率"
+	}
 	v.QRURI = "ethereum:" + v.Contract + "@" + strconv.FormatInt(v.ChainID, 10) + "/transfer?address=" + v.Address + "&uint256=" + v.ExpectedAtoms
 	return v, nil
 }
@@ -289,6 +292,7 @@ func (a *App) createCryptoInvoice(w http.ResponseWriter, r *http.Request, actor 
 	if e != nil || existingOrder.UserID != actor.ID || existingOrder.State != "pending" || existingOrder.Expires <= time.Now().Unix() || existingOrder.Offer.Price <= 0 {
 		return commerceFail(409, "订单不存在、已过期或无需付款")
 	}
+	_ = a.refreshCryptoAutoRates(r.Context())
 	settings, e := a.store.cryptoPaymentSettings()
 	if e != nil {
 		return e
@@ -303,7 +307,7 @@ func (a *App) createCryptoInvoice(w http.ResponseWriter, r *http.Request, actor 
 		return commerceFail(409, reason)
 	}
 	if asset.RateExpiresAt <= now {
-		return commerceFail(409, "手动汇率已过期，请管理员更新")
+		return commerceFail(409, "汇率已过期，请稍后重试或联系管理员")
 	}
 	if e = a.store.cryptoChainAvailable(a.store.db, chain.ChainID); e != nil {
 		return e
@@ -355,7 +359,7 @@ func (a *App) createCryptoInvoice(w http.ResponseWriter, r *http.Request, actor 
 		return e
 	}
 	if asset.RateExpiresAt <= time.Now().Unix() {
-		return commerceFail(409, "手动汇率已过期，请管理员更新")
+		return commerceFail(409, "汇率已过期，请稍后重试或联系管理员")
 	}
 	if revision != settings.Revision {
 		return commerceFail(409, "支付设置已变化，请重试")
@@ -429,6 +433,9 @@ func (a *App) createCryptoInvoice(w http.ResponseWriter, r *http.Request, actor 
 	}
 	if e = cryptoWalletReady(wallet); e != nil {
 		return e
+	}
+	if !cryptoWalletSupports(wallet, chain.ChainID) {
+		return commerceFail(409, "所选钱包未启用该收款网络")
 	}
 	atoms, e := cryptoQuote(order.Offer.Price, asset)
 	if e != nil {

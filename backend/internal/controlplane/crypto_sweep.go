@@ -190,6 +190,9 @@ func (a *App) cryptoWalletBalance(ctx context.Context, id, chainID string, after
 	if e != nil {
 		return out, e
 	}
+	if !cryptoWalletSupports(v, chain.ChainID) {
+		return out, commerceFail(409, "此钱包未选择该网络")
+	}
 	c, e := newCryptoEVM(chain, a.cfg.Dev)
 	if e != nil {
 		return out, e
@@ -284,6 +287,9 @@ func (a *App) cryptoPreviewSweep(ctx context.Context, actor Record, id string, i
 	if e != nil {
 		return out, e
 	}
+	if !cryptoWalletSupports(v, chain.ChainID) {
+		return out, commerceFail(409, "此钱包未选择该网络")
+	}
 	if e = cryptoSweepAllowed(chain); e != nil {
 		return out, e
 	}
@@ -299,9 +305,13 @@ func (a *App) cryptoPreviewSweep(ctx context.Context, actor Record, id string, i
 	if e != nil {
 		return out, e
 	}
-	budget, e := cryptoAtoms(in.MaxGasAtoms)
-	if e != nil || budget.Sign() <= 0 {
-		return out, commerceFail(400, "请设置本次手续费预算上限")
+	automaticBudget := strings.TrimSpace(in.MaxGasAtoms) == ""
+	budget := new(big.Int)
+	if !automaticBudget {
+		budget, e = cryptoAtoms(in.MaxGasAtoms)
+		if e != nil || budget.Sign() <= 0 {
+			return out, commerceFail(400, "请设置本次手续费预算上限")
+		}
 	}
 	if !common.IsHexAddress(in.Destination) || common.HexToAddress(in.Destination) == (common.Address{}) {
 		return out, commerceFail(400, "提取目标地址无效")
@@ -458,6 +468,12 @@ func (a *App) cryptoPreviewSweep(ctx context.Context, actor Record, id string, i
 		fundFees.Add(fundFees, fundFee)
 	}
 	out.TotalAtoms, out.TotalTopupAtoms, out.TotalGasAtoms = total.String(), topups.String(), fees.String()
+	if automaticBudget {
+		// The estimate already includes bounded price and gas-limit buffers. Freeze
+		// that exact upper limit in the same approved quote; never use infinity.
+		budget.Set(fees)
+		out.MaxGasAtoms = budget.String()
+	}
 	requiredFunding := new(big.Int).Add(new(big.Int).Set(topups), fundFees)
 	out.RequiredFundingAtoms = requiredFunding.String()
 	shortfall := new(big.Int).Sub(requiredFunding, fundBalance)
@@ -546,6 +562,9 @@ func (a *App) cryptoCreateSweep(ctx context.Context, actor Record, wallet string
 	v, e := cryptoWalletByID(tx, wallet)
 	if e != nil {
 		return job, e
+	}
+	if !cryptoWalletSupports(v, quote.Chain.ChainID) {
+		return job, commerceFail(409, "此钱包未选择该网络")
 	}
 	if e = cryptoSweepWallet(v); e != nil {
 		return job, e

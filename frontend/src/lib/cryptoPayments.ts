@@ -1,4 +1,5 @@
 import { t } from '../i18n';
+import { canAllocate, walletSupportsChain, type CryptoWallet, type WalletAPI } from './cryptoWallet';
 export interface CryptoAssetOption { id:string; chain_id:number; chain_name:string; name:string; symbol:string; contract:string; decimals:number; payment_decimals:number; cny_per_token:string; rate_updated_at:number; rate_expires_at:number; available:boolean; unavailable_reason:string }
 export interface CryptoOptions { enabled:boolean; assets:CryptoAssetOption[] }
 export interface CryptoTransfer {chain_id:number;tx_hash:string;log_index:number;contract:string;atoms:string;block_number:number;block_time:number;state:string;reason:string}
@@ -28,10 +29,38 @@ export function invoiceQR(invoice:CryptoInvoice,mode:'wallet'|'exchange'):string
 }
 export const CRYPTO_PROVIDER='crypto';
 export function supportsPaymentPurpose(method:{code:string;purposes?:string[]},purpose:'order'|'topup'):boolean{return method.purposes?method.purposes.includes(purpose):purpose==='order'||!['crypto','evm_crypto'].includes(method.code);}
-export interface CryptoChain {id:string;name:string;chain_id:number;rpc_url:string;rpc_backup_url:string;has_rpc:boolean;has_rpc_backup:boolean;native_symbol:string;enabled:boolean;finality_verified:boolean}
-export interface CryptoConfiguredAsset extends CryptoAssetOption {enabled:boolean}
-export interface CryptoSettings {revision:number;enabled:boolean;wallet_id:string;invoice_minutes:number;chains:CryptoChain[];assets:CryptoConfiguredAsset[]}
+export interface CryptoChain {id:string;name:string;chain_id:number;rpc_url:string;rpc_backup_url:string;has_rpc:boolean;has_rpc_backup:boolean;native_symbol:string;enabled:boolean;finality_verified:boolean;rpc_source?:'built_in'|'custom'}
+export interface CryptoConfiguredAsset extends CryptoAssetOption {enabled:boolean;rate_source?:string}
+export interface CryptoSetupReadiness {ready:boolean;checked_at:number;message:string}
+export interface CryptoSettings {revision:number;enabled:boolean;wallet_id:string;invoice_minutes:number;chains:CryptoChain[];assets:CryptoConfiguredAsset[];rate_mode?:'automatic'|'manual';rate_source?:string;rate_checked_at?:number;rate_error?:string;setup_checked_at?:number;readiness?:CryptoSetupReadiness}
 export const cryptoOperationsSupported=(chain:number)=>chain===1||chain===56;
+
+export function cryptoSetupDefaults(wallet:CryptoWallet|undefined,settings:CryptoSettings){
+ const available=settings.chains.filter(chain=>cryptoOperationsSupported(chain.chain_id)&&walletSupportsChain(wallet,chain.chain_id));
+ const configured=settings.wallet_id===wallet?.id&&settings.enabled?available.filter(chain=>chain.enabled):[];
+ const chain_ids=configured.length?configured.map(chain=>chain.chain_id):available.some(chain=>chain.chain_id===56)?[56]:available.slice(0,1).map(chain=>chain.chain_id);
+ const candidates=settings.assets.filter(asset=>chain_ids.includes(asset.chain_id));
+ const enabled=configured.length?candidates.filter(asset=>asset.enabled):[];
+ return {chain_ids,asset_ids:(enabled.length?enabled:candidates.filter(asset=>['USDT','USDC'].includes(asset.symbol))).map(asset=>asset.id)};
+}
+/** Quick setup never carries manual RPC credentials or client-created exchange rates. */
+export function cryptoSetupSelection(wallet:CryptoWallet|undefined,settings:CryptoSettings,chainIDs:number[],assetIDs:string[]){
+ if(!wallet||!canAllocate(wallet))throw new Error(t('请先启用钱包并完成备份与恢复索引确认'));
+ const chain_ids=[...new Set(chainIDs)],asset_ids=[...new Set(assetIDs)];
+ if(!chain_ids.length||chain_ids.some(id=>!cryptoOperationsSupported(id)||!walletSupportsChain(wallet,id)||!settings.chains.some(chain=>chain.chain_id===id)))throw new Error(t('请选择钱包支持的网络'));
+ const selected=asset_ids.map(id=>settings.assets.find(asset=>asset.id===id));
+ if(!asset_ids.length||selected.some(asset=>!asset||!chain_ids.includes(asset.chain_id))||chain_ids.some(id=>!selected.some(asset=>asset?.chain_id===id)))throw new Error(t('请为每个已选网络选择至少一种收款币种'));
+ return {wallet_id:wallet.id,chain_ids,asset_ids};
+}
+export interface CryptoSetupOperation {key:string;id:string;completed:boolean}
+/** A successful idempotent response may describe an older configuration. Always read the current state. */
+export async function confirmCryptoSetup(api:WalletAPI,selection:ReturnType<typeof cryptoSetupSelection>,operation:CryptoSetupOperation,password:string):Promise<CryptoSettings>{
+ if(!operation.completed){
+  await api<CryptoSettings>('/setup','POST',{...selection,password,operation_id:operation.id});
+  operation.completed=true;
+ }
+ return api<CryptoSettings>('/setup/status');
+}
 
 export function transferStateText(state:string){const labels:Record<string,string>={observed:'已检测，待网络确认',confirmed:'已最终确认',review_required:'待管理员核对',orphaned:'已被链重组撤回'};return t(labels[state]||state)}
 

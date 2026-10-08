@@ -15,6 +15,13 @@ func TestPostgresBehaviors(t *testing.T) {
 		name string
 		run  func(*testing.T)
 	}{
+		{"crypto_wallet_selected_networks", TestCryptoWalletSelectedNetworksAndImmediateGas},
+		{"crypto_wallet_watch_network", TestCryptoWalletWatchOnlySelectedNetwork},
+		{"crypto_sweep_automatic_budget", TestCryptoSweepAutomaticBudgetAndSelectedNetwork},
+		{"crypto_rates_refresh", TestCryptoRatesRefreshExpiryAndConcurrentEdit},
+		{"crypto_rates_invoice_snapshot", TestCryptoRatesInvoiceSnapshotExpiryAndWalletScope},
+		{"crypto_setup_atomic", TestCryptoSetupAtomicPreflightReplayAndPermissions},
+		{"crypto_settings_disable_expired", TestCryptoSettingsCanDisableExpiredRates},
 		{"payment_module_takeover", TestPaymentModuleTakeoverDefaultsAndLocalOverride},
 		{"payment_module_history", TestPaymentModuleBlocksIntentsButSettlesExistingFunds},
 		{"payment_module_sweep", TestPaymentModuleKeepsApprovedSweep},

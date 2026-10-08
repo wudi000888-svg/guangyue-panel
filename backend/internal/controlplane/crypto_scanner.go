@@ -25,6 +25,7 @@ func (a *App) runCryptoPaymentWorker(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
+		_ = a.refreshCryptoAutoRates(ctx)
 		_ = a.cryptoPaymentWork(ctx)
 		select {
 		case <-ctx.Done():

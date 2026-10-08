@@ -106,10 +106,17 @@ func cryptoDecryptBackup(backup cryptoWalletBackup, password string) (cryptoWall
 }
 func cryptoValidateDump(v cryptoWalletDump) error {
 	w := v.Wallet
+	if _, e := cryptoWalletChainIDs(w.SupportedChainIDs); e != nil {
+		return cryptoInvalidDump()
+	}
 	if v.Version != 1 || v.Exported <= 0 || w.ID == "" || len(w.ID) > 100 || !validText(w.Name, 80) || w.Created <= 0 || w.Revision < 1 || w.NextIndex < 0 || w.NextIndex > cryptoMaxIndex || v.Addresses == nil || v.ReservedIndices < 0 || v.ReservedIndices > cryptoMaxIndex || int64(len(v.Addresses))+v.ReservedIndices != w.NextIndex {
 		return cryptoInvalidDump()
 	}
 	if e := cryptoValidateXPub(w.XPub, w.Path); e != nil {
+		return cryptoInvalidDump()
+	}
+	funding, e := cryptoFunding(w)
+	if e != nil || w.FundingAddress != "" && w.FundingAddress != funding.Address || w.FundingPath != "" && w.FundingPath != funding.Path {
 		return cryptoInvalidDump()
 	}
 	first, e := cryptoDeriveAddress(w.XPub, w.Path, 0)
@@ -210,6 +217,11 @@ func (a *App) cryptoWalletExport(w http.ResponseWriter, r *http.Request, route s
 }
 func (a *App) cryptoWalletRestore(tx *persistence.Tx, dump cryptoWalletDump) (CryptoWallet, error) {
 	v := dump.Wallet
+	var networkErr error
+	v.SupportedChainIDs, networkErr = cryptoWalletChainIDs(v.SupportedChainIDs)
+	if networkErr != nil {
+		return v, cryptoInvalidDump()
+	}
 	receive, e := cryptoReceiveXPub(v.XPub, v.Path)
 	if e != nil {
 		return v, e
@@ -283,5 +295,5 @@ func (a *App) cryptoWalletRestore(tx *persistence.Tx, dump cryptoWalletDump) (Cr
 	if _, e = tx.Exec("UPDATE crypto_wallets SET reserved_indices=next_index-(SELECT COUNT(*) FROM crypto_wallet_addresses WHERE wallet_id=?) WHERE id=?", v.ID, v.ID); e != nil {
 		return v, e
 	}
-	return v, nil
+	return cryptoWalletFundingDTO(v)
 }

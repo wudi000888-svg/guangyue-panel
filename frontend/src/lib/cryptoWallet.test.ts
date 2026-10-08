@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { canAllocate, mergeCryptoWallets, CRYPTO_BACKUP_FILE_LIMIT, MAX_WALLET_NEXT_INDEX, parseCryptoBackup, saveGeneratedWallet, validateBackupPassword, type CryptoWallet, type WalletAPI } from './cryptoWallet';
+import { canAllocate, walletChains, walletSupportsChain, validateWalletChains, mergeCryptoWallets, CRYPTO_BACKUP_FILE_LIMIT, MAX_WALLET_NEXT_INDEX, parseCryptoBackup, saveGeneratedWallet, validateBackupPassword, type CryptoWallet, type WalletAPI } from './cryptoWallet';
 import type { HotWalletMaterial } from './walletCore';
 
 const wallet = { id: 'wallet-test', mode: 'hot', enabled: true, backup_confirmed: false, recovery_required: false, next_index: 0 } as CryptoWallet;
@@ -7,16 +7,16 @@ const material = (): HotWalletMaterial => ({ mnemonic: 'public test words', xpub
 
 describe('wallet secrets and request lifecycle', () => {
   it('sends only the explicit creation request and drops mnemonic/password references after success', async () => {
-    const generated = material(), input = { name: 'test', password: 'admin-test', operation_id: 'operation-test', risk_ack: true };
+    const generated = material(), input = { name: 'test', password: 'admin-test', operation_id: 'operation-test', risk_ack: true, supported_chain_ids: [56] };
     let sent: Record<string, unknown> | undefined, wire: Record<string, unknown> | undefined;
     const api = vi.fn(async (_path: string, _method: string, body: Record<string, unknown>) => { sent = body; wire = JSON.parse(JSON.stringify(body)); return wallet; });
     const result = await saveGeneratedWallet(api as WalletAPI, input, async () => generated);
     expect(result).toBe(wallet); expect(api).toHaveBeenCalledOnce();
-    expect(wire?.mnemonic).toBe('public test words'); expect(wire?.operation_id).toBe('operation-test');
+    expect(wire?.supported_chain_ids).toEqual([56]); expect(wire?.mnemonic).toBe('public test words'); expect(wire?.operation_id).toBe('operation-test');
     expect(sent?.mnemonic).toBe(''); expect(sent?.password).toBe(''); expect(generated.mnemonic).toBe(''); expect(input.password).toBe('');
   });
   it('clears secrets after a lost response and does not automatically create a second wallet', async () => {
-    const generated = material(), input = { name: 'test', password: 'admin-test', operation_id: 'operation-test', risk_ack: true };
+    const generated = material(), input = { name: 'test', password: 'admin-test', operation_id: 'operation-test', risk_ack: true, supported_chain_ids: [56] };
     let retained: Record<string, unknown> | undefined;
     const api = vi.fn(async (_path: string, _method: string, body: Record<string, unknown>) => { retained = body; throw new Error('network interrupted'); });
     await expect(saveGeneratedWallet(api as WalletAPI, input, async () => generated)).rejects.toThrow('network interrupted');
@@ -24,10 +24,10 @@ describe('wallet secrets and request lifecycle', () => {
   });
   it('does not create keys before the custody acknowledgement and clears authentication after loader failures', async () => {
     const api = vi.fn(), generate = vi.fn(async () => material());
-    const input = { name: 'test', password: 'admin-test', operation_id: 'operation-test', risk_ack: false };
+    const input = { name: 'test', password: 'admin-test', operation_id: 'operation-test', risk_ack: false, supported_chain_ids: [56] };
     await expect(saveGeneratedWallet(api as WalletAPI, input, generate)).rejects.toThrow();
     expect(generate).not.toHaveBeenCalled(); expect(api).not.toHaveBeenCalled(); expect(input.password).toBe('');
-    const next = { ...input, password: 'other-admin-test', risk_ack: true };
+    const next = { ...input, password: 'other-admin-test', risk_ack: true, supported_chain_ids: [56] };
     await expect(saveGeneratedWallet(api as WalletAPI, next, async () => { throw new Error('WASM unavailable'); })).rejects.toThrow('WASM unavailable');
     expect(next.password).toBe('');
   });
@@ -63,4 +63,25 @@ it('accepts a large exported backup and rejects a stale wallet read after mutati
   const merged = mergeCryptoWallets([changed, created], [{ ...wallet, revision: 4, next_index: 2 }]);
   expect(merged).toEqual([changed, created]);
   expect(mergeCryptoWallets(merged, [{ ...changed, revision: 6, enabled: false }])[0]?.enabled).toBe(false);
+});
+
+
+it('shows only the networks selected for this wallet and never falls back to all chains', () => {
+  const bnb = {...wallet, supported_chain_ids:[56]};
+  expect(walletChains(bnb).map(chain=>chain.native_symbol)).toEqual(['BNB']);
+  expect(walletSupportsChain(bnb,1)).toBe(false);
+  expect(walletChains({...wallet, supported_chain_ids:[]})).toEqual([]);
+  expect(validateWalletChains([56,56,1])).toEqual([56,1]);
+  expect(()=>validateWalletChains([])).toThrow();
+  expect(()=>validateWalletChains([56,8453])).toThrow();
+});
+
+it('rejects an empty or unsupported network selection before creating keys', async () => {
+  const api=vi.fn(),generate=vi.fn(async()=>material());
+  for(const ids of [[],[56,8453]]){
+    const input={name:'test',password:'admin-test',operation_id:'operation-test',risk_ack:true,supported_chain_ids:ids};
+    await expect(saveGeneratedWallet(api as WalletAPI,input,generate)).rejects.toThrow();
+    expect(input.password).toBe('');
+  }
+  expect(generate).not.toHaveBeenCalled();expect(api).not.toHaveBeenCalled();
 });
