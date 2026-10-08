@@ -38,6 +38,14 @@ sudo python3 deploy/upgrade.py --bundle "$PWD" --apply
 
 Pro 升级还会保存站点专属 `postgres.dump`（含 schema）与便携备份；失败时先恢复数据库 schema，再启动旧应用。仅还原状态目录不能回滚 Pro 数据库。Lite→Pro 操作参见[版本迁移](EDITIONS.md)。
 
+### 旧 Pro 首次升级的恢复工具保障
+
+从 0.35.0 或更早版本首次升级到 0.35.1 或更新版本时，先把官方固定版本安装包下载、验证并解压到 root 专属目录，使用**新包中的** `python3 deploy/upgrade.py --bundle "$PWD" --apply`。不要只调用旧 `/opt/guangyue-updater/update_agent.py install-bundle` 或旧网页更新按钮：旧执行器的 PostgreSQL 恢复函数需要在本次升级开始前更新，才能在后续迁移失败或断电恢复时完整撤回本次 schema 变更。
+
+新命令在部署锁与完整包校验通过后，检查没有活跃更新、恢复或网络操作，暂停闲置更新入口，再原子预置新包的 `deploy/infrastructure.py` 到既有独立执行器并恢复 socket。旧模块及校验摘要保存在 root 私有的 `/var/lib/guangyue-updater/recovery/helper-infrastructure-*/`；模块写入和目录均同步落盘。helper 版本号、其它脚本、安装基线、操作记录和配置不会在预置阶段被覆盖。不带 `--apply` 的预检查不会写入执行器。
+
+部署锁繁忙时直接拒绝维护，不停止正在执行的升级；如果关闭入口期间出现并发排队记录，也会恢复入口并拒绝本次 CLI 升级，保留原操作记录供正常执行器处理。等操作结束后重试，不要清空 journal。预置成功但后续升级失败时仍保留新版恢复模块，不能把旧恢复逻辑覆盖回去。完整操作步骤见[在线更新指南](UPDATES.md#旧-pro-首次升级到-0351-或更新版本)。
+
 ### 人工回滚
 
 `/root/guangyue-backups/upgrade-<时间>/` 包含 `state/`、`app/`、`config.json`、`units/`。停止三个服务，先把当前目录另存，然后将备份复制回原路径。状态目录递归归属 `guangyue:guangyue`、权限 0700，配置归属 `root:guangyue`、权限 0640。复制服务文件，daemon-reload 后启动，并验证 Nginx、面板、两种协议与用户权限。

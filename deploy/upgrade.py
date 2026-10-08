@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Verified release upgrades and compatible code rollback with offline recovery."""
 import argparse
+import contextlib
 import hashlib
 import json
 import os
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -190,26 +192,138 @@ def preflight(bundle=None):
     if shutil.disk_usage('/root').free < needed + (256 << 20): raise ValueError('insufficient backup space')
 
 
+def _helper_directory(path, private=False):
+    """Reject redirects and writable parents before touching privileged code."""
+    path = Path(path).absolute()
+    for parent in reversed((path, *path.parents)):
+        info = parent.lstat()
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid not in {0, os.geteuid()}:
+            raise ValueError('更新恢复目录存在不安全的链接或所有者')
+        # A protected child of a sticky temporary directory is safe for tests;
+        # the helper and recovery directories themselves must never be writable.
+        if info.st_mode & 0o022 and (parent == path or not info.st_mode & stat.S_ISVTX):
+            raise ValueError('更新恢复目录可被其他用户写入: ' + (parent.name or '/') + ' mode=' + format(stat.S_IMODE(info.st_mode), '04o'))
+    if private and path.stat().st_mode & 0o077:
+        raise ValueError('更新恢复状态目录必须为私有目录')
+
+
+def _helper_file(path):
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_uid not in {0, os.geteuid()} or info.st_mode & 0o022:
+            raise ValueError('更新恢复文件权限无效')
+        with os.fdopen(fd, 'rb', closefd=False) as source:
+            return source.read()
+    finally:
+        os.close(fd)
+
+
+def _helper_sync_directory(path):
+    fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try: os.fsync(fd)
+    finally: os.close(fd)
+
+
+def _helper_atomic_write(path, content, mode):
+    fd, temporary = tempfile.mkstemp(prefix='.' + path.name + '-', dir=path.parent)
+    try:
+        with os.fdopen(fd, 'wb') as output:
+            os.fchmod(output.fileno(), mode)
+            output.write(content); output.flush(); os.fsync(output.fileno())
+        os.replace(temporary, path)
+        _helper_sync_directory(path.parent)
+    finally:
+        if os.path.exists(temporary): os.unlink(temporary)
+
+
+def _require_idle_helper():
+    # Unknown stages fail closed too: a newer helper may introduce new actions.
+    for name in ['transaction.json', 'operation.json', 'network-operation.json']:
+        path = updates.ROOT / name
+        try: value = json.loads(_helper_file(path))
+        except FileNotFoundError: continue
+        if value is None: continue
+        if name == 'transaction.json' or not isinstance(value, dict) or value.get('stage') not in {'succeeded', 'failed'}:
+            raise ValueError('已有更新、恢复或网络操作，请等待其完成后重试')
+
+
+def prime_helper_recovery(bundle):
+    """Prime only infrastructure.py from a verified bundle under deployment_lock.
+
+    CLI callers must hold the deployment lock throughout this call and upgrade.
+    Never call from the helper itself: only an idle helper may be stopped here.
+    Keep this module after a failed upgrade so restart recovery uses the fix.
+    """
+    bundle = Path(bundle).resolve()
+    verify_bundle(bundle)
+    helper = updates.HELPER
+    if not helper.exists() and not helper.is_symlink(): return None
+    _helper_directory(helper)
+    source = bundle / 'deploy/infrastructure.py'
+    # Verification above covers every bundled deploy file; retain exactly those
+    # bytes and recheck their manifest entry before installing privileged code.
+    _helper_directory(source.parent)
+    content = _helper_file(source)
+    expected = hashlib.sha256(content).hexdigest() + '  deploy/infrastructure.py'
+    if expected not in (bundle / 'SHA256SUMS').read_text().splitlines():
+        raise ValueError('恢复工具未通过发布包校验')
+    target = helper / 'infrastructure.py'
+    previous = _helper_file(target)
+    helper_version = helper / 'VERSION'
+    if helper_version.exists() or helper_version.is_symlink():
+        if updates.version(_helper_file(helper_version).decode().strip()) > updates.version((bundle / 'VERSION').read_text().strip()):
+            raise ValueError('恢复工具版本高于安装包，请使用最新已验证发布包')
+    _helper_directory(updates.ROOT.parent)
+    updates.ROOT.mkdir(mode=0o700, exist_ok=True)
+    _helper_directory(updates.ROOT, private=True)
+    _helper_sync_directory(updates.ROOT.parent)
+    _require_idle_helper()
+    try:
+        # Holding the deployment lock prevents executing mutations. A request
+        # queued just before shutdown remains recorded; reject this CLI run.
+        run('systemctl', 'stop', 'guangyue-updater.socket', 'guangyue-updater.service')
+        _require_idle_helper()
+        if content == previous: return None
+        recovery = updates.ROOT / 'recovery'
+        recovery.mkdir(mode=0o700, exist_ok=True)
+        _helper_directory(recovery, private=True)
+        backup = Path(tempfile.mkdtemp(prefix='helper-infrastructure-', dir=recovery))
+        _helper_atomic_write(backup / 'infrastructure.py', previous, 0o600)
+        _helper_atomic_write(backup / 'manifest.json', json.dumps({
+            'bundle_version': (bundle / 'VERSION').read_text().strip(),
+            'previous_sha256': hashlib.sha256(previous).hexdigest(),
+            'installed_sha256': hashlib.sha256(content).hexdigest(),
+            'created_at': int(time.time()),
+        }, indent=2).encode() + b'\n', 0o600)
+        _helper_sync_directory(recovery); _helper_sync_directory(updates.ROOT)
+        _helper_atomic_write(target, content, 0o644)
+        return backup
+    finally:
+        run('systemctl', 'start', 'guangyue-updater.socket')
+
+
 def main():
     os.umask(0o077)
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--bundle', type=Path, required=True)
     p.add_argument('--edition', choices=['lite', 'pro']); p.add_argument('--site-id'); p.add_argument('--infrastructure-file', type=Path)
     p.add_argument('--apply', action='store_true'); args = p.parse_args()
-    preflight(args.bundle)
-    config = json.loads(CONFIG.read_text())
-    edition_config(config, args.edition or config.get('edition', 'lite'), args.site_id or config.get('site_id', 'default'), args.infrastructure_file, existing=True)
-    # A read-only preflight does not establish or modify the installation baseline.
-    floor = updates.read('installation.json', {'version': updates.current()})['version']
-    if updates.version((args.bundle / 'VERSION').read_text().strip()) < updates.version(floor): raise ValueError('不能回退到安装基线之前的版本')
-    if args.apply: upgrade(args.bundle, args.edition, args.site_id, args.infrastructure_file)
-    else: print('Upgrade preflight passed. Add --apply for a brief service interruption.')
+    with deployment_lock() if args.apply else contextlib.nullcontext():
+        preflight(args.bundle)
+        config = json.loads(CONFIG.read_text())
+        edition_config(config, args.edition or config.get('edition', 'lite'), args.site_id or config.get('site_id', 'default'), args.infrastructure_file, existing=True)
+        # A read-only preflight does not establish or modify the installation baseline.
+        floor = updates.read('installation.json', {'version': updates.current()})['version']
+        if updates.version((args.bundle / 'VERSION').read_text().strip()) < updates.version(floor): raise ValueError('不能回退到安装基线之前的版本')
+        if args.apply:
+            prime_helper_recovery(args.bundle)
+            upgrade(args.bundle, args.edition, args.site_id, args.infrastructure_file)
+        else: print('Upgrade preflight passed. Add --apply for a brief service interruption.')
 
 
 if __name__ == '__main__':
     try:
-        if '--apply' in sys.argv:
-            with deployment_lock(): main()
-        else: main()
+        main()
     except (ValueError, OSError, subprocess.CalledProcessError) as exc:
         raise SystemExit('Upgrade failed: ' + (str(exc) if isinstance(exc, ValueError) else type(exc).__name__))
