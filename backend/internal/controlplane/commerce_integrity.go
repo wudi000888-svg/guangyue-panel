@@ -66,7 +66,7 @@ func (s *Store) validateCommerce(deep bool) error {
 			rows.Close()
 			return errors.New("order snapshot integrity failed")
 		}
-		if state == "provisioning" {
+		if state == "provisioning" && o.PaymentAttemptID == "" {
 			heldOrders[user] += o.Offer.Price
 		}
 	}
@@ -94,9 +94,12 @@ func (s *Store) validateCommerce(deep bool) error {
 	if !deep {
 		return nil
 	}
-	for _, table := range []string{"commerce_requests", "support_attachments"} {
+	for _, table := range []string{"commerce_requests", "support_attachments", "payment_providers", "payment_attempts", "email_settings", "email_outbox"} {
 		field := "response"
-		if table == "support_attachments" {
+		if table == "payment_providers" || table == "payment_attempts" || table == "email_settings" {
+			field = "doc"
+		}
+		if table == "support_attachments" || table == "email_outbox" {
 			field = "body"
 		}
 		rows, e = s.db.Query("SELECT " + field + " FROM " + table)

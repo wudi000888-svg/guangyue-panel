@@ -57,6 +57,49 @@ describe('session and request isolation', () => {
   });
 });
 
+describe('entry-site account and payment requests', () => {
+  it.each([
+    ['/email/status', 'GET'],
+    ['/email/registration', 'POST'],
+    ['/email/verify', 'POST'],
+    ['/email/reset/request', 'POST'],
+    ['/email/reset/confirm', 'POST'],
+    ['/email/settings', 'GET'],
+    ['/email/settings', 'PUT'],
+    ['/email/test', 'POST'],
+    ['/email/deliveries?state=failed', 'GET'],
+    ['/email/deliveries/retry', 'POST'],
+    ['/account/email', 'GET'],
+    ['/account/email', 'POST'],
+    ['/account/email', 'DELETE'],
+    ['/commerce/payment-methods', 'GET'],
+    ['/commerce/payment-methods', 'POST'],
+    ['/commerce/payment-methods/action', 'POST'],
+    ['/commerce/payments?state=refund_required', 'GET'],
+    ['/commerce/payments/action', 'POST'],
+    ['/commerce/wallet/topup', 'POST'],
+  ])('keeps %s %s on the entry site while a child is selected', async (path, method) => {
+    setRemoteSite('child-account-must-not-use');
+    const fetch = vi.fn(async (_url: string, _options: RequestInit) => Response.json({ ok: true }));
+    vi.stubGlobal('fetch', fetch);
+    const body = method === 'GET' ? undefined : { operation_id: 'request-1' };
+
+    await api(path, method, body);
+    await api('/state');
+
+    const [url, options] = fetch.mock.calls[0]!;
+    expect(url).toBe('/api' + path);
+    expect(options.method).toBe(method);
+    expect(options.credentials).toBe('same-origin');
+    const localHeaders = new Headers(options.headers);
+    expect(localHeaders.has('X-Guangyue-Site')).toBe(false);
+    expect(localHeaders.get('X-Requested-With')).toBe('guangyue');
+    expect(options.body).toBe(body ? JSON.stringify(body) : undefined);
+    // Performing local account work must not clear the user's selected site.
+    expect(new Headers(fetch.mock.calls[1]![1].headers).get('X-Guangyue-Site')).toBe('child-account-must-not-use');
+  });
+});
+
 const deniedStatus = {
   enabled: true, allowed: false, access_denied: true, ip: '203.0.113.24',
   country_code: 'CN', country_name: '中国', reason: '该地区暂不提供访问',

@@ -46,6 +46,8 @@ func (a *App) register(w http.ResponseWriter, r *http.Request) {
 		Password        string `json:"password"`
 		ConfirmPassword string `json:"confirm_password"`
 		CaptchaToken    string `json:"captcha_token"`
+		Email           string `json:"email"`
+		EmailToken      string `json:"email_token"`
 	}
 	if !decode(w, r, &input) {
 		return
@@ -103,8 +105,8 @@ func (a *App) register(w http.ResponseWriter, r *http.Request) {
 			record.Credentials.VLESS[n.ID] = uuid()
 		}
 	}
-	if err = a.store.save(&record); err != nil {
-		failure(w, 409, "账号已存在或保存失败")
+	if err = a.store.saveEmailRegistration(&record, input.Email, input.EmailToken); err != nil {
+		commerceWriteError(w, err)
 		return
 	}
 	a.status = "pending"

@@ -20,6 +20,7 @@ import (
 )
 
 type App struct {
+	paymentClient          *http.Client
 	clientDownloadMu       sync.Mutex
 	clientDownloads        *clientDownloadRelay
 	mountSyncMu            [64]sync.Mutex
@@ -205,6 +206,8 @@ func Run() {
 	}
 	defer workers.Wait()
 	startWorker(a.loop)
+	startWorker(a.runEmailWorker)
+	startWorker(a.runPaymentWorker)
 	if cfg.controller() {
 		startWorker(a.mountLoop)
 	}

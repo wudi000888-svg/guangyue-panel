@@ -75,7 +75,7 @@ async function request<T>(url: string, options: RequestInit, decode: (r: Respons
   try {
     check();
     const path = url.split(/[?#]/, 1)[0];
-    const localOnly = /^\/api\/(commerce(?:\/|$)|support(?:\/|$)|fleet(?:\/|$)|business-sites(?:\/|$)|updates(?:\/|$)|login$|logout$|password$|site$|access-status$|register(?:\/|$))/.test(path || '');
+    const localOnly = /^\/api\/(commerce(?:\/|$)|support(?:\/|$)|fleet(?:\/|$)|business-sites(?:\/|$)|updates(?:\/|$)|login$|logout$|password$|site$|access-status$|register(?:\/|$)|email(?:\/|$)|account\/email$)/.test(path || '');
     // Access decisions concern the browser's entry site, never the selected child site.
     if (path === '/api/access-status') {
       const headers = new Headers(options.headers);

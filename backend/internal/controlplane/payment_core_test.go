@@ -1,11 +1,13 @@
 package controlplane
 
 import (
+	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"net/url"
 	"testing"
+	"time"
 )
 
 func TestPaymentCents(t *testing.T) {
@@ -23,7 +25,7 @@ func TestPaymentCents(t *testing.T) {
 }
 
 func TestEpaySignatureVerification(t *testing.T) {
-	provider := PaymentProvider{Code: "epay", Config: map[string]string{"secret": "test-secret"}}
+	provider := PaymentProvider{Code: "epay", Config: map[string]string{"secret": "test-secret", "merchant_id": "merchant"}}
 	values := url.Values{"pid": {"merchant"}, "trade_no": {"T-1"}, "out_trade_no": {"GYO-1"}, "money": {"12.34"}, "trade_status": {"TRADE_SUCCESS"}}
 	values.Set("sign", epaySign(values, provider.Config["secret"]))
 	values.Set("sign_type", "MD5")
@@ -51,5 +53,23 @@ func TestJSONWebhookVerification(t *testing.T) {
 	}
 	if _, err = verifyJSONWebhook(provider, body, "sha256=bad"); err == nil {
 		t.Fatal("verifyJSONWebhook accepted an invalid signature")
+	}
+}
+
+func TestStripeRefundSignatureAndMode(t *testing.T) {
+	p := PaymentProvider{Code: "stripe", Config: map[string]string{"webhook_secret": "whsec_fixture", "mode": "test", "merchant_id": "acct_fixture"}}
+	body := []byte(`{"id":"evt_refund","type":"refund.updated","livemode":false,"data":{"object":{"id":"re_fixture","payment_intent":"pi_fixture","amount":1234,"currency":"cny","status":"succeeded","metadata":{"attempt_id":"attempt_fixture"}}}}`)
+	sig := stripeTestSignature(body, "whsec_fixture", time.Now().Unix())
+	event, err := verifyStripe(p, body, sig)
+	if err != nil || event.Status != "refund" || event.RefundID != "re_fixture" || event.RefundStatus != "succeeded" || event.ExternalRef != "pi_fixture" || event.Amount != 1234 || event.MerchantRef != "attempt_fixture" {
+		t.Fatalf("refund=%+v err=%v", event, err)
+	}
+	changed := bytes.Replace(body, []byte(`"amount":1234`), []byte(`"amount":9999`), 1)
+	if _, err = verifyStripe(p, changed, sig); err == nil {
+		t.Fatal("tampered refund accepted")
+	}
+	p.Config["mode"] = "live"
+	if _, err = verifyStripe(p, body, sig); err == nil {
+		t.Fatal("test webhook crossed into live mode")
 	}
 }

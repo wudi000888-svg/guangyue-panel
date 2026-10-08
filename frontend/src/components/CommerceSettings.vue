@@ -1,26 +1,34 @@
 <script setup lang="ts">
-import {onMounted,ref} from 'vue';import {useCommerce,type PaymentMethod} from '../lib/commerce';import {t} from '../i18n';import '../commerce.css';
-const {read,api,busy,error,notice}=useCommerce();
-const settings=ref({sales:false,redemption:true,tickets:true,currency:'CNY',payment_provider:'manual',payment_webhook_url:'',mail_provider:'none',mail_from:'',mail_webhook_url:''});
-const methods=ref<PaymentMethod[]>([]),editing=ref<PaymentMethod|null>(null),code=ref('epay'),name=ref(''),enabled=ref(true),baseURL=ref(''),merchantID=ref(''),channel=ref(''),secret=ref(''),password=ref('');
-onMounted(async()=>{const v=await read<typeof settings.value>('/settings');if(v)settings.value=v;await loadMethods()});
-async function loadMethods(){const v=await read<{items:PaymentMethod[]}>('/payment-methods');if(v)methods.value=v.items}
-function add(){editing.value=null;code.value='epay';name.value='';enabled.value=true;baseURL.value='';merchantID.value='';channel.value='';secret.value=''}
-function edit(v:PaymentMethod){editing.value=v;code.value=v.code;name.value=v.name;enabled.value=v.enabled;baseURL.value=v.base_url||'';merchantID.value=v.merchant_id||'';channel.value=v.channel||'';secret.value=''}
-async function saveMethod(){busy.value=true;error.value='';try{await api('/payment-methods','POST',{id:editing.value?.id||'',version:editing.value?.version||0,code:code.value,name:name.value,enabled:enabled.value,base_url:baseURL.value,merchant_id:merchantID.value,channel:channel.value,secret:secret.value,password:password.value});password.value='';secret.value='';notice.value=t('支付方式已保存');editing.value=null;await loadMethods()}catch(e){error.value=t((e as Error).message)}finally{busy.value=false}}
-async function save(){busy.value=true;error.value='';try{await api('/settings','POST',{settings:settings.value,password:password.value});notice.value=t('账户服务设置已保存')}catch(e){error.value=t((e as Error).message)}finally{password.value='';busy.value=false}}
+import { onMounted, ref } from 'vue';
+import { CreditCard, Mail, Settings2 } from 'lucide-vue-next';
+import { useCommerce } from '../lib/commerce';
+import { t } from '../i18n';
+import PaymentSettings from './PaymentSettings.vue';
+import MailSettings from './MailSettings.vue';
+import '../commerce.css';
+import '../styles/integrations.css';
+const { read, api, busy, error, notice } = useCommerce();
+const section = ref('payments'), password = ref('');
+const settings = ref({ sales: false, redemption: true, tickets: true, currency: 'CNY', payment_provider: 'manual', payment_webhook_url: '', mail_provider: 'none', mail_from: '', mail_webhook_url: '' });
+const tabs = [{ id: 'payments', label: '在线支付', icon: CreditCard }, { id: 'mail', label: '邮件服务', icon: Mail }, { id: 'rules', label: '账户规则', icon: Settings2 }];
+function tabKey(event: KeyboardEvent, index: number) {
+  if (!['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) return;
+  event.preventDefault();
+  const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+  section.value = tabs[next]!.id;
+  document.getElementById('integration-tab-' + section.value)?.focus();
+}
+onMounted(async () => { const v = await read<typeof settings.value>('/settings'); if (v) settings.value = v; });
+async function save() {
+  busy.value = true; error.value = ''; notice.value = '';
+  try { await api('/settings', 'POST', { settings: settings.value, password: password.value }); notice.value = t('账户服务设置已保存'); }
+  catch (e) { error.value = t((e as Error).message); }
+  finally { password.value = ''; busy.value = false; }
+}
 </script>
 <template>
-<section class="commerce-page settings-card commerce-preferences">
- <header><div><h2>{{t('账户服务')}}</h2><p>{{t('管理充值、工单以及后续支付和邮件接入')}}</p></div><a href="#/shop">{{t('套餐上架')}} →</a></header>
- <p v-if="error" class="error" role="alert">{{error}}</p><p v-if="notice" role="status">{{notice}}</p>
- <div class="commerce-service-options"><label class="inline-check"><input v-model="settings.redemption" type="checkbox"/>{{t('开放兑换码充值')}}</label><label class="inline-check"><input v-model="settings.tickets" type="checkbox"/>{{t('允许成员提交工单')}}</label></div><small class="commerce-muted">{{t('实际是否可购买由“套餐上架”页面中的上架状态决定。')}}</small>
- <section class="integration-settings"><div class="commerce-line"><div><h3>{{t('在线支付方式')}}</h3><p class="commerce-muted">{{t('支付成功只以验签回调为准，密钥仅在保存时输入。')}}</p></div><button type="button" @click="add">{{t('新增支付方式')}}</button></div><div v-if="!methods.length" class="commerce-empty">{{t('尚未配置在线支付方式')}}</div><article v-for="v in methods" :key="v.id" class="commerce-card payment-method-row"><div><strong>{{v.name}}</strong><span class="commerce-muted"> · {{v.code}} · {{v.enabled?t('已启用'):t('已停用')}}</span><p class="commerce-muted">{{v.base_url||t('通用签名回调')}}<span v-if="v.merchant_id"> · {{v.merchant_id}}</span></p></div><button type="button" @click="edit(v)">{{t('编辑')}}</button></article></section>
- <form class="integration-settings" @submit.prevent="saveMethod"><h3>{{editing?t('编辑支付方式'):t('新增支付方式')}}</h3><div class="integration-grid"><label>{{t('适配器')}}<select v-model="code"><option value="epay">{{t('易支付')}}</option><option value="webhook">{{t('通用 Webhook')}}</option></select></label><label>{{t('显示名称')}}<input v-model.trim="name" maxlength="80" required placeholder="例如：支付宝"/></label><label v-if="code==='epay'">{{t('网关地址')}}<input v-model.trim="baseURL" type="url" required placeholder="https://pay.example.com"/></label><label v-if="code==='epay'">{{t('商户号')}}<input v-model.trim="merchantID" required/></label><label>{{t('签名密钥')}}<input v-model="secret" type="password" :placeholder="editing?t('留空保持原密钥'):t('请输入签名密钥')" :required="!editing" autocomplete="new-password"/></label><label v-if="code==='epay'">{{t('支付渠道')}}<input v-model.trim="channel" placeholder="alipay"/></label></div><label class="inline-check"><input v-model="enabled" type="checkbox"/>{{t('启用该支付方式')}}</label><footer class="commerce-settings-save"><label>{{t('管理员当前密码')}}<input v-model="password" type="password" autocomplete="current-password" required/></label><div class="commerce-actions"><button class="primary" :disabled="busy">{{t('保存支付方式')}}</button><button v-if="editing" type="button" @click="add">{{t('取消')}}</button></div></footer></form>
- <details class="integration-settings"><summary>{{t('邮件与其他接入预留')}}</summary><p class="commerce-muted">{{t('邮件服务配置仍保存在账户服务设置中，第三方适配器将在后续版本接入。')}}</p></details>
- <footer class="commerce-settings-save"><label>{{t('管理员当前密码')}}<input v-model="password" type="password" autocomplete="current-password" required/></label><button class="primary" :disabled="busy" @click="save">{{t('保存账户服务设置')}}</button></footer>
-</section>
+  <section class="settings-card commerce-preferences">
+    <nav class="integration-service-tabs" role="tablist" :aria-label="t('交易与接入分类')"><button v-for="(tab,index) in tabs" :key="tab.id" :id="'integration-tab-'+tab.id" role="tab" :tabindex="section===tab.id?0:-1" :aria-selected="section===tab.id" :aria-controls="'integration-panel-'+tab.id" @click="section=tab.id" @keydown="tabKey($event,index)"><component :is="tab.icon" :size="17"/>{{t(tab.label)}}</button></nav>
+    <div :id="'integration-panel-'+section" role="tabpanel" :aria-labelledby="'integration-tab-'+section"><PaymentSettings v-if="section==='payments'"/><MailSettings v-else-if="section==='mail'"/><form v-else class="service-integration integration-form" @submit.prevent="save"><header class="integration-heading"><div><h2>{{t('账户规则')}}</h2><p>{{t('管理兑换码充值与工单服务。')}}</p></div><RouterLink to="/shop">{{t('套餐上架')}} →</RouterLink></header><p v-if="error" class="error" role="alert">{{error}}</p><p v-if="notice" role="status">{{notice}}</p><fieldset :disabled="busy"><label class="inline-check"><input v-model="settings.redemption" type="checkbox"/>{{t('开放兑换码充值')}}</label><label class="inline-check"><input v-model="settings.tickets" type="checkbox"/>{{t('允许成员提交工单')}}</label><p class="integration-muted">{{t('实际是否可购买由“套餐上架”页面中的上架状态决定。')}}</p><label>{{t('管理员当前密码')}}<input v-model="password" type="password" autocomplete="current-password" required/></label><button class="primary" :disabled="busy">{{t('保存账户服务设置')}}</button></fieldset></form></div>
+  </section>
 </template>
-<style scoped>
-.commerce-preferences{gap:16px}.commerce-preferences header{align-items:center;margin:0;justify-content:space-between}.commerce-preferences header a{font-size:12px;color:var(--accent-text);white-space:nowrap}.commerce-service-options{display:flex;gap:25px;flex-wrap:wrap}.commerce-service-options .inline-check{flex-direction:row;margin:0;gap:8px}.commerce-service-options input{width:16px;min-height:16px;height:16px}.integration-settings{border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:18px 0}.integration-settings h3{font-size:14px;margin:0;color:var(--secondary)}.integration-settings summary{cursor:pointer;font-size:14px;color:var(--secondary)}.integration-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:14px}.payment-method-row{display:flex;align-items:center;justify-content:space-between;margin-top:10px;padding:14px}.commerce-settings-save{display:flex;align-items:flex-end;justify-content:space-between;gap:20px}.commerce-settings-save label{max-width:360px;flex:1;margin:0}.commerce-settings-save button{flex-shrink:0}@media(max-width:650px){.integration-grid{grid-template-columns:1fr;gap:0}.commerce-service-options{gap:15px;flex-direction:column}.commerce-settings-save{align-items:stretch;flex-direction:column}.commerce-settings-save label{max-width:none}}
-</style>

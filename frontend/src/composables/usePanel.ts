@@ -12,6 +12,7 @@ import { runQueued } from "../lib/tasks";
 import { latestRequest, serialPoll } from "../lib/requests";
 import { NodeSaveUncertain, saveNodeRecovering, upsertSavedNode } from "../lib/nodeSave";
 import { operationID } from "../lib/commerce";
+import { clearEmailProof } from '../lib/email';
 import { storeToRefs } from "pinia";
 import { usePreferencesStore } from "../stores/preferences";
 import { t, locale, applyDefaultLocale } from "../i18n";
@@ -46,7 +47,7 @@ watch(state,v=>{access.role=v?.me.role||null;access.edition=v?.system.edition||'
 const site = ref<SiteSettings>({panel_name:'广月面板',organization:'跨境电商工作区',default_locale:'zh-CN',support_email:'',login_notice:'',registration_enabled:false,registration_captcha:false,revision:'',sidebar_admin:[...DEFAULT_ADMIN_SIDEBAR],sidebar_member:[...DEFAULT_MEMBER_SIDEBAR],client_download_relay:false,country_access_enabled:false,country_access_blocked:[],country_access_reason:''});
 watch([site, locale], () => { document.title=site.value.panel_name+' · '+t('月庭'); }, {deep:true,immediate:true});
 const login = reactive({ username: "", password: "" });
-const registration = reactive({ username: "", password: "", confirm_password: "", captcha_token: "" });
+const registration = reactive({ username: "", password: "", confirm_password: "", captcha_token: "", email: "", email_token: "" });
 const registrationReset = ref(0);
 const userSearch = ref(""),
   userFilter = ref("all"),
@@ -549,6 +550,7 @@ async function signIn() {
   await task(async () => {
     await api("/login", "POST", login);
     login.password = "";
+    clearEmailProof();
     await refresh();
     subUser.value = state.value?.me.id || 0;
     go(owner.value ? "overview" : "subscription");
@@ -559,7 +561,8 @@ async function registerAccount() {
   await task(async () => {
     try { await api('/register', 'POST', registration); } catch(e) { registration.captcha_token='';registrationReset.value++;throw e; }
     Object.assign(login, {username: registration.username, password: ''});
-    Object.assign(registration, {username:'', password:'', confirm_password:'', captcha_token:''});
+    Object.assign(registration, {username:'', password:'', confirm_password:'', captcha_token:'', email:'', email_token:''});
+    clearEmailProof();
     registrationReset.value++;
     await refresh();
     subUser.value = state.value?.me.id || 0;
@@ -575,6 +578,7 @@ async function signOut() {
   });
 }
 function go(id: string) {
+ if (id.replace(/^\/+/, "").startsWith("email/")) return;
  const query=id.includes("?")?id.slice(id.indexOf("?")):"";id=id.split("?")[0];
   id=id.replace(/^\/+/, "");
  const target = id === "sources" ? "ips/sources" : id;
@@ -1006,12 +1010,17 @@ const poll = serialPoll(async () => {
  state.value={...state.value,me:value.me,site:value.site,runtime:value.runtime,unread_messages:value.unread_messages,system:{...state.value.system,...value.system}};
 },()=>10000);
 let mounted = true;
-watch(() => route.fullPath, path => { if (state.value) go(path); });
+watch(() => route.fullPath, async (path, previous) => {
+ if (route.meta.publicEmail) return;
+ if (previous.startsWith('/email/')) { await refresh(true); if (state.value) go(path); }
+ else if (state.value) go(path);
+});
 onMounted(async () => {
   await router.isReady();
  const initial = route.fullPath;
   try { site.value=await api<SiteSettings>('/site'); applyDefaultLocale(site.value.default_locale); } catch {}
   if (!mounted) return;
+  if (route.meta.publicEmail) { ready.value = true; poll.start(); return; }
   await refresh(true);
   if (state.value) go(initial || (owner.value ? "overview" : "subscription"));
   if (!mounted) return;

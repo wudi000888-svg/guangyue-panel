@@ -15,6 +15,9 @@ import (
 )
 
 func (a *App) commerceAPI(w http.ResponseWriter, r *http.Request, actor Record) {
+	if a.paymentAPIRoute(w, r, actor) {
+		return
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	current, e := a.commerceActor(actor, false, "")
@@ -81,6 +84,14 @@ func (a *App) commerceAPI(w http.ResponseWriter, r *http.Request, actor Record) 
 		e = a.saveOffer(w, r, actor)
 	case "payment-methods":
 		e = a.savePaymentMethod(w, r, actor)
+	case "payment-methods/delete":
+		e = a.deletePaymentMethod(w, r, actor)
+	case "payment-methods/check":
+		e = a.checkPaymentMethod(w, r, actor)
+	case "wallet/topup":
+		e = a.createTopup(w, r, actor)
+	case "payment-refunds":
+		e = a.paymentRefundAction(w, r, actor)
 	case "orders/pay":
 		e = a.createPayment(w, r, actor)
 	case "orders":
@@ -203,6 +214,10 @@ func (a *App) commerceGet(w http.ResponseWriter, r *http.Request, actor Record, 
 		return a.listOffers(w, actor)
 	case "payment-methods":
 		return a.listPaymentMethods(w, actor)
+	case "payments":
+		return a.listPayments(w, r, actor)
+	case "payment-receipts":
+		return a.listPaymentReceipts(w, r, actor)
 	case "orders":
 		return a.listOrders(w, r, actor)
 	default:
