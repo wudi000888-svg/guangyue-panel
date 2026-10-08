@@ -563,7 +563,13 @@ func (a *App) cryptoWalletCreate(tx *persistence.Tx, route string, in cryptoWall
 		}
 		v.Mode, v.Engine, v.BackupConfirmed = "watch_only", "external-xpub", true
 	}
-	return v, cryptoInsertWallet(tx, v, receive, secret, 0)
+	if e = cryptoInsertWallet(tx, v, receive, secret, 0); e != nil {
+		return v, e
+	}
+	if v.Mode == "hot" {
+		_, e = a.store.cryptoEnsureFunding(tx, v)
+	}
+	return v, e
 }
 func cryptoInsertWallet(tx *persistence.Tx, v CryptoWallet, receive string, secret []byte, exported int64) error {
 	_, e := tx.Exec("INSERT INTO crypto_wallets("+cryptoWalletColumns+",receive_key,secret,backup_exported) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", v.ID, v.Name, v.Mode, v.XPub, v.Path, v.FirstAddress, v.Engine, v.EngineVersion, cryptoBool(v.Enabled), v.Revision, v.NextIndex, v.Created, cryptoBool(v.BackupConfirmed), cryptoBool(v.RecoveryRequired), receive, secret, exported)

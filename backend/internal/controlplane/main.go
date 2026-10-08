@@ -208,6 +208,8 @@ func Run() {
 	startWorker(a.loop)
 	startWorker(a.runEmailWorker)
 	startWorker(a.runPaymentWorker)
+	startWorker(a.runCryptoPaymentWorker)
+	startWorker(a.runCryptoSweepWorker)
 	if cfg.controller() {
 		startWorker(a.mountLoop)
 	}

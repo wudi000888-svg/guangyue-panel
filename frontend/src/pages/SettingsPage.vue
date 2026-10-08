@@ -6,6 +6,8 @@ import {Building2,CreditCard,Settings2,SlidersHorizontal,ChevronRight,ShieldChec
 import {usePanelContext} from '../composables/panelContext';
 import {t} from '../i18n';
 import {router} from '../router';
+import {useRoute} from 'vue-router';
+const route=useRoute();
 import {allowedRoute} from '../lib/access';
 import {groupNavigation,sidebarNavigation,MEMBER_NAVIGATION_LABELS} from '../lib/navigation';
 import CommerceSettings from '../components/CommerceSettings.vue';
@@ -36,6 +38,7 @@ const tabs=computed(()=>[
  ]:[{id:'personal',label:t('个人偏好'),description:t('语言、外观与账户安全'),icon:Settings2}])
 ]);
 function choose(id:string){if(!tabs.value.some(tab=>tab.id===id))return;section.value=id;visited.value.add(id);}
+watch([()=>route.query.section,tabs],()=>{const requested=String(route.query.section||'');if(requested)choose(requested)},{immediate:true});
 function password(){error.value='';modal.value='password';}
 function featureDrag(event:DragEvent,id:string){if(!canCustomize.value||id==='settings'){event.preventDefault();return}sidebarCustomization.startDrag(event,id,'directory');}
 function directoryDragOver(event:DragEvent){if(canCustomize.value&&sidebarDragging.value?.source==='sidebar')sidebarCustomization.acceptDrag(event,'directory');}

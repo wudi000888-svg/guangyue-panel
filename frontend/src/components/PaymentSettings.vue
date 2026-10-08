@@ -4,8 +4,10 @@ import { CreditCard, Plus, ShieldCheck, RefreshCw, Copy, LoaderCircle, X } from 
 import { useCommerce, money, stamp, paymentStateText, type PaymentMethod, type PaymentAttempt, type PaymentReceipt, type PaymentDiagnostic } from '../lib/commerce';
 import { isCancelled } from '../lib/api';
 import { t } from '../i18n';
+import { usePaymentModule } from '../lib/paymentModule';
 import CryptoWalletSettings from './CryptoWalletSettings.vue';
-defineProps<{ active?: boolean }>();
+const props=defineProps<{ active?: boolean }>();
+const {enabled:moduleEnabled,error:moduleError,loaded:moduleLoaded,refresh:refreshModule}=usePaymentModule(()=>props.active!==false);
 const { read, api, run, busy, error, notice } = useCommerce();
 const methods = ref<PaymentMethod[]>([]), payments = ref<PaymentAttempt[]>([]), receipts = ref<PaymentReceipt[]>([]), loading = ref(false), loaded = ref(false);
 const editing = ref<PaymentMethod | null>(null), showForm = ref(false), adminPassword = ref(''), formElement = ref<HTMLFormElement|null>(null);
@@ -27,16 +29,16 @@ function clearSecrets(){adminPassword.value='';form.value.secret='';form.value.w
 function closeForm(){showForm.value=false;editing.value=null;clearSecrets()}
 async function edit(method?:PaymentMethod) {
   closeRefund();editing.value=method||null;
-  form.value={code:method?.code||'epay',name:method?.name||'',enabled:method?.enabled||false,base_url:method?.base_url||'',merchant_id:method?.merchant_id||'',channel:method?.channel||'alipay',secret:'',webhook_secret:''};
+  form.value={code:method?.code||'epay',name:method?.name||'',enabled:!!method?.enabled&&moduleEnabled.value,base_url:method?.base_url||'',merchant_id:method?.merchant_id||'',channel:method?.channel||'alipay',secret:'',webhook_secret:''};
   adminPassword.value='';error.value='';notice.value='';showForm.value=true;await nextTick();formElement.value?.scrollIntoView({block:'center',behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});formElement.value?.querySelector('input')?.focus({preventScroll:true});
 }
 async function save() {
-  if(busy.value)return;busy.value=true;error.value='';notice.value='';
+  if(busy.value)return;if(form.value.enabled&&!moduleEnabled.value){error.value=t('支付模块已关闭，请先启用支付模块。');return}busy.value=true;error.value='';notice.value='';
   try{await api('/payment-methods','POST',{...form.value,id:editing.value?.id||'',version:editing.value?.version||0,password:adminPassword.value});closeForm();notice.value=t('支付方式已保存');await load()}
   catch(e){if(!isCancelled(e))error.value=t((e as Error).message)}finally{clearSecrets();busy.value=false}
 }
 async function setEnabled(method:PaymentMethod) {
-  if(busy.value)return;busy.value=true;error.value='';notice.value='';
+  if(busy.value)return;if(!method.enabled&&!moduleEnabled.value){error.value=t('支付模块已关闭，请先启用支付模块。');return}busy.value=true;error.value='';notice.value='';
   try{await api('/payment-methods','POST',{id:method.id,version:method.version,code:method.code,name:method.name,enabled:!method.enabled,base_url:method.base_url||'',merchant_id:method.merchant_id||'',channel:method.channel||'',secret:'',webhook_secret:'',password:adminPassword.value});notice.value=t('支付方式已更新');await load()}
   catch(e){if(!isCancelled(e))error.value=t((e as Error).message)}finally{adminPassword.value='';busy.value=false}
 }
@@ -64,7 +66,7 @@ onMounted(load);onUnmounted(()=>{disposed=true;sequence++;clearSecrets();closeRe
 <template>
   <section class="service-integration" :aria-busy="loading||busy">
     <header class="integration-heading"><div><h2><CreditCard :size="20"/>{{t('在线支付')}}</h2><p>{{t('配置收款方式，用户可支付套餐或充值钱包。')}}</p></div><button type="button" :disabled="busy" @click="edit()"><Plus :size="16"/>{{t('新增支付方式')}}</button></header>
-    <p v-if="error" class="error" role="alert">{{error}}</p><p v-if="notice" class="integration-notice" role="status">{{notice}}</p>
+    <p v-if="moduleError" class="error" role="alert">{{moduleError}}<button type="button" @click="refreshModule">{{t('重试')}}</button></p><p v-else-if="moduleLoaded&&!moduleEnabled" class="integration-muted" role="status">{{t('支付模块已关闭。现有配置与交易记录保留，启用总开关后才可接受新付款。')}}</p><p v-if="error" class="error" role="alert">{{error}}</p><p v-if="notice" class="integration-notice" role="status">{{notice}}</p>
     <div class="integration-explanation"><ShieldCheck :size="19"/><p>{{t('仅以支付平台确认的到账结果入账。套餐付款与余额充值分开记录，重复回调不会重复入账。')}}</p></div>
     <p v-if="!loaded" role="status">{{t('加载中…')}}</p><p v-else-if="!liveMethods.length" class="integration-empty">{{t('尚未配置可用的在线支付方式')}}</p>
     <article v-for="method in liveMethods" :key="method.id" class="provider-card">
@@ -73,7 +75,7 @@ onMounted(load);onUnmounted(()=>{disposed=true;sequence++;clearSecrets();closeRe
       <label v-if="method.webhook_url" class="callback-field">{{t('服务商回调地址')}}<div><input :value="method.webhook_url" readonly :aria-label="t('服务商回调地址')"/><button type="button" :aria-label="t('复制回调地址')" @click="copyURL(method.webhook_url)"><Copy :size="16"/></button></div></label>
       <p v-if="method.code==='stripe'&&!method.has_webhook_secret" class="integration-muted">{{t('请先在 Stripe 创建此回调地址，再编辑填入签名密钥并启用。')}}</p>
       <p v-if="!method.checkout" class="integration-muted">{{t('此方式仅供已有签名回调使用，不会作为用户收银台选项。')}}</p>
-      <div class="integration-actions"><button :disabled="busy" @click="edit(method)">{{t('编辑')}}</button><button :disabled="busy||!adminPassword" @click="check(method)">{{t('接入检查')}}</button><button :disabled="busy||!adminPassword||(method.code==='stripe'&&!method.has_webhook_secret)" @click="setEnabled(method)">{{method.enabled?t('停用'):t('启用')}}</button><button :disabled="busy||!adminPassword" @click="remove(method)">{{t('移除支付方式')}}</button></div>
+      <div class="integration-actions"><button :disabled="busy" @click="edit(method)">{{t('编辑')}}</button><button :disabled="busy||!adminPassword" @click="check(method)">{{t('接入检查')}}</button><button :disabled="busy||!adminPassword||(!moduleEnabled&&!method.enabled)||(method.code==='stripe'&&!method.has_webhook_secret)" @click="setEnabled(method)">{{method.enabled?t('停用'):t('启用')}}</button><button :disabled="busy||!adminPassword" @click="remove(method)">{{t('移除支付方式')}}</button></div>
       <div v-if="diagnostics[method.id]" class="payment-diagnostic"><p>{{t(diagnostics[method.id]!.message)}}</p><span>{{t('最近有效回调')}} {{diagnostics[method.id]!.last_event_at?stamp(diagnostics[method.id]!.last_event_at):t('暂无')}}</span><span>{{t('处理中')}} {{diagnostics[method.id]!.pending}} · {{t('待核对或退款')}} {{diagnostics[method.id]!.refund_required}}</span></div>
     </article>
     <details v-if="archivedMethods.length"><summary>{{t('已归档支付方式')}} · {{archivedMethods.length}}</summary><p class="integration-muted">{{t('历史付款与回调继续保留，不再接受新的支付。')}}</p><p v-for="method in archivedMethods" :key="method.id">{{method.name}} · {{method.code}}</p></details>
@@ -85,7 +87,7 @@ onMounted(load);onUnmounted(()=>{disposed=true;sequence++;clearSecrets();closeRe
       <label v-if="form.code==='stripe'">{{t('Stripe Webhook 签名密钥')}}<input v-model="form.webhook_secret" type="password" autocomplete="new-password" :required="form.enabled&&!editing?.has_webhook_secret" :placeholder="editing?.has_webhook_secret?t('留空保持原密钥'):'whsec_…'"/></label></div>
       <p v-if="form.code==='epay'" class="integration-muted">{{t('使用兼容 V1 MD5 的 HTTPS 网关。支付宝、微信可分别新增为两个支付方式。')}}</p>
       <div v-if="form.code==='stripe'" class="integration-muted"><p>{{t('商户号由密钥自动识别。API 密钥和 Webhook 密钥须属于同一环境。')}}</p><p>{{t('首次接入请先停用保存，取得回调地址；在 Stripe 创建该地址的 Webhook 后，回填签名密钥并启用。')}}<br/>{{t('在 Stripe 控制台为回调地址订阅以下事件：')}}</p><code class="stripe-events">checkout.session.completed<br/>checkout.session.async_payment_succeeded<br/>refund.created · refund.updated · refund.failed</code></div>
-      <label class="inline-check"><input v-model="form.enabled" type="checkbox"/>{{t('启用该支付方式')}}</label><label>{{t('管理员当前密码')}}<input v-model="adminPassword" type="password" autocomplete="current-password" required/></label><button class="primary" :disabled="busy"><LoaderCircle v-if="busy" :size="16" class="spin"/>{{t('保存支付方式')}}</button></fieldset>
+      <label class="inline-check"><input v-model="form.enabled" type="checkbox" :disabled="!moduleEnabled&&!form.enabled"/>{{t('启用该支付方式')}}</label><label>{{t('管理员当前密码')}}<input v-model="adminPassword" type="password" autocomplete="current-password" required/></label><button class="primary" :disabled="busy"><LoaderCircle v-if="busy" :size="16" class="spin"/>{{t('保存支付方式')}}</button></fieldset>
     </form>
     <label v-if="liveMethods.length&&!showForm&&!refundTarget" class="integration-password">{{t('管理员当前密码')}}<input v-model="adminPassword" type="password" autocomplete="current-password" :placeholder="t('检查或修改支付方式前验证密码')"/></label>
     <details class="integration-review" :open="unresolved.length>0"><summary>{{t('收款与退款处理')}} <span>{{unresolved.length}}</span></summary><div class="integration-actions"><button :disabled="busy||loading" @click="load"><RefreshCw :size="15" :class="{spin:loading}"/>{{t('刷新')}}</button></div><p class="integration-muted">{{t('套餐已开通时，请先在订单管理中审核退款并撤回权益，再处理原路退款。')}}</p>

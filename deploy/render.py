@@ -18,17 +18,31 @@ WALLET_RESTORE_LOCATION = '''    location = /api/commerce/crypto/admin/wallets/r
     }
 '''
 
+CRYPTO_TREASURY_LOCATION = '''    location /api/commerce/crypto/admin/wallets/ {
+        proxy_pass http://127.0.0.1:19100;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_read_timeout 100s;
+    }
+'''
+
 
 def wallet_restore_location(panel):
-    """Upgrade only the managed API exception, retaining other Nginx changes."""
-    if WALLET_RESTORE_LOCATION in panel:
-        return panel
-    if '/api/commerce/crypto/admin/wallets/restore' in panel:
-        raise ValueError('Existing wallet restore proxy differs from the managed configuration')
+    """Upgrade managed wallet exceptions, retaining other Nginx changes."""
     anchor = '    location / {\n        proxy_pass http://127.0.0.1:19100;'
     if panel.count(anchor) != 1:
         raise ValueError('Managed panel proxy could not be identified for wallet restore')
-    return panel.replace(anchor, WALLET_RESTORE_LOCATION + anchor, 1)
+    for fragment, marker in [(WALLET_RESTORE_LOCATION, '/api/commerce/crypto/admin/wallets/restore'),
+                             (CRYPTO_TREASURY_LOCATION, 'location /api/commerce/crypto/admin/wallets/')]:
+        if fragment in panel:
+            continue
+        if marker in panel:
+            raise ValueError('Existing wallet proxy differs from the managed configuration')
+        panel = panel.replace(anchor, fragment + anchor, 1)
+    return panel
 
 
 def domain(value):

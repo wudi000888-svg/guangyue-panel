@@ -109,6 +109,12 @@ func (a *App) fleetGateway(w http.ResponseWriter, r *http.Request) {
 		failure(w, 403, "站点接口不在授权范围内")
 		return
 	}
+	if scope == "manage" {
+		if err := a.store.defaultTakenOverPayments(); err != nil {
+			failure(w, 503, "子站支付默认设置尚未保存，请重试连接")
+			return
+		}
+	}
 	request, err := http.NewRequestWithContext(r.Context(), in.Method, in.Path, bytes.NewReader(in.Body))
 	if err != nil {
 		failure(w, 400, "站点请求无效")

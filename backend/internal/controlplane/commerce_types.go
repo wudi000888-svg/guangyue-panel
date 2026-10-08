@@ -68,6 +68,7 @@ func validText(s string, max int) bool {
 }
 
 type CommerceSettings struct {
+	PaymentModuleEnabled *bool `json:"payment_module_enabled,omitempty"`
 	// Sales is retained for database compatibility. Offer.Enabled is the
 	// authoritative switch for whether a package can be purchased.
 	Sales           bool   `json:"sales"`

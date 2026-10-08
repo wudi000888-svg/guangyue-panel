@@ -7,6 +7,7 @@ import json
 import os
 import re
 import subprocess
+import tarfile
 from pathlib import Path
 from urllib.parse import quote
 
@@ -43,7 +44,45 @@ def go_modules(directory):
         entry = value.get('Replace', value)
         if value.get('Main') or not entry.get('Dir'):
             continue
-        collect(value['Path'], value.get('Version', 'local'), entry['Dir'], 'golang')
+        declared = 'LGPL-3.0-or-later' if value['Path'] == 'github.com/ethereum/go-ethereum' else 'NOASSERTION'
+        collect(value['Path'], value.get('Version', 'local'), entry['Dir'], 'golang', declared)
+        if value['Path'] == 'github.com/ethereum/go-ethereum' and Path(directory) == root / 'backend':
+            ethereum_source(value, entry)
+
+
+def ethereum_source(module, entry):
+    """Ship the pinned linked library's source and relinking instructions."""
+    version = module['Version']
+    directory = Path(entry['Dir'])
+    key = 'golang:github.com/ethereum/go-ethereum@' + version
+    record = packages[key]
+    record.update(
+        downloadLocation='https://github.com/ethereum/go-ethereum/tree/' + version,
+        sourceInfo='Unmodified upstream library packages linked into the panel. LGPL-3.0-or-later. Pinned library source is included in licenses/go-ethereum-source.tar.gz; panel source and build/relink instructions are available at the matching panel release tag and docs/CRYPTO_BUILD.md. Go module checksum: ' + module.get('Sum', ''),
+    )
+    archive = out / 'go-ethereum-source.tar.gz'
+    # Core/notices collection may call go_modules for other components; archive
+    # this exact backend dependency only, once, without host filesystem paths.
+    def normalize(info):
+        info.uid = info.gid = 0
+        info.uname = info.gname = 'root'
+        info.mtime = 0
+        return info
+    if not archive.is_file() or getattr(ethereum_source, 'version', None) != version:
+        import gzip
+        with archive.open('wb') as output:
+            with gzip.GzipFile(filename='', fileobj=output, mode='wb', mtime=0) as compressed:
+                with tarfile.open(fileobj=compressed, mode='w') as source:
+                    source.add(directory, arcname='go-ethereum-' + version, filter=normalize)
+        ethereum_source.version = version
+    (out / 'GO-ETHEREUM-SOURCE.json').write_text(json.dumps({
+        'module': module['Path'], 'version': version,
+        'module_sum': module.get('Sum', ''),
+        'source_url': record['downloadLocation'],
+        'archive': archive.name,
+        'archive_sha256': hashlib.sha256(archive.read_bytes()).hexdigest(),
+        'modifications': 'Unmodified upstream library source; see docs/CRYPTO_BUILD.md for rebuilding and relinking the panel.',
+    }, ensure_ascii=False, indent=2) + '\n')
 
 
 def wallet_core(lock):

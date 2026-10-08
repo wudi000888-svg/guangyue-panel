@@ -174,6 +174,13 @@ func (a *App) recordPaymentEvent(p PaymentProvider, event verifiedPaymentEvent, 
 		return tx.Commit()
 	}
 	if readErr == nil {
+		// Every channel must serialize on the same order before claiming its
+		// attempt. Crypto replaces payment intents under this order lock too.
+		if attempt.OrderID != "" {
+			if _, err = tx.Exec("UPDATE commerce_orders SET updated=updated WHERE id=?", attempt.OrderID); err != nil {
+				return err
+			}
+		}
 		// Lock before re-reading; App.mu is deliberately not a correctness boundary.
 		if _, err = tx.Exec("UPDATE payment_attempts SET updated=updated WHERE id=?", attempt.ID); err != nil {
 			return err
@@ -194,6 +201,23 @@ func (a *App) recordPaymentEvent(p PaymentProvider, event verifiedPaymentEvent, 
 		}
 		if attempt.ExternalRef != "" {
 			reason = "该支付已关联其他到账交易，多付金额需原路退款"
+		}
+		if attempt.OrderID != "" && reason == "" {
+			var body []byte
+			err = tx.QueryRow("SELECT doc FROM commerce_orders WHERE id=?", attempt.OrderID).Scan(&body)
+			if errors.Is(err, sql.ErrNoRows) {
+				reason = "付款对应订单不存在，需核对并原路退款"
+			} else if err != nil {
+				return err
+			} else {
+				var order Order
+				if err = json.Unmarshal(body, &order); err != nil {
+					return err
+				}
+				if order.PaymentAttemptID != attempt.ID || order.State != "pending" {
+					reason = "订单已选择其他支付或已结束，此笔实际收款需核对并原路退款"
+				}
+			}
 		}
 		state := "paid"
 		message := "付款已确认，正在处理"
@@ -256,8 +280,13 @@ func (a *App) paymentRefundRequired(id, reason string) error {
 		return err
 	}
 	defer tx.Rollback()
-	// All order transitions lock the attempt first. Recheck under that lock so
-	// another process accepting this payment cannot be undone by a stale 409.
+	// Serialize on the order before the attempt, matching payment-intent
+	// replacement and checkout. Recheck so a stale conflict cannot undo payment.
+	if receipt.OrderID != "" {
+		if _, err = tx.Exec("UPDATE commerce_orders SET updated=updated WHERE id=?", receipt.OrderID); err != nil {
+			return err
+		}
+	}
 	if _, err = tx.Exec("UPDATE payment_attempts SET updated=updated WHERE id=?", receipt.AttemptID); err != nil {
 		return err
 	}
@@ -344,6 +373,15 @@ func (a *App) reconcilePaymentReceipt(id string) error {
 	}
 	if order.PaymentAttemptID != attempt.ID {
 		return a.paymentRefundRequired(id, "订单使用了其他支付，当前收款需原路退款")
+	}
+	if attempt.ProviderID == "crypto" && order.State != "completed" {
+		invoice, e := a.store.scanCryptoInvoice(a.store.db.QueryRow("SELECT "+cryptoInvoiceColumns+" FROM crypto_invoices WHERE attempt_id=?", attempt.ID))
+		if e != nil {
+			return e
+		}
+		if e = a.store.cryptoChainAvailable(a.store.db, invoice.ChainID); e != nil {
+			return e
+		}
 	}
 	switch order.State {
 	case "pending":
@@ -441,7 +479,9 @@ func (a *App) paymentWork() error {
 	if err != nil {
 		errs = append(errs, err)
 	}
-	_, err = a.store.db.Exec("UPDATE payment_attempts SET state='expired',message='支付已过期，晚到付款将转人工退款',updated=? WHERE state IN ('created','awaiting_customer') AND expires<=?", time.Now().Unix(), time.Now().Unix())
+	// Crypto eligibility is determined by canonical block time after the scan
+	// has covered the invoice deadline, not this process's current wall clock.
+	_, err = a.store.db.Exec("UPDATE payment_attempts SET state='expired',message='支付已过期，晚到付款将转人工退款',updated=? WHERE provider_id<>'crypto' AND state IN ('created','awaiting_customer') AND expires<=?", time.Now().Unix(), time.Now().Unix())
 	if err != nil {
 		errs = append(errs, err)
 	}
