@@ -384,7 +384,14 @@ func (a *App) orderAction(w http.ResponseWriter, r *http.Request, actor Record) 
 				return commerceFail(409, "该套餐已达到你的限购次数")
 			}
 		}
-		if o.State != "pending" || o.Expires <= now || !u.Enabled || o.Expected != userCommerceVersion(u) || u.Meter != nil && u.Meter.PendingReset {
+		paidInTime := false
+		if o.PaymentAttemptID != "" && in.PaymentAttemptID == o.PaymentAttemptID {
+			var received int64
+			if err := a.store.db.QueryRow("SELECT MIN(created) FROM payment_receipts WHERE attempt_id=? AND state IN ('verified','applied')", o.PaymentAttemptID).Scan(&received); err == nil {
+				paidInTime = received > 0 && received < o.Expires
+			}
+		}
+		if o.State != "pending" || o.Expires <= now && !paidInTime || !u.Enabled || o.Expected != userCommerceVersion(u) || u.Meter != nil && u.Meter.PendingReset {
 			return commerceFail(409, "订单或权益已变化，请取消后重新下单")
 		}
 		// Online payments are activated only after a verified provider callback.
@@ -431,7 +438,9 @@ func (a *App) orderAction(w http.ResponseWriter, r *http.Request, actor Record) 
 		o.State = "cancelled"
 		o.Message = "订单已取消"
 		if old == "provisioning" {
-			deltaAvailable, deltaHeld, kind = o.Offer.Price, -o.Offer.Price, "release"
+			if o.PaymentAttemptID == "" {
+				deltaAvailable, deltaHeld, kind = o.Offer.Price, -o.Offer.Price, "release"
+			}
 			if o.Action == "purchase" && u.Meter != nil {
 				u.Meter.PendingReset = false
 			}
@@ -465,6 +474,9 @@ func (a *App) orderAction(w http.ResponseWriter, r *http.Request, actor Record) 
 		o.NextAttempt = 0
 		o.State = "refunding"
 		o.Message = "等待订单权益撤回后退回余额"
+		if o.PaymentAttemptID != "" {
+			o.Message = "等待订单权益撤回后原路退款"
+		}
 	default:
 		return commerceFail(400, "订单操作无效")
 	}
@@ -473,8 +485,24 @@ func (a *App) orderAction(w http.ResponseWriter, r *http.Request, actor Record) 
 		return e
 	}
 	defer tx.Rollback()
+	if in.Action == "confirm" && o.PaymentAttemptID != "" {
+		locked, err := tx.Exec("UPDATE payment_attempts SET updated=updated WHERE id=? AND state='paid'", o.PaymentAttemptID)
+		if err != nil {
+			return err
+		}
+		n, err := locked.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if n != 1 {
+			return commerceFail(409, "在线付款状态已变化，请刷新订单")
+		}
+	}
 	if in.Action == "cancel" && o.PaymentAttemptID != "" {
 		if _, e = tx.Exec("UPDATE payment_attempts SET state=CASE WHEN state='paid' THEN 'refund_required' ELSE 'cancelled' END,updated=? WHERE id=? AND state IN ('created','awaiting_customer','paid')", now, o.PaymentAttemptID); e != nil {
+			return e
+		}
+		if e = paymentMarkReceiptRefund(tx, o.PaymentAttemptID, "订单已取消，需原路退款"); e != nil {
 			return e
 		}
 		if old == "provisioning" {
@@ -540,6 +568,15 @@ func (a *App) commerceWork(now int64) error {
 		}
 		if o.State == "pending" {
 			if o.Expires <= now {
+				if o.PaymentAttemptID != "" {
+					var state string
+					if err := a.store.db.QueryRow("SELECT state FROM payment_attempts WHERE id=?", o.PaymentAttemptID).Scan(&state); err != nil {
+						problems = append(problems, err)
+						continue
+					} else if state == "paid" {
+						continue
+					}
+				}
 				o.State = "expired"
 				o.Message = "订单确认已超时"
 				if o.PaymentAttemptID != "" {
@@ -608,6 +645,9 @@ func (a *App) failProvisioning(o Order, message string) error {
 	// silently crediting the user's internal balance.
 	if o.PaymentAttemptID != "" {
 		if _, e = tx.Exec("UPDATE payment_attempts SET state='refund_required',updated=? WHERE id=? AND state IN ('paid','completed')", time.Now().Unix(), o.PaymentAttemptID); e != nil {
+			return e
+		}
+		if e = paymentMarkReceiptRefund(tx, o.PaymentAttemptID, "订单开通失败，需原路退款"); e != nil {
 			return e
 		}
 		o.Message = message + "；在线支付待人工退款"
@@ -745,6 +785,9 @@ func (a *App) fulfilOrder(o Order, now int64) error {
 		}
 		if o.PaymentAttemptID != "" {
 			_, e = tx.Exec("UPDATE payment_attempts SET state='refund_required',updated=? WHERE id=? AND state IN ('paid','completed')", time.Now().Unix(), o.PaymentAttemptID)
+			if e == nil {
+				e = paymentMarkReceiptRefund(tx, o.PaymentAttemptID, "账号已停用，需原路退款")
+			}
 			o.Message += "；在线支付待人工退款"
 		} else if o.Offer.Price > 0 {
 			_, e = a.store.postMoney(tx, u.ID, 0, "release:"+o.ID, "release", o.ID, o.Message, o.Offer.Price, -o.Offer.Price)
@@ -763,11 +806,13 @@ func (a *App) fulfilOrder(o Order, now int64) error {
 		o.State = "refunded"
 		o.Message = "已退回站内余额"
 		if o.PaymentAttemptID != "" {
-			if _, e = tx.Exec("UPDATE payment_attempts SET state='refunded',updated=? WHERE id=? AND state IN ('completed','paid')", time.Now().Unix(), o.PaymentAttemptID); e != nil {
+			o.State = "refund_pending"
+			o.Message = "权益已撤回，等待管理员执行原路退款"
+			if _, e = tx.Exec("UPDATE payment_attempts SET state='refund_required',updated=?,message=? WHERE id=? AND state IN ('completed','paid')", time.Now().Unix(), o.Message, o.PaymentAttemptID); e != nil {
 				return e
 			}
-		}
-		if o.Offer.Price > 0 {
+			e = paymentMarkReceiptRefund(tx, o.PaymentAttemptID, o.Message)
+		} else if o.Offer.Price > 0 {
 			_, e = a.store.postMoney(tx, u.ID, 0, "refund:"+o.ID, "refund", o.ID, o.Message, o.Offer.Price, 0)
 		}
 	} else {
@@ -831,7 +876,7 @@ func (a *App) fulfilOrder(o Order, now int64) error {
 			o.State = "completed"
 			o.Message = "权益已开通，业务站按同步状态生效"
 			if o.PaymentAttemptID != "" {
-				_, e = tx.Exec("UPDATE payment_attempts SET state='completed',updated=? WHERE id=? AND state='paid'", time.Now().Unix(), o.PaymentAttemptID)
+				_, e = tx.Exec("UPDATE payment_attempts SET state='completed',message='套餐已开通',updated=? WHERE id=? AND state='paid'", time.Now().Unix(), o.PaymentAttemptID)
 			} else if o.Offer.Price > 0 {
 				_, e = a.store.postMoney(tx, u.ID, 0, "capture:"+o.ID, "purchase", o.ID, o.Message, 0, -o.Offer.Price)
 			}

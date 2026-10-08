@@ -13,6 +13,8 @@ import PanelSettings from '../PanelSettings.vue';
 import RuntimeSettings from '../RuntimeSettings.vue';
 import NetworkSettings from '../NetworkSettings.vue';
 import LanguageSwitcher from '../LanguageSwitcher.vue';
+import AccountEmail from '../components/AccountEmail.vue';
+import '../styles/integrations.css';
 const {state,owner,selectedSite,publicFeaturesEnabled,refresh,nav,pageDescriptions,go,theme,toggleTheme,modal,error,sidebarCustomization}=usePanelContext();
 const {dragging:sidebarDragging,target:sidebarTarget,saving:sidebarSaving,error:sidebarSaveError,saved:sidebarSaved,directoryRequest}=sidebarCustomization;
 const directory=ref<HTMLElement|null>(null);
@@ -29,7 +31,8 @@ const tabs=computed(()=>[
  {id:'navigation',label:t('侧边栏配置'),description:t('管理员与成员的常用入口'),icon:Navigation},
  {id:'access',label:t('下载与访问'),description:t('客户端中继和国家访问限制'),icon:Globe2},
  ...(!selectedSite.value?[{id:'commerce',label:t('交易与接入'),description:t('套餐销售、支付与邮件服务'),icon:CreditCard}]:[]),
- {id:'runtime',label:t('运行与网络'),description:t('日志记录、网络与运行策略'),icon:SlidersHorizontal}
+ {id:'runtime',label:t('运行与网络'),description:t('日志记录、网络与运行策略'),icon:SlidersHorizontal},
+ ...(!selectedSite.value?[{id:'personal',label:t('我的账户'),description:t('邮箱、语言与账户安全'),icon:Settings2}]:[])
  ]:[{id:'personal',label:t('个人偏好'),description:t('语言、外观与账户安全'),icon:Settings2}])
 ]);
 function choose(id:string){if(!tabs.value.some(tab=>tab.id===id))return;section.value=id;visited.value.add(id);}
@@ -67,7 +70,7 @@ async function tabKey(event:KeyboardEvent){const keys=['ArrowLeft','ArrowRight',
    <div v-if="owner&&['site','navigation','access'].some(id=>visited.has(id))" :id="'settings-panel-'+(['site','navigation','access'].includes(section)?section:'site')" v-show="['site','navigation','access'].includes(section)" role="tabpanel" :aria-labelledby="'settings-tab-'+section" tabindex="0"><PanelSettings :key="selectedSite||'local'" :section="section" :admin-navigation="availableNavigation" :remote-site="!!selectedSite" :public-features-enabled="publicFeaturesEnabled" @update-public-features-enabled="publicFeaturesEnabled=$event" @saved="refresh()" @show-section="choose"/></div>
    <div v-if="owner&&!selectedSite&&visited.has('commerce')" id="settings-panel-commerce" v-show="section==='commerce'" role="tabpanel" aria-labelledby="settings-tab-commerce" tabindex="0"><CommerceSettings/></div>
    <div v-if="owner&&visited.has('runtime')" id="settings-panel-runtime" v-show="section==='runtime'" role="tabpanel" aria-labelledby="settings-tab-runtime" tabindex="0" class="runtime-panel"><RuntimeSettings @updated="refresh()"/><NetworkSettings v-if="!selectedSite"/></div>
-   <div v-if="!owner" id="settings-panel-personal" v-show="section==='personal'" role="tabpanel" aria-labelledby="settings-tab-personal" tabindex="0" class="personal-preferences"><section class="settings-card"><h2>{{t('显示偏好')}}</h2><div class="personal-row"><div><strong>{{t('界面语言')}}</strong><p>{{t('仅影响当前浏览器的显示语言。')}}</p></div><LanguageSwitcher/></div><div class="personal-row"><div><strong>{{t('界面外观')}}</strong><p>{{theme==='dark'?t('深色模式'):t('浅色模式')}}</p></div><button @click="toggleTheme"><Sun v-if="theme==='dark'" :size="17"/><Moon v-else :size="17"/>{{theme==='dark'?t('切换浅色模式'):t('切换深色模式')}}</button></div></section><section class="settings-card"><h2>{{t('账户安全')}}</h2><div class="personal-row"><div><strong>{{state.me.username}}</strong><p>{{t('定期更新密码，保护你的账户。')}}</p></div><button @click="password"><KeyRound :size="17"/>{{t('修改密码')}}</button></div></section></div>
+   <div v-if="(!owner||!selectedSite)&&visited.has('personal')" id="settings-panel-personal" v-show="section==='personal'" role="tabpanel" aria-labelledby="settings-tab-personal" tabindex="0" class="personal-preferences"><section class="settings-card"><h2>{{t('显示偏好')}}</h2><div class="personal-row"><div><strong>{{t('界面语言')}}</strong><p>{{t('仅影响当前浏览器的显示语言。')}}</p></div><LanguageSwitcher/></div><div class="personal-row"><div><strong>{{t('界面外观')}}</strong><p>{{theme==='dark'?t('深色模式'):t('浅色模式')}}</p></div><button @click="toggleTheme"><Sun v-if="theme==='dark'" :size="17"/><Moon v-else :size="17"/>{{theme==='dark'?t('切换浅色模式'):t('切换深色模式')}}</button></div></section><section class="settings-card"><h2>{{t('账户安全')}}</h2><div class="personal-row"><div><strong>{{state.me.username}}</strong><p>{{t('定期更新密码，保护你的账户。')}}</p></div><button @click="password"><KeyRound :size="17"/>{{t('修改密码')}}</button></div><AccountEmail/></section></div>
   </div>
  </div>
 </section>

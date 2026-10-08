@@ -4,42 +4,45 @@ import (
 	"crypto/hmac"
 	"crypto/md5"
 	"crypto/sha256"
-	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"net/url"
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 )
 
 // PaymentProvider is deliberately stored separately from commerce settings.
 // One site can therefore expose several providers and a provider can have
 // multiple payment attempts without changing the order snapshot.
 type PaymentProvider struct {
-	ID      string            `json:"id"`
-	Code    string            `json:"code"`
-	Name    string            `json:"name"`
-	Enabled bool              `json:"enabled"`
-	Version int               `json:"version"`
-	Config  map[string]string `json:"-"`
+	ID       string            `json:"id"`
+	Code     string            `json:"code"`
+	Name     string            `json:"name"`
+	Enabled  bool              `json:"enabled"`
+	Archived bool              `json:"archived"`
+	Version  int               `json:"version"`
+	Config   map[string]string `json:"-"`
 }
 
 type PaymentMethod struct {
-	ID         string `json:"id"`
-	Code       string `json:"code"`
-	Name       string `json:"name"`
-	Enabled    bool   `json:"enabled"`
-	Version    int    `json:"version"`
-	BaseURL    string `json:"base_url,omitempty"`
-	MerchantID string `json:"merchant_id,omitempty"`
-	Channel    string `json:"channel,omitempty"`
-	Checkout   bool   `json:"checkout"`
+	ID               string `json:"id"`
+	Code             string `json:"code"`
+	Name             string `json:"name"`
+	Enabled          bool   `json:"enabled"`
+	Version          int    `json:"version"`
+	BaseURL          string `json:"base_url,omitempty"`
+	MerchantID       string `json:"merchant_id,omitempty"`
+	Channel          string `json:"channel,omitempty"`
+	Checkout         bool   `json:"checkout"`
+	Archived         bool   `json:"archived"`
+	HasSecret        bool   `json:"has_secret"`
+	HasWebhookSecret bool   `json:"has_webhook_secret"`
+	WebhookURL       string `json:"webhook_url,omitempty"`
+	AccountScope     string `json:"account_scope,omitempty"`
+	Mode             string `json:"mode,omitempty"`
 }
 
 type PaymentAttempt struct {
@@ -57,29 +60,39 @@ type PaymentAttempt struct {
 	Created        int64  `json:"created"`
 	Updated        int64  `json:"updated"`
 	Expires        int64  `json:"expires"`
+	Purpose        string `json:"purpose"`
+	Message        string `json:"message"`
+	AccountScope   string `json:"-"`
+	RefundStatus   string `json:"refund_status,omitempty"`
 }
 
 type paymentProviderDoc struct {
-	Secret     string `json:"secret"`
-	BaseURL    string `json:"base_url"`
-	MerchantID string `json:"merchant_id"`
-	Channel    string `json:"channel"`
+	Secret        string `json:"secret"`
+	BaseURL       string `json:"base_url"`
+	MerchantID    string `json:"merchant_id"`
+	Channel       string `json:"channel"`
+	WebhookSecret string `json:"webhook_secret"`
+	AccountScope  string `json:"account_scope"`
+	Mode          string `json:"mode"`
 }
 
 type verifiedPaymentEvent struct {
-	EventID     string
-	MerchantRef string
-	ExternalRef string
-	Amount      int64
-	Currency    string
-	Status      string
+	EventID      string
+	MerchantRef  string
+	ExternalRef  string
+	Amount       int64
+	Currency     string
+	Status       string
+	RefundID     string
+	RefundStatus string
+	ReviewReason string
 }
 
 func (s *Store) paymentProvider(id string) (PaymentProvider, error) {
 	var p PaymentProvider
 	var enabled, version int
 	var body []byte
-	err := s.db.QueryRow("SELECT id,code,name,enabled,version,doc FROM payment_providers WHERE id=?", id).Scan(&p.ID, &p.Code, &p.Name, &enabled, &version, &body)
+	err := s.db.QueryRow("SELECT id,code,name,enabled,version,doc,archived FROM payment_providers WHERE id=?", id).Scan(&p.ID, &p.Code, &p.Name, &enabled, &version, &body, &p.Archived)
 	if err != nil {
 		return p, err
 	}
@@ -91,15 +104,15 @@ func (s *Store) paymentProvider(id string) (PaymentProvider, error) {
 		if err = s.vault.open(body, &doc); err != nil {
 			return p, err
 		}
-		p.Config = map[string]string{"secret": doc.Secret, "base_url": doc.BaseURL, "merchant_id": doc.MerchantID, "channel": doc.Channel}
+		p.Config = map[string]string{"secret": doc.Secret, "base_url": doc.BaseURL, "merchant_id": doc.MerchantID, "channel": doc.Channel, "webhook_secret": doc.WebhookSecret, "account_scope": doc.AccountScope, "mode": doc.Mode}
 	}
 	return p, nil
 }
 
 func (s *Store) paymentProviders(enabledOnly bool) ([]PaymentProvider, error) {
-	query := "SELECT id,code,name,enabled,version,doc FROM payment_providers"
+	query := "SELECT id,code,name,enabled,version,doc,archived FROM payment_providers"
 	if enabledOnly {
-		query += " WHERE enabled=1"
+		query += " WHERE enabled=1 AND archived=0"
 	}
 	query += " ORDER BY name,id"
 	rows, err := s.db.Query(query)
@@ -112,7 +125,7 @@ func (s *Store) paymentProviders(enabledOnly bool) ([]PaymentProvider, error) {
 		var p PaymentProvider
 		var enabled int
 		var body []byte
-		if err = rows.Scan(&p.ID, &p.Code, &p.Name, &enabled, &p.Version, &body); err != nil {
+		if err = rows.Scan(&p.ID, &p.Code, &p.Name, &enabled, &p.Version, &body, &p.Archived); err != nil {
 			return nil, err
 		}
 		p.Enabled = enabled != 0
@@ -122,23 +135,78 @@ func (s *Store) paymentProviders(enabledOnly bool) ([]PaymentProvider, error) {
 			if err = s.vault.open(body, &doc); err != nil {
 				return nil, err
 			}
-			p.Config = map[string]string{"secret": doc.Secret, "base_url": doc.BaseURL, "merchant_id": doc.MerchantID, "channel": doc.Channel}
+			p.Config = map[string]string{"secret": doc.Secret, "base_url": doc.BaseURL, "merchant_id": doc.MerchantID, "channel": doc.Channel, "webhook_secret": doc.WebhookSecret, "account_scope": doc.AccountScope, "mode": doc.Mode}
 		}
 		out = append(out, p)
 	}
 	return out, rows.Err()
 }
 
-func (s *Store) paymentAttemptByMerchant(providerID, merchantRef string) (PaymentAttempt, error) {
+const paymentAttemptColumns = "id,order_id,user_id,provider_id,state,amount,currency,merchant_ref,COALESCE(external_ref,''),checkout_url,idempotency_key,created,updated,expires,purpose,message,account_scope"
+
+type paymentScanner interface{ Scan(...any) error }
+
+func scanPaymentAttempt(row paymentScanner) (PaymentAttempt, error) {
 	var a PaymentAttempt
-	var external, checkout, idempotency string
-	err := s.db.QueryRow("SELECT id,order_id,user_id,provider_id,state,amount,currency,merchant_ref,COALESCE(external_ref,''),checkout_url,idempotency_key,created,updated,expires FROM payment_attempts WHERE provider_id=? AND merchant_ref=? ORDER BY created DESC LIMIT 1", providerID, merchantRef).Scan(&a.ID, &a.OrderID, &a.UserID, &a.ProviderID, &a.State, &a.Amount, &a.Currency, &a.MerchantRef, &external, &checkout, &idempotency, &a.Created, &a.Updated, &a.Expires)
-	a.ExternalRef, a.CheckoutURL, a.IdempotencyKey = external, checkout, idempotency
+	err := row.Scan(&a.ID, &a.OrderID, &a.UserID, &a.ProviderID, &a.State, &a.Amount, &a.Currency, &a.MerchantRef, &a.ExternalRef, &a.CheckoutURL, &a.IdempotencyKey, &a.Created, &a.Updated, &a.Expires, &a.Purpose, &a.Message, &a.AccountScope)
 	return a, err
 }
+func (s *Store) paymentAttempt(id string) (PaymentAttempt, error) {
+	return scanPaymentAttempt(s.db.QueryRow("SELECT "+paymentAttemptColumns+" FROM payment_attempts WHERE id=?", id))
+}
+func (s *Store) paymentAttemptByMerchant(providerID, merchantRef string) (PaymentAttempt, error) {
+	return scanPaymentAttempt(s.db.QueryRow("SELECT "+paymentAttemptColumns+" FROM payment_attempts WHERE provider_id=? AND merchant_ref=? ORDER BY created DESC,id DESC LIMIT 1", providerID, merchantRef))
+}
 
+type paymentAttemptDoc struct {
+	Provider    paymentProviderDoc `json:"provider"`
+	Code        string             `json:"code"`
+	Fingerprint string             `json:"fingerprint"`
+	SessionID   string             `json:"session_id,omitempty"`
+}
+
+func providerDocument(p PaymentProvider) paymentProviderDoc {
+	return paymentProviderDoc{Secret: p.Config["secret"], BaseURL: p.Config["base_url"], MerchantID: p.Config["merchant_id"], Channel: p.Config["channel"], WebhookSecret: p.Config["webhook_secret"], AccountScope: p.Config["account_scope"], Mode: p.Config["mode"]}
+}
+func (s *Store) attemptProvider(attempt PaymentAttempt) (PaymentProvider, paymentAttemptDoc, error) {
+	var doc paymentAttemptDoc
+	var body []byte
+	err := s.db.QueryRow("SELECT doc FROM payment_attempts WHERE id=?", attempt.ID).Scan(&body)
+	if err == nil {
+		err = s.vault.open(body, &doc)
+	}
+	if err != nil {
+		return PaymentProvider{}, doc, err
+	}
+	if doc.Code == "" {
+		p, e := s.paymentProvider(attempt.ProviderID)
+		return p, doc, e
+	}
+	p := PaymentProvider{ID: attempt.ProviderID, Code: doc.Code, Config: map[string]string{"secret": doc.Provider.Secret, "base_url": doc.Provider.BaseURL, "merchant_id": doc.Provider.MerchantID, "channel": doc.Provider.Channel, "webhook_secret": doc.Provider.WebhookSecret, "account_scope": doc.Provider.AccountScope, "mode": doc.Provider.Mode}}
+	return p, doc, nil
+}
+func paymentAccountScope(p PaymentProvider) string {
+	if scope := p.Config["account_scope"]; scope != "" {
+		return scope
+	}
+	base, _ := url.Parse(strings.ToLower(strings.TrimSpace(p.Config["base_url"])))
+	origin := ""
+	if base != nil {
+		origin = base.Hostname()
+	}
+	if p.Code == "stripe" {
+		origin = "stripe"
+	}
+	merchant := strings.TrimSpace(p.Config["merchant_id"])
+	if p.Code == "epay" {
+		if id, err := strconv.ParseUint(merchant, 10, 64); err == nil {
+			merchant = strconv.FormatUint(id, 10)
+		}
+	}
+	return digest(p.Code + ":" + origin + ":" + merchant)
+}
 func paymentMethod(p PaymentProvider) PaymentMethod {
-	return PaymentMethod{ID: p.ID, Code: p.Code, Name: p.Name, Enabled: p.Enabled, Version: p.Version, BaseURL: p.Config["base_url"], MerchantID: p.Config["merchant_id"], Channel: p.Config["channel"], Checkout: p.Code == "epay"}
+	return PaymentMethod{ID: p.ID, Code: p.Code, Name: p.Name, Enabled: p.Enabled, Version: p.Version, BaseURL: p.Config["base_url"], MerchantID: p.Config["merchant_id"], Channel: p.Config["channel"], Checkout: p.Code == "epay" || p.Code == "stripe", Archived: p.Archived, HasSecret: p.Config["secret"] != "", HasWebhookSecret: p.Config["webhook_secret"] != "", AccountScope: paymentAccountScope(p), Mode: p.Config["mode"]}
 }
 
 func paymentCents(value string) (int64, error) {
@@ -181,7 +249,7 @@ func paymentCents(value string) (int64, error) {
 func epaySign(values url.Values, secret string) string {
 	keys := make([]string, 0, len(values))
 	for key := range values {
-		if key != "sign" && key != "sign_type" {
+		if key != "sign" && key != "sign_type" && values.Get(key) != "" {
 			keys = append(keys, key)
 		}
 	}
@@ -210,9 +278,13 @@ func createPaymentCheckout(p PaymentProvider, a PaymentAttempt, notifyURL, retur
 	if base == "" || merchant == "" || secret == "" {
 		return "", errors.New("payment provider is not configured")
 	}
+	label := "光月 · 套餐购买"
+	if a.Purpose == "topup" {
+		label = "光月 · 余额充值"
+	}
 	values := url.Values{
 		"money":        {fmt.Sprintf("%d.%02d", a.Amount/100, a.Amount%100)},
-		"name":         {a.MerchantRef},
+		"name":         {label},
 		"notify_url":   {notifyURL},
 		"return_url":   {returnURL},
 		"out_trade_no": {a.MerchantRef},
@@ -228,12 +300,20 @@ func createPaymentCheckout(p PaymentProvider, a PaymentAttempt, notifyURL, retur
 
 func verifyEpay(p PaymentProvider, values url.Values) (verifiedPaymentEvent, error) {
 	var out verifiedPaymentEvent
+	for _, v := range values {
+		if len(v) != 1 {
+			return out, errors.New("ambiguous payment parameters")
+		}
+	}
+	if p.Config["secret"] == "" || values.Get("pid") != p.Config["merchant_id"] || strings.ToUpper(values.Get("sign_type")) != "MD5" {
+		return out, errors.New("payment merchant or signature type mismatch")
+	}
 	if values.Get("sign") == "" || !hmac.Equal([]byte(strings.ToLower(values.Get("sign"))), []byte(epaySign(values, p.Config["secret"]))) {
 		return out, errors.New("payment signature verification failed")
 	}
 	status := strings.ToLower(strings.TrimSpace(values.Get("trade_status")))
 	if status == "" {
-		status = "success"
+		return out, errors.New("payment status is missing")
 	}
 	amount, err := paymentCents(values.Get("money"))
 	if err != nil {
@@ -242,7 +322,7 @@ func verifyEpay(p PaymentProvider, values url.Values) (verifiedPaymentEvent, err
 	out.EventID = values.Get("trade_no")
 	out.MerchantRef = values.Get("out_trade_no")
 	out.ExternalRef = values.Get("trade_no")
-	if out.EventID == "" {
+	if out.EventID == "" || out.MerchantRef == "" || len(out.EventID) > 200 || len(out.MerchantRef) > 200 {
 		return out, errors.New("payment event reference is missing")
 	}
 	out.Amount = amount
@@ -289,126 +369,4 @@ func verifyJSONWebhook(p PaymentProvider, body []byte, signature string) (verifi
 		return out, errors.New("payment order reference is missing")
 	}
 	return out, nil
-}
-
-func (a *App) paymentWebhook(w http.ResponseWriter, r *http.Request) {
-	providerID := strings.TrimSpace(r.PathValue("provider"))
-	p, err := a.store.paymentProvider(providerID)
-	// Disabling a method prevents new checkout attempts, but must not make an
-	// already-created payment impossible to settle when the provider retries a
-	// callback later.
-	if err != nil {
-		failure(w, 404, "支付方式不存在")
-		return
-	}
-	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		failure(w, 400, "支付回调格式无效")
-		return
-	}
-	// GET callbacks carry the signed form in the query string.  Preserve it as
-	// the event payload so different callbacks cannot collide on an empty-body
-	// hash.
-	eventBody := body
-	if len(eventBody) == 0 && r.URL.RawQuery != "" {
-		eventBody = []byte(r.URL.RawQuery)
-	}
-	var verified verifiedPaymentEvent
-	if p.Code == "epay" {
-		values := r.URL.Query()
-		if r.Method == http.MethodPost {
-			if form, e := url.ParseQuery(string(body)); e == nil {
-				values = form
-			}
-		}
-		verified, err = verifyEpay(p, values)
-	} else {
-		verified, err = verifyJSONWebhook(p, body, r.Header.Get("X-Guangyue-Signature"))
-	}
-	if err != nil {
-		failure(w, 401, err.Error())
-		return
-	}
-	if verified.Status != "success" && verified.Status != "paid" && verified.Status != "trade_success" {
-		if p.Code == "epay" {
-			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-			_, _ = w.Write([]byte("success"))
-		} else {
-			jsonResponse(w, 200, object{"ok": true, "ignored": true})
-		}
-		return
-	}
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if err = a.recordPaymentEvent(p, verified, eventBody); err != nil {
-		failure(w, 409, "支付回调暂未完成，请稍后重试")
-		return
-	}
-	if p.Code == "epay" {
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		_, _ = w.Write([]byte("success"))
-	} else {
-		jsonResponse(w, 200, object{"ok": true})
-	}
-}
-
-func (a *App) recordPaymentEvent(p PaymentProvider, event verifiedPaymentEvent, body []byte) error {
-	if event.MerchantRef == "" {
-		return errors.New("payment order reference is missing")
-	}
-	attempt, err := a.store.paymentAttemptByMerchant(p.ID, event.MerchantRef)
-	if err != nil {
-		return err
-	}
-	if attempt.State == "refund_required" {
-		_, err = a.store.db.Exec("UPDATE payment_events SET state='applied',processed=?,message=? WHERE provider_id=? AND external_id=? AND processed=0", time.Now().Unix(), "开通失败，已转人工退款", p.ID, event.EventID)
-		return err
-	}
-	if attempt.State == "cancelled" || attempt.State == "expired" {
-		return errors.New("payment attempt is no longer active")
-	}
-	if attempt.Amount != event.Amount || event.Currency != "" && event.Currency != attempt.Currency {
-		return errors.New("payment amount or currency mismatch")
-	}
-	hash := digest(string(body))
-	tx, err := a.store.db.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	var processed int
-	err = tx.QueryRow("SELECT processed FROM payment_events WHERE provider_id=? AND (external_id=? OR payload_hash=?)", p.ID, event.EventID, hash).Scan(&processed)
-	if err == nil && processed != 0 {
-		return nil
-	}
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return err
-	}
-	if errors.Is(err, sql.ErrNoRows) {
-		_, err = tx.Exec("INSERT INTO payment_events(id,provider_id,external_id,payload_hash,signature_valid,state,order_id,attempt_id,body,created) VALUES(?,?,?,?,1,'verified',?,?,?,?)", serial("GYE"), p.ID, event.EventID, hash, attempt.OrderID, attempt.ID, body, time.Now().Unix())
-		if err != nil {
-			// A concurrent duplicate callback is safe; the other request will do
-			// the activation and this request can return success.
-			if strings.Contains(strings.ToLower(err.Error()), "unique") {
-				return nil
-			}
-			return err
-		}
-	}
-	if _, err = tx.Exec("UPDATE payment_attempts SET state='paid',external_ref=?,updated=? WHERE id=? AND state IN ('created','awaiting_customer')", event.ExternalRef, time.Now().Unix(), attempt.ID); err != nil {
-		return err
-	}
-	if err = tx.Commit(); err != nil {
-		return err
-	}
-	user, err := a.store.record(attempt.UserID)
-	if err != nil {
-		return err
-	}
-	if err = a.confirmExternalOrder(attempt.OrderID, user, attempt.ID); err != nil {
-		return err
-	}
-	_, err = a.store.db.Exec("UPDATE payment_events SET state='applied',processed=?,message=? WHERE provider_id=? AND payload_hash=?", time.Now().Unix(), "套餐开通已进入队列", p.ID, hash)
-	return err
 }

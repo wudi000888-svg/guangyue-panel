@@ -10,6 +10,7 @@ if (location.hash && !location.hash.startsWith('#/')) {
 export const router = createRouter({
   history: createWebHashHistory(),
   routes: [
+    { path: '/email/:action(verify|reset)', component: () => import('./pages/EmailFlow.vue'), meta: { publicEmail: true } },
     { path: '/', redirect: '/overview' },
     { path: '/overview', component: () => import('./pages/OverviewPage.vue') },
     { path: '/clients', component: () => import('./pages/ClientsPage.vue') },
@@ -42,6 +43,7 @@ export const router = createRouter({
 });
 
 router.beforeEach(to=>{
+  if (to.meta.publicEmail) return true;
   const access=useAccessStore(),preferences=usePreferencesStore();
   if(!access.role) return true; // The shell withholds page content until authentication.
   if(!allowedRoute(to.meta,{role:access.role,edition:access.edition,publicFeatures:preferences.publicFeaturesEnabled})) return access.role==='owner'?'/overview':'/subscription';

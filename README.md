@@ -12,7 +12,7 @@
 
 [月庭 Penpot 设计源](docs/designs/penpot/README.md) · [UI UX 施工方案](docs/designs/penpot-courtyard-system.md)
 
-![version](https://img.shields.io/badge/version-0.34.1-2563eb)
+![version](https://img.shields.io/badge/version-0.35.0-2563eb)
 ![license](https://img.shields.io/badge/panel_license-LGPL--3.0-16a34a)
 ![platform](https://img.shields.io/badge/server-Linux_amd64-475569)
 
@@ -74,6 +74,12 @@ sudo python3 deploy/install.py --bundle "$PWD" \
 ```
 
 不提供未经检查的远程 `curl | bash`。安装器不会安装到已存在的广月状态目录，也不会自动停止其他项目。
+
+## 邮箱与在线支付
+
+在“系统设置 → 交易与接入”配置邮件服务与在线支付。邮件支持标准 SMTP 的 TLS/STARTTLS，提供邮箱验证、密码找回和订单通知；支付支持易支付 V1 MD5 和 Stripe Checkout，包括套餐支付、钱包充值与退款处理。新安装默认关闭这些外部服务，需填写自己的服务商凭据并检查接入。
+
+加密货币当前为设计阶段，尚未开放收款；USDT/USDC 的网络、资产与去重方案见[加密支付设计](docs/CRYPTO_PAYMENTS.md)。SMTP 配置与排错见[邮件服务](docs/EMAIL.md)，支付接入见[交易系统](docs/COMMERCE.md)。
 
 ## 文档导航
 

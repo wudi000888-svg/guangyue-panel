@@ -49,6 +49,11 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("GET /api/register/challenge", a.registrationChallenge)
 	mux.HandleFunc("POST /api/register/verify", a.verifyRegistrationChallenge)
 	mux.HandleFunc("POST /api/register", a.register)
+	mux.HandleFunc("GET /api/email/status", a.emailPublicAPI)
+	mux.HandleFunc("POST /api/email/registration", a.emailPublicAPI)
+	mux.HandleFunc("POST /api/email/verify", a.emailPublicAPI)
+	mux.HandleFunc("POST /api/email/reset/request", a.emailPublicAPI)
+	mux.HandleFunc("POST /api/email/reset/confirm", a.emailPublicAPI)
 	mux.HandleFunc("POST /api/business/enroll", a.businessEnroll)
 	mux.HandleFunc("POST /api/business/connect", a.businessEnroll)
 	mux.HandleFunc("POST /api/business/sync", a.businessSync)
@@ -204,7 +209,7 @@ func (a *App) authenticated(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if peer := r.Header.Get("X-Guangyue-Site"); peer != "" {
-		if strings.HasPrefix(r.URL.Path, "/api/commerce/") || strings.HasPrefix(r.URL.Path, "/api/support/") {
+		if strings.HasPrefix(r.URL.Path, "/api/commerce/") || strings.HasPrefix(r.URL.Path, "/api/support/") || strings.HasPrefix(r.URL.Path, "/api/email/") || strings.HasPrefix(r.URL.Path, "/api/account/email") {
 			failure(w, 403, "账户服务必须在主控访问")
 			return
 		}
@@ -215,6 +220,10 @@ func (a *App) authenticated(w http.ResponseWriter, r *http.Request) {
 }
 func (a *App) dispatchAuthenticated(w http.ResponseWriter, r *http.Request, actor Record) {
 	switch {
+	case strings.HasPrefix(r.URL.Path, "/api/email/"):
+		a.emailAdminAPI(w, r, actor)
+	case r.URL.Path == "/api/account/email":
+		a.accountEmailAPI(w, r, actor)
 	case r.Method == "GET" && r.URL.Path == "/api/access-check":
 		a.accessCheck(w, r, actor)
 	case (r.Method == "GET" || r.Method == "HEAD") && strings.HasPrefix(r.URL.Path, "/api/clients/download/"):
