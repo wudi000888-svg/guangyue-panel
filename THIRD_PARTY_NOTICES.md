@@ -9,10 +9,13 @@
 | Vue | 以 package-lock.json 为准 | MIT | 编译进入前端 |
 | Lucide | 以 package-lock.json 为准 | ISC | 编译进入前端 |
 | QRCode | 以 package-lock.json 为准 | MIT | 编译进入前端 |
+| Trust Wallet Core | [4.8.4 / d40d24a6](https://github.com/trustwallet/wallet-core/tree/d40d24a63d92619167903369308bf0e2f7eb3a59)，官方 `@trustwallet/wallet-core@4.8.4` | 上游 Core Apache-2.0；npm 元数据声明 MIT；其内第三方组件各自许可 | 官方未修改 WASM 与 JavaScript glue 作为浏览器资产；原始许可及上游第三方声明随包提供，不需要生产 Node 服务 |
 | Go / SQLite 生态 | 以 go.mod/go.sum 为准 | 各自许可 | 编译进入应用 |
 | DB-IP IP to Country Lite | [2026-10](https://db-ip.com/db/download/ip-to-country-lite) | CC-BY-4.0 | MMDB 原始记录嵌入应用；[来源与署名](docs/SITE-ACCESS.md#数据来源与许可)，完整许可随安装包提供 |
 
 `python3 scripts/third-party.py` 从已锁定和下载的 Go/npm 依赖及固定 DB-IP 数据集收集许可证文本，生成 `build/notices/` 及 SPDX JSON 依赖清单，随应用包提供。无法自动判断的 SPDX license 字段为 `NOASSERTION`，许可证原文单独保留，不声称自动扫描是法律审核。
+
+Trust Wallet Core 的 npm 包不含许可证文件，且 npm 的 MIT 声明不能覆盖所包含 Core 的 Apache-2.0 及其他第三方许可。`licenses/trust-wallet-core-source.json` 固定上游 commit、npm integrity、WASM/glue 和原始许可 SHA-256；打包会校验这些来源并保留 `trust-wallet-core-4.8.4-LICENSE.txt`、`trust-wallet-core-4.8.4-LICENSE-3RD-PARTY.txt`。SBOM 分别记录 npm 包与上游 Core，并建立包含关系；完整上游源码和构建资料见固定 commit。
 
 [IP Geolocation by DB-IP](https://db-ip.com/)：国家判断使用 DB-IP 的 CC-BY-4.0 数据，不修改上游记录。该数据集保留自身许可，面板 LGPL 许可不替代它；来源、完整许可及「按现状提供」条款见对应署名和许可证文件。
 

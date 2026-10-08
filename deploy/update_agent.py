@@ -29,6 +29,7 @@ import network
 API = 'https://api.github.com/repos/' + state.REPO + '/releases?per_page=100'
 DOWNLOAD = 'https://github.com/' + state.REPO + '/releases/download/'
 ACTIVE = {'queued', 'downloading', 'verifying', 'backing_up', 'installing', 'restarting', 'recovering'}
+PROXY_WARNING = '钱包备份恢复的上传配置未完成，较大的备份可能无法上传；请检查 Nginx 配置和运行状态后重启更新服务'
 lock = threading.RLock()
 last_activity = time.monotonic()
 
@@ -159,7 +160,21 @@ def status():
     # Polling must not open the database while its files are being backed up or
     # restored (nor recreate SQLite WAL sidecars under the updater's identity).
     rollback = [] if (op or {}).get('stage') in ACTIVE else [{k: r[k] for k in ['version', 'created', 'compatible']} for r in state.candidates()]
-    return {'available': True, 'current_version': current, 'installed_version': state.baseline()['version'], 'checked_at': cached['checked_at'], 'releases': releases, 'rollback_versions': rollback, 'operation': op, 'refresh_seconds': 8}
+    warning = PROXY_WARNING if (state.read('proxy-migration.json') or {}).get('failed') else ''
+    return {'available': True, 'current_version': current, 'installed_version': state.baseline()['version'], 'checked_at': cached['checked_at'], 'releases': releases, 'rollback_versions': rollback, 'operation': op, 'refresh_seconds': 8, 'warning': warning}
+
+
+def reconcile_panel_proxy():
+    # Custom or invalid Nginx configuration must not disable the maintenance
+    # socket. The migration restores its original fragment on reload failure;
+    # keep a safe, persistent warning and retry on the next helper startup.
+    try:
+        with deployment_lock(): upgrade.upgrade_panel_proxy()
+    except Exception as exc:
+        state.write('proxy-migration.json', {'failed': True, 'checked_at': int(time.time())})
+        print('Panel proxy migration failed: ' + type(exc).__name__, file=sys.stderr, flush=True)
+    else:
+        if state.read('proxy-migration.json') is not None: state.write('proxy-migration.json', None)
 
 
 def progress(stage):
@@ -292,7 +307,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             elif self.path == '/check' and self.command == 'POST':
                 with lock:
                     if (state.read('operation.json') or {}).get('stage') in ACTIVE: raise ValueError('已有版本操作正在执行')
-                    c = catalog(True); result = dict(status(), warning=c.get('warning', ''))
+                    c = catalog(True); result = status()
+                    result['warning'] = ' · '.join(filter(None, [result.get('warning'), c.get('warning')]))
             elif self.path == '/apply' and self.command == 'POST':
                 size = int(self.headers.get('Content-Length', '0'))
                 if size <= 0 or size > 1024: raise ValueError('更新请求过大或为空')
@@ -315,6 +331,10 @@ class Server(socketserver.ThreadingMixIn, socketserver.UnixStreamServer):
 
 def serve():
     state.baseline(); recover()
+    # An older running helper applies upgrades using its already-loaded Python
+    # modules. Reconcile this scoped proxy addition once the new helper starts,
+    # including after the first status request following an online upgrade.
+    reconcile_panel_proxy()
     network.setup()
     loaded = (state.HELPER / 'VERSION').read_text()
     if (state.read('network-operation.json') or {}).get('stage') in {'queued', 'applying'}:

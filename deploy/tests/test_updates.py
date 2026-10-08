@@ -17,6 +17,7 @@ import update_state as state
 import update_agent as agent
 import upgrade
 import install
+import render
 
 
 class UpdateTests(unittest.TestCase):
@@ -32,6 +33,98 @@ class UpdateTests(unittest.TestCase):
 
     def request(self, **kw):
         return dict(action='update', version='0.19.0', expected_version='0.18.0', request_id='11111111-2222-4333-a444-555555555555', **kw)
+
+    def test_upgrade_installs_restore_proxy_once_and_preserves_existing_configuration(self):
+        panel = self.root / 'nginx-panel.conf'
+        original = render.render('panel.example.com', 'node.example.com', 'www.cloudflare.com')['nginx-panel.conf'].replace(render.WALLET_RESTORE_LOCATION, '') + '\n# local setting retained\n'
+        panel.write_text(original)
+        with patch.object(upgrade, 'NGINX_PANEL', panel), patch.object(upgrade, 'run') as run:
+            upgrade.upgrade_panel_proxy()
+            self.assertEqual(panel.read_text().replace(render.WALLET_RESTORE_LOCATION, ''), original)
+            self.assertEqual(run.call_args_list, [unittest.mock.call('nginx', '-t'), unittest.mock.call('systemctl', 'reload', 'nginx')])
+            run.reset_mock(); upgrade.upgrade_panel_proxy(); run.assert_not_called()
+
+    def test_failed_restore_proxy_reload_restores_original_fragment(self):
+        panel = self.root / 'nginx-panel.conf'
+        original = render.render('panel.example.com', 'node.example.com', 'www.cloudflare.com')['nginx-panel.conf'].replace(render.WALLET_RESTORE_LOCATION, '')
+        panel.write_text(original)
+        with patch.object(upgrade, 'NGINX_PANEL', panel), patch.object(upgrade, 'run', side_effect=[None, OSError('reload failed'), None, None]):
+            with self.assertRaises(OSError): upgrade.upgrade_panel_proxy()
+        self.assertEqual(panel.read_text(), original)
+        self.assertEqual(list(self.root.glob('.guangyue-panel-*')), [])
+
+    def test_new_helper_reconciles_proxy_after_legacy_online_upgrade(self):
+        # Old helpers install new files using already-loaded upgrade modules.
+        # The restarted helper must update the real fragment before serving.
+        panel = self.root / 'nginx-panel.conf'
+        original = render.render('panel.example.com', 'node.example.com', 'www.cloudflare.com')['nginx-panel.conf'].replace(render.WALLET_RESTORE_LOCATION, '')
+        panel.write_text(original)
+        with patch.object(upgrade, 'NGINX_PANEL', panel), patch.object(upgrade, 'run') as run:
+            response = self.serve_one_status()
+        self.assertIn(render.WALLET_RESTORE_LOCATION, panel.read_text())
+        self.assertEqual(run.call_args_list, [unittest.mock.call('nginx', '-t'), unittest.mock.call('systemctl', 'reload', 'nginx')])
+        self.assertTrue(response['available']); self.assertEqual(response['warning'], '')
+        unit = (Path(upgrade.__file__).parent / 'guangyue-updater.service').read_text()
+        self.assertIn('ProtectSystem=full', unit)
+        writable = next(line for line in unit.splitlines() if line.startswith('ReadWritePaths='))
+        self.assertIn('/etc/nginx/sites-enabled', writable.split())
+        self.assertNotIn('/etc', writable.split())
+
+    def serve_one_status(self):
+        helper = self.root / 'helper-startup'; helper.mkdir(exist_ok=True)
+        version = helper / 'VERSION'; version.write_text('0.18.0\n')
+        responses = []
+        def request():
+            responses.append(agent.status())
+            # Complete one real startup/serve/retire cycle, with only the OS
+            # socket, lock, and unrelated network initialization replaced.
+            version.write_text('0.19.0\n')
+        with patch.object(state, 'HELPER', helper), patch.object(agent, 'recover'), patch.object(agent, 'deployment_lock'), patch.object(agent.network, 'setup'), patch.dict(os.environ, {'LISTEN_PID': str(os.getpid()), 'LISTEN_FDS': '1'}), patch.object(agent, 'Server') as server, patch.object(agent.socket, 'socket'):
+            server.return_value.handle_request.side_effect = request
+            agent.serve()
+            server.return_value.server_close.assert_called_once()
+        self.assertEqual(len(responses), 1)
+        return responses[0]
+
+    def test_proxy_migration_failure_keeps_status_available_and_clears_after_retry(self):
+        panel = self.root / 'nginx-panel.conf'
+        original = '# custom proxy with private-fixture-value\n'
+        panel.write_text(original)
+        with patch.object(upgrade, 'NGINX_PANEL', panel), patch.object(upgrade, 'run') as run, patch('sys.stderr', new_callable=io.StringIO) as stderr:
+            response = self.serve_one_status()
+        self.assertTrue(response['available']); self.assertEqual(response['warning'], agent.PROXY_WARNING)
+        self.assertEqual(panel.read_text(), original); run.assert_not_called()
+        self.assertNotIn('private-fixture-value', stderr.getvalue())
+        self.assertNotIn('private-fixture-value', json.dumps(state.read('proxy-migration.json')))
+        self.assertEqual(agent.status()['warning'], agent.PROXY_WARNING)
+        panel.write_text(render.render('panel.example.com', 'node.example.com', 'www.cloudflare.com')['nginx-panel.conf'].replace(render.WALLET_RESTORE_LOCATION, ''))
+        with patch.object(upgrade, 'NGINX_PANEL', panel), patch.object(upgrade, 'run'):
+            recovered = self.serve_one_status()
+        self.assertTrue(recovered['available']); self.assertEqual(recovered['warning'], '')
+        self.assertIsNone(state.read('proxy-migration.json'))
+        self.assertIn(render.WALLET_RESTORE_LOCATION, panel.read_text())
+
+    def test_proxy_startup_reload_failure_rolls_back_and_reports_without_leaking_details(self):
+        panel = self.root / 'nginx-panel.conf'
+        original = render.render('panel.example.com', 'node.example.com', 'www.cloudflare.com')['nginx-panel.conf'].replace(render.WALLET_RESTORE_LOCATION, '')
+        panel.write_text(original)
+        with patch.object(upgrade, 'NGINX_PANEL', panel), patch.object(upgrade, 'run', side_effect=[None, OSError('private-reload-value'), None, None]), patch('sys.stderr', new_callable=io.StringIO) as stderr:
+            response = self.serve_one_status()
+        self.assertTrue(response['available']); self.assertEqual(response['warning'], agent.PROXY_WARNING)
+        self.assertEqual(panel.read_text(), original)
+        self.assertNotIn('private-reload-value', stderr.getvalue())
+        self.assertNotIn('private-reload-value', json.dumps(response))
+
+    def test_catalog_check_retains_proxy_migration_warning(self):
+        state.write('proxy-migration.json', {'failed': True})
+        handler = unittest.mock.Mock()
+        handler.path = '/check'; handler.command = 'POST'; handler.wfile = io.BytesIO()
+        with patch.object(agent, 'catalog', return_value={'warning': '版本来源暂不可用，请稍后重试'}):
+            agent.Handler.handle_api(handler)
+        handler.send_response.assert_called_once_with(200)
+        response = json.loads(handler.wfile.getvalue())
+        self.assertIn(agent.PROXY_WARNING, response['warning'])
+        self.assertIn('版本来源暂不可用', response['warning'])
 
     def cache(self):
         state.write('catalog.json', {'checked_at': int(time.time()), 'releases': [{'version': '0.19.0', 'editions': ['lite']}]})

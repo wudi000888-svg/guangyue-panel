@@ -15,6 +15,11 @@ func TestPostgresBehaviors(t *testing.T) {
 		name string
 		run  func(*testing.T)
 	}{
+		{"crypto_wallet_permissions", TestCryptoWalletPermissionsSecretsAndBackup},
+		{"crypto_wallet_dedup", TestCryptoWalletCanonicalDedupAndValidation},
+		{"crypto_wallet_concurrency", TestCryptoWalletIndependentInstancesReplayAndRestart},
+		{"crypto_wallet_restore", TestCryptoWalletRestoreHighWaterAndRecoveryGate},
+		{"crypto_wallet_snapshot", TestCryptoWalletSnapshotIntegrityAndPagination},
 		{"payment_topup_dedup", TestPaymentTopupDedupAcrossInstancesAndMethods},
 		{"payment_late_refund", TestPaymentLateMismatchAndManualRefund},
 		{"payment_order_recovery", TestPaymentOrderRecoveryCancellationAndRefundTruth},

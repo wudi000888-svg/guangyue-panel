@@ -36,6 +36,27 @@ class LockTests(unittest.TestCase):
 
 
 class RenderTests(unittest.TestCase):
+    def test_wallet_restore_has_only_a_scoped_upload_exception(self):
+        panel = render.render('panel.example.com', 'node.example.com', 'www.cloudflare.com')['nginx-panel.conf']
+        restore = render.WALLET_RESTORE_LOCATION
+        self.assertEqual(panel.count(restore), 1)
+        self.assertEqual(panel.count('client_max_body_size 16m;'), 1)
+        self.assertIn('client_max_body_size 5m;', panel)
+        self.assertIn('location = /api/support/upload {\n        client_max_body_size 3m;', panel)
+        for directive in ['proxy_request_buffering off;', 'proxy_pass http://127.0.0.1:19100;',
+                          'proxy_set_header Host $host;', 'proxy_set_header X-Real-IP $remote_addr;',
+                          'proxy_set_header X-Forwarded-For $remote_addr;',
+                          'proxy_set_header X-Forwarded-Proto https;', 'proxy_read_timeout 45s;']:
+            self.assertIn(directive, restore)
+        # A location-level add_header would suppress inherited server headers.
+        self.assertNotIn('add_header', restore)
+        self.assertIn('add_header Strict-Transport-Security', panel)
+        self.assertEqual(render.wallet_restore_location(panel), panel)
+        custom = panel.replace(restore, '').replace('access_log off;', '# preserve custom settings\n    access_log off;', 1)
+        self.assertEqual(render.wallet_restore_location(custom).replace(restore, ''), custom)
+        with self.assertRaises(ValueError):
+            render.wallet_restore_location(panel.replace('client_max_body_size 16m;', 'client_max_body_size 1m;'))
+
     def test_same_domain_and_existing_sites_route_explicitly(self):
         result = render.render('panel.example.com', 'panel.example.com', 'www.cloudflare.com', ['shop.example.com', 'shop.example.com'])
         stream = result['nginx-stream.conf']

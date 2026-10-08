@@ -15,6 +15,9 @@ import (
 )
 
 func (a *App) commerceAPI(w http.ResponseWriter, r *http.Request, actor Record) {
+	if a.cryptoWalletAPIRoute(w, r, actor) {
+		return
+	}
 	if a.paymentAPIRoute(w, r, actor) {
 		return
 	}
