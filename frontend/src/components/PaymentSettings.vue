@@ -4,6 +4,8 @@ import { CreditCard, Plus, ShieldCheck, RefreshCw, Copy, LoaderCircle, X } from 
 import { useCommerce, money, stamp, paymentStateText, type PaymentMethod, type PaymentAttempt, type PaymentReceipt, type PaymentDiagnostic } from '../lib/commerce';
 import { isCancelled } from '../lib/api';
 import { t } from '../i18n';
+import CryptoWalletSettings from './CryptoWalletSettings.vue';
+defineProps<{ active?: boolean }>();
 const { read, api, run, busy, error, notice } = useCommerce();
 const methods = ref<PaymentMethod[]>([]), payments = ref<PaymentAttempt[]>([]), receipts = ref<PaymentReceipt[]>([]), loading = ref(false), loaded = ref(false);
 const editing = ref<PaymentMethod | null>(null), showForm = ref(false), adminPassword = ref(''), formElement = ref<HTMLFormElement|null>(null);
@@ -91,6 +93,7 @@ onMounted(load);onUnmounted(()=>{disposed=true;sequence++;clearSecrets();closeRe
     </details>
     <form v-if="refundTarget" ref="refundElement" class="integration-form" @submit.prevent="refund"><div class="provider-heading"><h3>{{manualRefund?t('确认商户后台退款'):t('发起原路退款')}}</h3><button type="button" class="icon" :disabled="busy" :aria-label="t('取消')" @click="closeRefund"><X :size="18"/></button></div><p class="integration-muted">{{t('收款编号')}} · {{refundTarget.id}}</p><fieldset :disabled="busy"><p v-if="manualRefund" class="integration-muted">{{t('先在支付平台完成实际退款，再填写退款凭据。此操作仅记录核实结果，不会自动转账或退入钱包。')}}</p><p v-else class="integration-muted">{{t('将请求 Stripe 按此笔实收金额原路退款，成功后自动更新状态。')}}</p><label>{{t('退款处理说明')}}<input v-model.trim="refundReason" required maxlength="300"/></label><label v-if="manualRefund">{{t('实际退款凭据')}}<input v-model.trim="refundReference" required maxlength="200" autocomplete="off"/></label><label v-if="manualRefund" class="inline-check"><input v-model="manualConfirmed" type="checkbox" required/>{{t('我已在支付平台核实，这笔资金已实际退回')}}</label><label>{{t('管理员当前密码')}}<input v-model="adminPassword" type="password" autocomplete="current-password" required/></label><button class="primary" :disabled="busy||!adminPassword||!refundReason||(manualRefund&&(!manualConfirmed||!refundReference))"><LoaderCircle v-if="busy" :size="16" class="spin"/>{{manualRefund?t('确认已实际退款'):t('提交原路退款')}}</button></fieldset></form>
     <details class="integration-review"><summary>{{t('全部支付尝试')}} · {{payments.length}}</summary><article v-for="payment in payments" :key="payment.id" class="payment-review-row"><div><strong>{{money(payment.amount)}}</strong><span>{{payment.purpose==='topup'?t('钱包充值'):t('套餐支付')}} · {{paymentStateText(payment.state)}}</span><small>{{stamp(payment.created)}} · {{payment.id}}</small><p v-if="payment.message">{{t(payment.message)}}</p><p v-if="payment.refund_status">{{t('退款状态')}} · {{paymentStateText(payment.refund_status)}}</p></div></article><p v-if="!payments.length" class="integration-empty">{{t('暂无支付记录')}}</p></details>
+    <CryptoWalletSettings :active="active !== false" />
   </section>
 </template>
 <style scoped>

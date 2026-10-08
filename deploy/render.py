@@ -5,6 +5,31 @@ import json
 import re
 from pathlib import Path
 
+WALLET_RESTORE_LOCATION = '''    location = /api/commerce/crypto/admin/wallets/restore {
+        client_max_body_size 16m;
+        proxy_request_buffering off;
+        proxy_pass http://127.0.0.1:19100;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_read_timeout 45s;
+    }
+'''
+
+
+def wallet_restore_location(panel):
+    """Upgrade only the managed API exception, retaining other Nginx changes."""
+    if WALLET_RESTORE_LOCATION in panel:
+        return panel
+    if '/api/commerce/crypto/admin/wallets/restore' in panel:
+        raise ValueError('Existing wallet restore proxy differs from the managed configuration')
+    anchor = '    location / {\n        proxy_pass http://127.0.0.1:19100;'
+    if panel.count(anchor) != 1:
+        raise ValueError('Managed panel proxy could not be identified for wallet restore')
+    return panel.replace(anchor, WALLET_RESTORE_LOCATION + anchor, 1)
+
 
 def domain(value):
     if len(value) > 63 or not re.fullmatch(r'[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+', value):
@@ -90,7 +115,7 @@ server {
     location / { return 301 https://%s$request_uri; }
 }
 ''' % (' '.join(dict.fromkeys([panel, node])), ' '.join(dict.fromkeys([panel, node])), panel)
-    return {'nginx-stream.conf': stream, 'nginx-panel.conf': panel_conf}
+    return {'nginx-stream.conf': stream, 'nginx-panel.conf': wallet_restore_location(panel_conf)}
 
 
 def parser():

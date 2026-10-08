@@ -1,0 +1,28 @@
+{
+  "name": "Trust Wallet Core",
+  "version": "4.8.4",
+  "repository": "https://github.com/trustwallet/wallet-core",
+  "commit": "d40d24a63d92619167903369308bf0e2f7eb3a59",
+  "source": "https://github.com/trustwallet/wallet-core/tree/d40d24a63d92619167903369308bf0e2f7eb3a59",
+  "license": "Apache-2.0",
+  "npm_package": "@trustwallet/wallet-core",
+  "npm_declared_license": "MIT",
+  "npm_tarball": "https://registry.npmjs.org/@trustwallet/wallet-core/-/wallet-core-4.8.4.tgz",
+  "npm_integrity": "sha512-IE2tHafdgBojb/8UkNbcMi0hXVVIX6Zo6PXL3Hslmo0AezEbLJ1k/VealEr/O6PQSP6ZbwhY0AYK9LE1xC3FCw==",
+  "wasm_sha256": "c202624dc95475d3d309a28d99e286875066ed20fd7adc81c28de38dc721e09f",
+  "javascript_glue_sha256": "d0624dfdb7008b1e7dae4c281ea68cc72614e75c9bcb7bef6a31d74ea2813559",
+  "licenses": [
+    {
+      "file": "trust-wallet-core-4.8.4-LICENSE.txt",
+      "source": "https://raw.githubusercontent.com/trustwallet/wallet-core/d40d24a63d92619167903369308bf0e2f7eb3a59/LICENSE",
+      "sha256": "acebc15b086cea49799f5f86b1fc60afe82f99a0ece7ab37ccf3e0f1094df0a6"
+    },
+    {
+      "file": "trust-wallet-core-4.8.4-LICENSE-3RD-PARTY.txt",
+      "source": "https://raw.githubusercontent.com/trustwallet/wallet-core/d40d24a63d92619167903369308bf0e2f7eb3a59/LICENSE-3RD-PARTY.txt",
+      "sha256": "231c51196b17515caf6aa3b8898e7e19dd87ec93c73f1282b3efae1a7b37363a"
+    }
+  ],
+  "attribution": "Trust Wallet Core. Copyright 2017 Trust Wallet. Upstream core is Apache-2.0; bundled third-party components retain their individual licenses. The npm package declares MIT in its metadata, but does not ship license files. Preserve both declarations; do not infer that the bundled core is entirely MIT.",
+  "modifications": "Unmodified official npm WASM and Emscripten JavaScript glue, bundled as browser assets. No production Node runtime or server-side Wallet Core sidecar."
+}

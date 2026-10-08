@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Collect locked dependency/data licenses and a deterministic SPDX 2.3 inventory."""
+import base64
 import datetime
 import hashlib
 import json
@@ -14,6 +15,7 @@ out = root / 'build/notices'
 out.mkdir(parents=True, exist_ok=True)
 packages = {}
 texts = []
+relationships = []
 
 
 def collect(name, version, directory, ecosystem, license_id='NOASSERTION'):
@@ -44,6 +46,46 @@ def go_modules(directory):
         collect(value['Path'], value.get('Version', 'local'), entry['Dir'], 'golang')
 
 
+def wallet_core(lock):
+    """The npm license field alone does not describe its bundled upstream WASM."""
+    source = json.loads((root / 'licenses/trust-wallet-core-source.json').read_text())
+    name, version = source['npm_package'], source['version']
+    package_path = 'node_modules/' + name
+    locked = lock['packages'].get(package_path)
+    if not locked or locked.get('version') != version or locked.get('integrity') != source['npm_integrity']:
+        raise SystemExit('Wallet Core lock changed: update pinned source/license provenance before packaging.')
+    directory = root / 'frontend' / package_path
+    for name, field in [('dist/lib/wallet-core.wasm', 'wasm_sha256'), ('dist/lib/wallet-core.js', 'javascript_glue_sha256')]:
+        if hashlib.sha256((directory / name).read_bytes()).hexdigest() != source[field]:
+            raise SystemExit('Wallet Core installed payload checksum mismatch: ' + name)
+        shipped = root / 'frontend/dist/assets/wallet-core' / version / Path(name).name
+        if not shipped.is_file() or hashlib.sha256(shipped.read_bytes()).hexdigest() != source[field]:
+            raise SystemExit('Wallet Core built asset missing or changed: ' + shipped.relative_to(root).as_posix())
+    key = 'generic:trust-wallet-core@' + version
+    collect('trust-wallet-core', version, directory, 'generic', source['license'])
+    upstream = packages[key]
+    upstream.update(
+        downloadLocation=source['source'],
+        homepage=source['repository'],
+        supplier='Organization: Trust Wallet',
+        sourceInfo=source['attribution'] + ' Source commit: ' + source['commit'] + '. Published WASM SHA256: ' + source['wasm_sha256'] + '. ' + source['modifications'],
+    )
+    npm = packages['npm:' + source['npm_package'] + '@' + version]
+    if npm['licenseDeclared'] != source['npm_declared_license']:
+        raise SystemExit('Wallet Core npm license declaration changed; review upstream provenance.')
+    npm.update(
+        downloadLocation=source['npm_tarball'],
+        sourceInfo='npm metadata declares MIT; the contained upstream Wallet Core WASM is separately declared Apache-2.0, with bundled third-party notices. See the CONTAINS relationship and pinned license files.',
+        checksums=[{'algorithm': 'SHA512', 'checksumValue': base64.b64decode(source['npm_integrity'].removeprefix('sha512-'), validate=True).hex()}],
+    )
+    relationships.append({'spdxElementId': npm['SPDXID'], 'relationshipType': 'CONTAINS', 'relatedSpdxElement': upstream['SPDXID']})
+    for entry in source['licenses']:
+        path = root / 'licenses' / entry['file']
+        if hashlib.sha256(path.read_bytes()).hexdigest() != entry['sha256']:
+            raise SystemExit('Wallet Core license checksum mismatch: ' + entry['file'])
+        texts.append('\n' + '=' * 72 + '\n' + key + ' / ' + entry['file'] + '\nSource: ' + entry['source'] + '\n' + '=' * 72 + '\n' + path.read_text())
+
+
 go = os.environ.get('GY_GO', 'go')
 goroot = subprocess.check_output([go, 'env', 'GOROOT'], cwd=root / 'backend').decode().strip()
 go_version = subprocess.check_output([go, 'env', 'GOVERSION'], cwd=root / 'backend').decode().strip().removeprefix('go')
@@ -70,6 +112,7 @@ for name, value in lock['packages'].items():
     if not isinstance(license_id, str):
         license_id = 'NOASSERTION'
     collect(meta['name'], value['version'], path, 'npm', license_id)
+wallet_core(lock)
 geoip = root / 'backend/internal/geoip'
 dataset = json.loads((geoip / 'source.json').read_text())
 for name, field in [('country.mmdb', 'sha256_mmdb'), ('LICENSE.txt', 'sha256_license')]:
@@ -93,5 +136,6 @@ except (ValueError, subprocess.CalledProcessError):
     epoch = int(datetime.datetime.now(datetime.timezone.utc).timestamp())
 created = datetime.datetime.fromtimestamp(epoch, datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
 document = {'spdxVersion': 'SPDX-2.3', 'dataLicense': 'CC0-1.0', 'SPDXID': 'SPDXRef-DOCUMENT', 'name': 'Guangyue Panel ' + version + ' dependency inventory', 'documentNamespace': 'https://spdx.org/spdxdocs/guangyue-' + version + '-' + hashlib.sha256('\n'.join(sorted(packages)).encode()).hexdigest()[:16], 'creationInfo': {'creators': ['Tool: Guangyue third-party.py'], 'created': created}, 'packages': list(packages.values())}
+document['relationships'] = relationships
 (out / 'SBOM.spdx.json').write_text(json.dumps(document, ensure_ascii=False, indent=2) + '\n')
 print('Collected', len(packages), 'dependency records and license texts; no local paths in generated output.')

@@ -12,7 +12,7 @@
 
 [月庭 Penpot 设计源](docs/designs/penpot/README.md) · [UI UX 施工方案](docs/designs/penpot-courtyard-system.md)
 
-![version](https://img.shields.io/badge/version-0.35.1-2563eb)
+![version](https://img.shields.io/badge/version-0.36.0-2563eb)
 ![license](https://img.shields.io/badge/panel_license-LGPL--3.0-16a34a)
 ![platform](https://img.shields.io/badge/server-Linux_amd64-475569)
 
@@ -79,7 +79,9 @@ sudo python3 deploy/install.py --bundle "$PWD" \
 
 在“系统设置 → 交易与接入”配置邮件服务与在线支付。邮件支持标准 SMTP 的 TLS/STARTTLS，提供邮箱验证、密码找回和订单通知；支付支持易支付 V1 MD5 和 Stripe Checkout，包括套餐支付、钱包充值与退款处理。新安装默认关闭这些外部服务，需填写自己的服务商凭据并检查接入。
 
-加密货币当前为设计阶段，尚未开放收款；USDT/USDC 的网络、资产与去重方案见[加密支付设计](docs/CRYPTO_PAYMENTS.md)。SMTP 配置与排错见[邮件服务](docs/EMAIL.md)，支付接入见[交易系统](docs/COMMERCE.md)。
+加密钱包支持内置热 HD 钱包和外部 xpub：创建/恢复、独立口令备份与手动地址分配见[钱包管理](docs/CRYPTO_WALLETS.md)。热钱包由官方 Trust Wallet Core 浏览器 WASM 创建，助记词由服务端 Vault 加密保存；只建议存放小额并定期转走。链扫描、加密货币自动支付套餐和自动归集尚未启用；后续 USDT/USDC 的网络、资产与去重方案见[加密支付设计](docs/CRYPTO_PAYMENTS.md)。SMTP 配置与排错见[邮件服务](docs/EMAIL.md)，支付接入见[交易系统](docs/COMMERCE.md)。
+
+钱包管理的实现边界，以及后续链上支付的施工任务、接口、技术债和验收标准见[加密支付项目](docs/projects/crypto-payments/README.md)。钱包创建或地址分配成功不表示订单已收款、套餐可由链上支付开通或资金可自动归集。
 
 ## 文档导航
 
@@ -93,6 +95,8 @@ sudo python3 deploy/install.py --bundle "$PWD" \
 | [运维手册](docs/OPERATIONS.md) | 升级、回滚、备份恢复、续期、资源与连通性诊断 |
 | [配置参考](docs/CONFIGURATION.md) | JSON 配置字段、端口、目录、运行模式 |
 | [架构与边界](docs/ARCHITECTURE.md) | 数据流、权限、DNS、安全与资源设计 |
+| [钱包管理](docs/CRYPTO_WALLETS.md) | 内置热钱包、外部 xpub、备份恢复、地址与资金安全边界 |
+| [加密支付项目](docs/projects/crypto-payments/README.md) | 当前钱包交付与后续链上支付接口、技术债、施工任务及验证门槛 |
 | [开发指南](CONTRIBUTING.md) | 本地开发、测试、构建、贡献流程 |
 | [安全政策](SECURITY.md) | 漏洞报告、秘密与供应链管理 |
 | [第三方许可](THIRD_PARTY_NOTICES.md) | 上游来源、修改说明与再分发约束 |

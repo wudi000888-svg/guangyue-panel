@@ -5,9 +5,12 @@ go 1.26.0
 toolchain go1.26.8
 
 require (
+	github.com/btcsuite/btcd v0.24.2
+	github.com/btcsuite/btcd/btcutil v1.1.6
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/oschwald/maxminddb-golang/v2 v2.7.0
 	github.com/redis/go-redis/v9 v9.22.0
+	github.com/tyler-smith/go-bip39 v1.1.0
 	golang.org/x/crypto v0.56.0
 	golang.org/x/net v0.58.0
 	golang.org/x/text v0.41.0
@@ -16,7 +19,10 @@ require (
 )
 
 require (
+	github.com/btcsuite/btcd/btcec/v2 v2.5.0 // indirect
+	github.com/btcsuite/btcd/chaincfg/chainhash v1.2.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.1 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect

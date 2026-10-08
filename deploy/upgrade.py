@@ -16,7 +16,35 @@ sys.dont_write_bytecode = True
 from install import APP, STATE, CONFIG, UNITS, run, health, verify_bundle
 from common import deployment_lock
 from infrastructure import edition_config, service_text, dump_postgres, restore_postgres
+from render import wallet_restore_location
 import update_state as updates
+
+NGINX_PANEL = Path('/etc/nginx/sites-enabled/guangyue-panel.conf')
+
+
+def write_panel_proxy(content):
+    """Atomically replace the root-owned managed fragment without a partial read."""
+    fd, temp = tempfile.mkstemp(prefix='.guangyue-panel-', dir=NGINX_PANEL.parent)
+    try:
+        with os.fdopen(fd, 'w') as output:
+            os.fchmod(output.fileno(), 0o644)
+            output.write(content); output.flush(); os.fsync(output.fileno())
+        os.replace(temp, NGINX_PANEL)
+    finally:
+        if os.path.exists(temp): os.unlink(temp)
+
+
+def upgrade_panel_proxy():
+    before = NGINX_PANEL.read_text()
+    after = wallet_restore_location(before)
+    if after == before: return
+    write_panel_proxy(after)
+    try:
+        run('nginx', '-t'); run('systemctl', 'reload', 'nginx')
+    except Exception:
+        write_panel_proxy(before)
+        run('nginx', '-t'); run('systemctl', 'reload', 'nginx')
+        raise
 
 
 def as_panel(*args):
@@ -61,6 +89,7 @@ def backup_current(config):
     shutil.copytree(APP, backup / 'app', symlinks=True)
     (backup / 'app-checksums.json').write_text(json.dumps(app_hashes(backup / 'app')))
     shutil.copy2(CONFIG, backup / 'config.json')
+    if NGINX_PANEL.is_file(): shutil.copy2(NGINX_PANEL, backup / 'nginx-panel.conf')
     (backup / 'units').mkdir()
     for unit in UNITS:
         shutil.copy2('/etc/systemd/system/' + unit + '.service', backup / 'units')
@@ -89,6 +118,9 @@ def restore_current(backup):
     shutil.chown(CONFIG, user='root', group='guangyue')
     if (backup / 'postgres.dump').is_file(): restore_postgres(config, backup / 'postgres.dump')
     restore_units(backup)
+    if (backup / 'nginx-panel.conf').is_file():
+        write_panel_proxy((backup / 'nginx-panel.conf').read_text())
+        run('nginx', '-t'); run('systemctl', 'reload', 'nginx')
     run('systemctl', 'daemon-reload'); run('systemctl', 'start', *UNITS)
     health((backup / 'app/VERSION').read_text().strip())
 
@@ -163,6 +195,7 @@ def upgrade(bundle, edition=None, site_id=None, infrastructure_file=None, progre
             dest.write_text(service_text(source, new_config['edition'], new_config.get('role')) if unit == 'guangyue' else source.read_text()); dest.chmod(0o644)
         if migrating:
             as_panel(str(APP / 'bin/guangyue'), '-import-sqlite', str(STATE / 'panel.db'))
+        upgrade_panel_proxy()
     backup = transaction(change, target, new_config, progress, lambda: updates.setup(target, bundle / 'deploy'))
     print('Upgrade complete. Private offline backup: ' + str(backup))
     return backup
