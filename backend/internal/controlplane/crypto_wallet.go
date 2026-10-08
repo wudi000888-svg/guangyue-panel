@@ -28,20 +28,23 @@ const cryptoBackupMaxBytes = 8 << 20
 var cryptoWalletBackupSlots = make(chan struct{}, 1)
 
 type CryptoWallet struct {
-	ID               string `json:"id"`
-	Name             string `json:"name"`
-	Mode             string `json:"mode"`
-	XPub             string `json:"xpub"`
-	Path             string `json:"path"`
-	FirstAddress     string `json:"first_address"`
-	Engine           string `json:"engine"`
-	EngineVersion    string `json:"engine_version"`
-	Enabled          bool   `json:"enabled"`
-	Revision         int64  `json:"revision"`
-	NextIndex        int64  `json:"next_index"`
-	Created          int64  `json:"created"`
-	BackupConfirmed  bool   `json:"backup_confirmed"`
-	RecoveryRequired bool   `json:"recovery_required"`
+	ID                string  `json:"id"`
+	Name              string  `json:"name"`
+	Mode              string  `json:"mode"`
+	XPub              string  `json:"xpub"`
+	Path              string  `json:"path"`
+	FirstAddress      string  `json:"first_address"`
+	Engine            string  `json:"engine"`
+	EngineVersion     string  `json:"engine_version"`
+	Enabled           bool    `json:"enabled"`
+	Revision          int64   `json:"revision"`
+	NextIndex         int64   `json:"next_index"`
+	Created           int64   `json:"created"`
+	BackupConfirmed   bool    `json:"backup_confirmed"`
+	RecoveryRequired  bool    `json:"recovery_required"`
+	SupportedChainIDs []int64 `json:"supported_chain_ids"`
+	FundingAddress    string  `json:"funding_address"`
+	FundingPath       string  `json:"funding_path"`
 }
 
 type CryptoWalletAddress struct {
@@ -61,22 +64,23 @@ type cryptoWalletSecret struct {
 }
 
 type cryptoWalletInput struct {
-	Name           string             `json:"name"`
-	Mnemonic       string             `json:"mnemonic"`
-	XPub           string             `json:"xpub"`
-	Path           string             `json:"path"`
-	FirstAddress   string             `json:"first_address"`
-	EngineVersion  string             `json:"engine_version"`
-	Password       string             `json:"password"`
-	OperationID    string             `json:"operation_id"`
-	RiskAck        bool               `json:"risk_ack"`
-	Revision       int64              `json:"revision"`
-	Enabled        *bool              `json:"enabled"`
-	Label          string             `json:"label"`
-	BackupPassword string             `json:"backup_password"`
-	NextIndex      *int64             `json:"next_index"`
-	RecoveryAck    bool               `json:"recovery_ack"`
-	Backup         cryptoWalletBackup `json:"backup"`
+	Name              string             `json:"name"`
+	Mnemonic          string             `json:"mnemonic"`
+	XPub              string             `json:"xpub"`
+	Path              string             `json:"path"`
+	FirstAddress      string             `json:"first_address"`
+	EngineVersion     string             `json:"engine_version"`
+	Password          string             `json:"password"`
+	OperationID       string             `json:"operation_id"`
+	RiskAck           bool               `json:"risk_ack"`
+	Revision          int64              `json:"revision"`
+	Enabled           *bool              `json:"enabled"`
+	Label             string             `json:"label"`
+	BackupPassword    string             `json:"backup_password"`
+	NextIndex         *int64             `json:"next_index"`
+	RecoveryAck       bool               `json:"recovery_ack"`
+	Backup            cryptoWalletBackup `json:"backup"`
+	SupportedChainIDs []int64            `json:"supported_chain_ids"`
 }
 
 type cryptoWalletQuery interface {
@@ -84,14 +88,25 @@ type cryptoWalletQuery interface {
 	QueryRow(string, ...any) *sql.Row
 }
 
-const cryptoWalletColumns = "id,name,mode,xpub,path,first_address,engine,engine_version,enabled,revision,next_index,created,backup_confirmed,recovery_required"
+const cryptoWalletColumns = "id,name,mode,xpub,path,first_address,engine,engine_version,enabled,revision,next_index,created,backup_confirmed,recovery_required,supported_chain_ids"
 
 type cryptoScanner interface{ Scan(...any) error }
 
 func scanCryptoWallet(row cryptoScanner) (v CryptoWallet, err error) {
 	var enabled, confirmed, recovery int
-	err = row.Scan(&v.ID, &v.Name, &v.Mode, &v.XPub, &v.Path, &v.FirstAddress, &v.Engine, &v.EngineVersion, &enabled, &v.Revision, &v.NextIndex, &v.Created, &confirmed, &recovery)
+	var chains []byte
+	err = row.Scan(&v.ID, &v.Name, &v.Mode, &v.XPub, &v.Path, &v.FirstAddress, &v.Engine, &v.EngineVersion, &enabled, &v.Revision, &v.NextIndex, &v.Created, &confirmed, &recovery, &chains)
 	v.Enabled, v.BackupConfirmed, v.RecoveryRequired = enabled == 1, confirmed == 1, recovery == 1
+	if err != nil {
+		return
+	}
+	if err = json.Unmarshal(chains, &v.SupportedChainIDs); err != nil || v.SupportedChainIDs == nil {
+		return v, errors.New("wallet network policy unavailable")
+	}
+	v.SupportedChainIDs, err = cryptoWalletChainIDs(v.SupportedChainIDs)
+	if err == nil {
+		v, err = cryptoWalletFundingDTO(v)
+	}
 	return
 }
 func cryptoWalletByID(q cryptoWalletQuery, id string) (CryptoWallet, error) {
@@ -520,6 +535,11 @@ func (a *App) cryptoWalletPost(w http.ResponseWriter, r *http.Request, actor Rec
 }
 func (a *App) cryptoWalletCreate(tx *persistence.Tx, route string, in cryptoWalletInput) (CryptoWallet, error) {
 	v := CryptoWallet{ID: serial("GYW"), Name: in.Name, XPub: in.XPub, Path: in.Path, Enabled: true, Revision: 1, Created: time.Now().Unix()}
+	var chainError error
+	v.SupportedChainIDs, chainError = cryptoWalletChainIDs(in.SupportedChainIDs)
+	if chainError != nil {
+		return v, chainError
+	}
 	if !validText(v.Name, 80) {
 		return v, commerceFail(400, "钱包名称为1至80字")
 	}
@@ -567,12 +587,18 @@ func (a *App) cryptoWalletCreate(tx *persistence.Tx, route string, in cryptoWall
 		return v, e
 	}
 	if v.Mode == "hot" {
-		_, e = a.store.cryptoEnsureFunding(tx, v)
+		var f cryptoFundingAddress
+		f, e = a.store.cryptoEnsureFunding(tx, v)
+		v.FundingAddress, v.FundingPath = f.Address, f.Path
 	}
 	return v, e
 }
 func cryptoInsertWallet(tx *persistence.Tx, v CryptoWallet, receive string, secret []byte, exported int64) error {
-	_, e := tx.Exec("INSERT INTO crypto_wallets("+cryptoWalletColumns+",receive_key,secret,backup_exported) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", v.ID, v.Name, v.Mode, v.XPub, v.Path, v.FirstAddress, v.Engine, v.EngineVersion, cryptoBool(v.Enabled), v.Revision, v.NextIndex, v.Created, cryptoBool(v.BackupConfirmed), cryptoBool(v.RecoveryRequired), receive, secret, exported)
+	ids, e := cryptoWalletChainIDs(v.SupportedChainIDs)
+	if e != nil {
+		return e
+	}
+	_, e = tx.Exec("INSERT INTO crypto_wallets("+cryptoWalletColumns+",receive_key,secret,backup_exported) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", v.ID, v.Name, v.Mode, v.XPub, v.Path, v.FirstAddress, v.Engine, v.EngineVersion, cryptoBool(v.Enabled), v.Revision, v.NextIndex, v.Created, cryptoBool(v.BackupConfirmed), cryptoBool(v.RecoveryRequired), string(jsonBytes(ids)), receive, secret, exported)
 	return e
 }
 

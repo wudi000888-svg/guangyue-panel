@@ -30,7 +30,15 @@ func TestCryptoAnvilPaymentGasAndTokenExecution(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 	settings := cryptoDefaultSettings()
-	chain := settings.Chains[0]
+	chainIndex, assetIndex := 0, 1
+	switch os.Getenv("GY_TEST_CRYPTO_CHAIN_ID") {
+	case "", "1":
+	case "56":
+		chainIndex, assetIndex = 1, 3
+	default:
+		t.Fatal("isolated execution supports only fixture chain 1 or 56")
+	}
+	chain := settings.Chains[chainIndex]
 	chain.Enabled, chain.FinalityVerified = true, true
 	chain.RPCURL = endpoint
 	backup := *u
@@ -65,7 +73,7 @@ func TestCryptoAnvilPaymentGasAndTokenExecution(t *testing.T) {
 		}
 	})
 	for _, asset := range settings.Assets {
-		if asset.ChainID == 1 {
+		if asset.ChainID == chain.ChainID {
 			var ok any
 			call("anvil_setCode", []any{asset.Contract, string(code)}, &ok)
 		}
@@ -78,11 +86,11 @@ func TestCryptoAnvilPaymentGasAndTokenExecution(t *testing.T) {
 	wallet, _ := cryptoTestCreate(t, a, owner, true)
 	wallet = cryptoTestConfirm(t, a, owner, wallet)
 	settings.Enabled, settings.Revision, settings.WalletID = true, 1, wallet.ID
-	settings.Chains[0] = chain
-	settings.Assets[1].Enabled = true
-	settings.Assets[1].CNYPerToken = "7"
-	settings.Assets[1].RateUpdatedAt = time.Now().Unix()
-	settings.Assets[1].RateExpiresAt = time.Now().Unix() + 86400
+	settings.Chains[chainIndex] = chain
+	settings.Assets[assetIndex].Enabled = true
+	settings.Assets[assetIndex].CNYPerToken = "7"
+	settings.Assets[assetIndex].RateUpdatedAt = time.Now().Unix()
+	settings.Assets[assetIndex].RateExpiresAt = time.Now().Unix() + 86400
 	sealed, e := a.store.vault.seal(settings)
 	if e != nil {
 		t.Fatal(e)
@@ -90,7 +98,8 @@ func TestCryptoAnvilPaymentGasAndTokenExecution(t *testing.T) {
 	if _, e = a.store.db.Exec("INSERT INTO crypto_payment_settings(id,revision,doc) VALUES(1,1,?)", sealed); e != nil {
 		t.Fatal(e)
 	}
-	order, invoice := cryptoPaymentInvoice(t, a, owner, member)
+	order := newOrder(t, a, member, commerceOffer(t, a, owner))
+	invoice := decoded[CryptoInvoice](t, req(t, a, member, "POST", "/api/commerce/crypto/invoices", object{"order_id": order.ID, "asset_id": settings.Assets[assetIndex].ID, "operation_id": randomToken(24)}), 201)
 	var accounts []string
 	call("eth_accounts", []any{}, &accounts)
 	if len(accounts) == 0 {
@@ -131,7 +140,7 @@ func TestCryptoAnvilPaymentGasAndTokenExecution(t *testing.T) {
 		t.Fatal(e)
 	}
 	input := cryptoSweepTestInput()
-	input.MaxGasAtoms = "100000000000000000"
+	input.ChainID, input.AssetID, input.MaxGasAtoms = chain.ID, invoice.AssetID, ""
 	preview, e := a.cryptoPreviewSweep(ctx, owner, wallet.ID, input)
 	if e != nil || preview.CanSubmit || len(preview.Items) != 1 || preview.Items[0].TopupAtoms == "0" || preview.TotalGasAtoms == "0" {
 		t.Fatal("missing real estimate with empty Gas funding", preview, e)
@@ -142,6 +151,9 @@ func TestCryptoAnvilPaymentGasAndTokenExecution(t *testing.T) {
 	preview, e = a.cryptoPreviewSweep(ctx, owner, wallet.ID, input)
 	if e != nil || !preview.CanSubmit {
 		t.Fatal("funded execution preview", preview, e)
+	}
+	if preview.MaxGasAtoms == "0" || preview.MaxGasAtoms != preview.TotalGasAtoms {
+		t.Fatal("automatic fee cap must freeze the buffered estimate", preview)
 	}
 	job := decoded[CryptoSweepJob](t, req(t, a, owner, "POST", cryptoWalletPrefix+"wallets/"+wallet.ID+"/sweeps", object{"quote": preview.Quote, "password": commerceTestPassword, "operation_id": randomToken(24)}), 201)
 	for range 8 {

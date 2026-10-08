@@ -1,57 +1,242 @@
 <script setup lang="ts">
-import { computed,nextTick,onMounted,onUnmounted,ref,watch } from 'vue';
-import { ArrowUpRight,Check,Copy,LoaderCircle,RefreshCw,WalletCards,X } from 'lucide-vue-next';
-import { useApi,isCancelled,ApiError,onSessionExpired,onAccessDenied } from '../lib/api';
-import { operationID,stamp } from '../lib/commerce';
-import { tokenAmount,tokenAtoms,type CryptoSettings } from '../lib/cryptoPayments';
-import { canSignSweep,hasCryptoBalance,previewFundingFees,previewGasFees,previewFundingShortfall,sweepStateText,sweepJobStateText,sweepFinished,type CryptoBalancePage,type CryptoBalance,type SweepPreview,type SweepJob } from '../lib/cryptoTreasury';
+import {computed,nextTick,onMounted,onUnmounted,ref,watch} from 'vue';
+import {ArrowUpRight,Check,Copy,LoaderCircle,RefreshCw,WalletCards,X} from 'lucide-vue-next';
+import {useApi,isCancelled,ApiError,onSessionExpired,onAccessDenied} from '../lib/api';
+import {operationID,stamp} from '../lib/commerce';
+import {tokenAmount,type CryptoSettings} from '../lib/cryptoPayments';
+import {canSignSweep,hasCryptoBalance,previewFundingFees,previewGasFees,previewFundingShortfall,sweepStateText,sweepJobStateText,sweepFinished,treasuryChains,treasuryChainID,treasurySweepInput,treasuryPreviewMatches,type CryptoBalancePage,type CryptoBalance,type SweepPreview,type SweepJob} from '../lib/cryptoTreasury';
 import type {CryptoWallet} from '../lib/cryptoWallet';
-import {serialPoll} from '../lib/requests';
+import {latestRequest,serialPoll} from '../lib/requests';
 import {t} from '../i18n';
 import {usePaymentModule} from '../lib/paymentModule';
 const props=withDefaults(defineProps<{wallets:CryptoWallet[];active?:boolean}>(),{active:true}),api=useApi('/commerce/crypto/admin');
 const {enabled:moduleEnabled,loaded:moduleLoaded}=usePaymentModule(()=>props.active);
 const walletID=ref(''),chainID=ref(''),settings=ref<CryptoSettings>(),snapshot=ref<CryptoBalancePage>(),balances=ref<CryptoBalance[]>([]),jobs=ref<SweepJob[]>([]),selected=ref<string[]>([]);
-const onlyFunded=ref(true),loading=ref(false),jobsLoading=ref(false),loaded=ref(false),error=ref(''),notice=ref('');
-const wallet=computed(()=>props.wallets.find(w=>w.id===walletID.value)),chain=computed(()=>settings.value?.chains.find(c=>c.id===chainID.value));
+const onlyFunded=ref(true),autoRefresh=ref(true),loading=ref(false),jobsLoading=ref(false),loaded=ref(false),balanceError=ref(''),jobsError=ref(''),settingsError=ref(''),copyError=ref(''),notice=ref('');
+const error=computed(()=>[settingsError.value,balanceError.value,jobsError.value,copyError.value].filter(Boolean).join(' '));
+const wallet=computed(()=>props.wallets.find(w=>w.id===walletID.value));
+const chains=computed(()=>treasuryChains(wallet.value,settings.value?.chains||[]));
+const chain=computed(()=>chains.value.find(c=>c.id===chainID.value));
 const assets=computed(()=>settings.value?.assets.filter(a=>a.chain_id===chain.value?.chain_id)||[]),visible=computed(()=>balances.value.filter(b=>!onlyFunded.value||hasCryptoBalance(b)));
-const writable=computed(()=>moduleEnabled.value&&!!snapshot.value&&canSignSweep(wallet.value?.mode||'',snapshot.value.operations_supported)&&!!wallet.value?.backup_confirmed&&!wallet.value?.recovery_required);
-const dialog=ref<HTMLDialogElement>(),action=ref<'sweep'|'retry'|'cancel'|''>(''),retryJob=ref<SweepJob>(),assetID=ref(''),destination=ref(''),threshold=ref('0'),cap=ref(''),password=ref(''),preview=ref<SweepPreview>(),formError=ref(''),busy=ref(false),previewLoading=ref(false),now=ref(Date.now()/1000);
+const writable=computed(()=>moduleEnabled.value&&!!chain.value&&canSignSweep(wallet.value?.mode||'',snapshot.value?.operations_supported??true)&&!!wallet.value?.backup_confirmed&&!wallet.value?.recovery_required);
+const fundingAddress=computed(()=>wallet.value?.funding_address||snapshot.value?.funding_address||'');
+const dialog=ref<HTMLDialogElement>(),action=ref<'sweep'|'retry'|'cancel'|''>(''),retryJob=ref<SweepJob>(),assetID=ref(''),destination=ref(''),threshold=ref('0'),password=ref(''),preview=ref<SweepPreview>(),formError=ref(''),withdrawalError=ref(''),busy=ref(false),previewLoading=ref(false),now=ref(Date.now()/1000);
 const asset=computed(()=>assets.value.find(a=>a.id===assetID.value));
-let disposed=false,sequence=0,jobSequence=0,generation=0,previewSequence=0,trigger:HTMLElement|null=null,pending:{key:string;id:string}|undefined;
-const activeJobs=computed(()=>jobs.value.some(j=>['queued','running','waiting'].includes(j.state)));
-async function loadSettings(){if(!props.active||disposed)return;try{const v=await api<CryptoSettings>('/settings');if(disposed||!props.active)return;settings.value=v;if(!chainID.value)chainID.value=v.chains.find(c=>c.has_rpc)?.id||v.chains[0]?.id||''}catch(reason){if(!disposed&&!isCancelled(reason))error.value=t((reason as Error).message)}}
-async function load(append=false){if(!props.active||!walletID.value||!chainID.value)return;const current=++sequence,wid=walletID.value,cid=chainID.value;loading.value=true;error.value='';try{const query=new URLSearchParams({chain_id:cid});if(append&&snapshot.value?.next_after!=null)query.set('after',String(snapshot.value.next_after));const v=await api<CryptoBalancePage>('/wallets/'+encodeURIComponent(wid)+'/balances?'+query);if(disposed||current!==sequence||!props.active)return;snapshot.value=v;if(!append)selected.value=[];balances.value=append?[...new Map([...balances.value,...v.items].map(b=>[b.address_id,b])).values()]:v.items;loaded.value=true;}catch(reason){if(!disposed&&current===sequence&&!isCancelled(reason))error.value=t('余额查询未完成，保留上次成功的快照。')+' '+t((reason as Error).message)}finally{if(current===sequence)loading.value=false}}
-async function loadJobs(){if(!props.active||!walletID.value)return;const current=++jobSequence; jobsLoading.value=true;try{const v=await api<{items:SweepJob[]}>('/sweeps?wallet_id='+encodeURIComponent(walletID.value));if(disposed||current!==jobSequence||!props.active)return;jobs.value=v.items;}catch(reason){if(!disposed&&current===jobSequence&&!isCancelled(reason))error.value=t((reason as Error).message)}finally{if(current===jobSequence)jobsLoading.value=false}}
-async function open(kind:'sweep'|'retry'|'cancel',job?:SweepJob){if(busy.value||!wallet.value||wallet.value.mode!=='hot')return;generation++;previewSequence++;action.value=kind;retryJob.value=job;formError.value='';password.value='';preview.value=undefined;pending=undefined;destination.value='';threshold.value='0';cap.value='';assetID.value=assets.value[0]?.id||'';trigger=document.activeElement as HTMLElement;await nextTick();dialog.value?.showModal();dialog.value?.querySelector<HTMLInputElement>('input')?.focus()}
-function close(){generation++;previewSequence++;previewLoading.value=false;action.value='';password.value='';preview.value=undefined;formError.value='';dialog.value?.close();trigger?.focus();trigger=null}
-function body(){if(!asset.value||!chain.value)throw new Error(t('请选择网络与币种'));if(!/^0x[0-9a-fA-F]{40}$/.test(destination.value))throw new Error(t('请输入有效的收款地址'));const max=tokenAtoms(cap.value,18);if(BigInt(max)<=0n)throw new Error(t('费用上限必须大于零'));return {chain_id:chainID.value,asset_id:assetID.value,destination:destination.value,min_atoms:tokenAtoms(threshold.value,asset.value.decimals),max_gas_atoms:max,...(selected.value.length?{address_ids:[...selected.value]}:{})}}
-async function estimate(){if(busy.value||previewLoading.value||!writable.value)return;const current=++previewSequence,context=generation;password.value='';previewLoading.value=true;formError.value='';try{const v=await api<SweepPreview>('/wallets/'+encodeURIComponent(walletID.value)+'/sweeps/preview','POST',body());if(!disposed&&context===generation&&current===previewSequence){preview.value=v;now.value=Date.now()/1000}}catch(reason){if(!disposed&&context===generation&&!isCancelled(reason))formError.value=t((reason as Error).message)}finally{if(current===previewSequence)previewLoading.value=false}}
-async function submit(){if(busy.value)return;const context=generation,kind=action.value;busy.value=true;formError.value='';let payload:Record<string,unknown>,path:string;try{if((action.value==='retry'||action.value==='cancel')&&retryJob.value){path='/sweeps/'+encodeURIComponent(retryJob.value.id)+'/'+action.value;payload={};}else{if(!preview.value?.can_submit)throw new Error(t(preview.value?.unavailable_reason||'暂不满足提取条件'));if(preview.value.expires_at<=Date.now()/1000)throw new Error(t('预估已过期，请更新费用后确认'));path='/wallets/'+encodeURIComponent(walletID.value)+'/sweeps';payload={quote:preview.value.quote};}const key=path+JSON.stringify(payload);if(pending?.key!==key)pending={key,id:operationID()};const job=await api<SweepJob>(path,'POST',{...payload,password:password.value,operation_id:pending.id});if(disposed)return;if(walletID.value===job.wallet_id)jobs.value=[job,...jobs.value.filter(j=>j.id!==job.id)];pending=undefined;if(context===generation)close();notice.value=kind==='cancel'?t('任务已安全结束，历史交易与实际费用记录会保留。'):t('提取任务已提交，链上最终确认后才会显示完成。');await loadJobs();}catch(reason){if(!disposed&&context===generation&&!isCancelled(reason)){formError.value=t((reason as Error).message);if(reason instanceof ApiError&&reason.status<500)pending=undefined;void loadJobs()}}finally{password.value='';busy.value=false}}
-async function copy(value:string){try{await navigator.clipboard.writeText(value);notice.value=t('已复制')}catch{error.value=t('复制失败，请手动选择内容')}}
+const balanceRequests=latestRequest(),jobRequests=latestRequest(),settingsRequests=latestRequest(),previewRequests=latestRequest();
+let disposed=false,suspended=false,generation=0,trigger:HTMLElement|null=null,pending:{key:string;id:string}|undefined;
+let balanceFlight:Promise<void>|undefined,jobFlight:Promise<void>|undefined,lastRefresh=0;
+const readable=()=>!disposed&&!suspended&&props.active&&!document.hidden;
+function cancelReads(){balanceRequests.cancel();jobRequests.cancel();settingsRequests.cancel();balanceFlight=undefined;jobFlight=undefined;loading.value=false;jobsLoading.value=false}
+async function loadSettings(){
+  if(!readable())return;
+  const request=settingsRequests.start();lastRefresh=Date.now();
+  try{
+    const value=await api<CryptoSettings>('/settings','GET',undefined,{signal:request.signal});
+    if(!readable()||!settingsRequests.isCurrent(request))return;
+    settings.value=value;settingsError.value='';
+    await nextTick();await refresh();
+  }catch(reason){if(readable()&&settingsRequests.isCurrent(request)&&!isCancelled(reason))settingsError.value=t((reason as Error).message)}
+}
+function load(append=false):Promise<void>{
+  if(!readable()||!walletID.value||!chain.value||(append&&snapshot.value?.next_after==null))return Promise.resolve();
+  if(balanceFlight)return balanceFlight;
+  const request=balanceRequests.start(),wid=walletID.value,cid=chainID.value;
+  // Refresh every already loaded page atomically, so pagination and address selections survive polling.
+  const lastIndex=balances.value.at(-1)?.index??-1;
+  loading.value=true;lastRefresh=Date.now();
+  const flight=(async()=>{
+    try{
+      let after=append?snapshot.value?.next_after:undefined;
+      if(append&&after==null)return;
+      let rows:CryptoBalance[]=append?[...balances.value]:[],page:CryptoBalancePage;
+      do{
+        const query=new URLSearchParams({chain_id:cid});if(after!=null)query.set('after',String(after));
+        page=await api<CryptoBalancePage>('/wallets/'+encodeURIComponent(wid)+'/balances?'+query,'GET',undefined,{signal:request.signal});
+        if(!readable()||!balanceRequests.isCurrent(request))return;
+        rows.push(...page.items);
+        if(append||page.next_after==null||page.next_after>=lastIndex)break;
+        if(after!=null&&page.next_after<=after)throw new Error(t('服务器响应无效，请稍后重试'));
+        after=page.next_after;
+      }while(true);
+      snapshot.value=page;balances.value=[...new Map(rows.map(row=>[row.address_id,row])).values()];
+      selected.value=selected.value.filter(id=>balances.value.some(row=>row.address_id===id));
+      loaded.value=true;balanceError.value='';
+    }catch(reason){if(readable()&&balanceRequests.isCurrent(request)&&!isCancelled(reason))balanceError.value=t('余额查询未完成，保留上次成功的快照。')+' '+t((reason as Error).message)}
+    finally{if(balanceRequests.isCurrent(request)){loading.value=false;balanceFlight=undefined}}
+  })();
+  balanceFlight=flight;return flight;
+}
+function loadJobs():Promise<void>{
+  if(!readable()||!walletID.value)return Promise.resolve();
+  if(jobFlight)return jobFlight;
+  const request=jobRequests.start(),wid=walletID.value;jobsLoading.value=true;
+  const flight=(async()=>{
+    try{const value=await api<{items:SweepJob[]}>('/sweeps?wallet_id='+encodeURIComponent(wid),'GET',undefined,{signal:request.signal});if(!readable()||!jobRequests.isCurrent(request))return;jobs.value=value.items;jobsError.value=''}
+    catch(reason){if(readable()&&jobRequests.isCurrent(request)&&!isCancelled(reason))jobsError.value=t((reason as Error).message)}
+    finally{if(jobRequests.isCurrent(request)){jobsLoading.value=false;jobFlight=undefined}}
+  })();
+  jobFlight=flight;return flight;
+}
+async function refresh(){await load();await loadJobs()}
+function body(){return treasurySweepInput(chain.value,asset.value,destination.value,threshold.value,selected.value)}
+async function open(kind:'sweep'|'retry'|'cancel',job?:SweepJob){
+  if(busy.value||!wallet.value||wallet.value.mode!=='hot')return;
+  withdrawalError.value='';
+  if(kind==='sweep')try{body()}catch(reason){withdrawalError.value=t((reason as Error).message);return}
+  generation++;previewRequests.cancel();action.value=kind;retryJob.value=job;formError.value='';password.value='';preview.value=undefined;pending=undefined;
+  trigger=document.activeElement as HTMLElement;await nextTick();dialog.value?.showModal();
+  if(kind==='sweep'){await estimate();await nextTick();dialog.value?.querySelector<HTMLElement>('.treasury-preview h4')?.focus({preventScroll:true})}
+  else dialog.value?.querySelector<HTMLInputElement>('input')?.focus();
+}
+function close(){generation++;previewRequests.cancel();previewLoading.value=false;action.value='';password.value='';preview.value=undefined;formError.value='';dialog.value?.close();trigger?.focus();trigger=null}
+async function estimate(){
+  if(busy.value||previewLoading.value||!writable.value||action.value!=='sweep')return;
+  const request=previewRequests.start(),context=generation,wid=walletID.value;
+  password.value='';preview.value=undefined;previewLoading.value=true;formError.value='';pending=undefined;
+  try{
+    const input=body(),value=await api<SweepPreview>('/wallets/'+encodeURIComponent(wid)+'/sweeps/preview','POST',input,{signal:request.signal});
+    if(!disposed&&context===generation&&previewRequests.isCurrent(request)){
+      if(!treasuryPreviewMatches(value,wid,input))throw new Error(t('提取预估与当前选择不一致，请重新预估'));
+      preview.value=value;now.value=Date.now()/1000;
+    }
+  }catch(reason){if(!disposed&&context===generation&&previewRequests.isCurrent(request)&&!isCancelled(reason))formError.value=t((reason as Error).message)}
+  finally{if(previewRequests.isCurrent(request))previewLoading.value=false}
+}
+async function submit(){
+  if(busy.value||!action.value||!password.value)return;
+  const context=generation,kind=action.value;busy.value=true;formError.value='';
+  let payload:Record<string,unknown>,path:string;
+  try{
+    if((action.value==='retry'||action.value==='cancel')&&retryJob.value){path='/sweeps/'+encodeURIComponent(retryJob.value.id)+'/'+action.value;payload={}}
+    else{
+      if(!writable.value||!preview.value?.can_submit)throw new Error(t(preview.value?.unavailable_reason||'暂不满足提取条件'));
+      if(preview.value.expires_at<=Date.now()/1000)throw new Error(t('预估已过期，请更新费用后确认'));
+      if(!treasuryPreviewMatches(preview.value,walletID.value,body()))throw new Error(t('提取预估与当前选择不一致，请重新预估'));
+      path='/wallets/'+encodeURIComponent(walletID.value)+'/sweeps';payload={quote:preview.value.quote};
+    }
+    const key=path+JSON.stringify(payload);if(pending?.key!==key)pending={key,id:operationID()};
+    const job=await api<SweepJob>(path,'POST',{...payload,password:password.value,operation_id:pending.id});
+    if(disposed)return;
+    if(walletID.value===job.wallet_id)jobs.value=[job,...jobs.value.filter(j=>j.id!==job.id)];
+    pending=undefined;if(context===generation)close();
+    notice.value=kind==='cancel'?t('任务已安全结束，历史交易与实际费用记录会保留。'):t('提取任务已提交，链上最终确认后才会显示完成。');
+    await loadJobs();
+  }catch(reason){if(!disposed&&context===generation&&!isCancelled(reason)){formError.value=t((reason as Error).message);if(reason instanceof ApiError&&reason.status<500)pending=undefined;void loadJobs()}}
+  finally{password.value='';busy.value=false}
+}
+async function copy(value:string){try{await navigator.clipboard.writeText(value);copyError.value='';notice.value=t('已复制')}catch{copyError.value=t('复制失败，请手动选择内容')}}
 function assetFor(job:SweepJob){return settings.value?.assets.find(a=>a.id===job.asset_id)}
 function chainName(id:string|number){return settings.value?.chains.find(c=>c.id===id||c.chain_id===id)?.name||id}
 watch(moduleEnabled,value=>{if(!value&&action.value!=='cancel')close()});
-watch(password,value=>{if(value&&previewLoading.value){previewSequence++;previewLoading.value=false}});
-watch([assetID,destination,threshold,cap],()=>{previewSequence++;preview.value=undefined;previewLoading.value=false;pending=undefined});
-watch([walletID,chainID],()=>{sequence++;jobSequence++;snapshot.value=undefined;balances.value=[];selected.value=[];loaded.value=false;jobs.value=[];close();if(walletID.value&&chainID.value){void load();void loadJobs()}});
+watch([assetID,destination,threshold,()=>selected.value.join('|')],()=>{previewRequests.cancel();preview.value=undefined;previewLoading.value=false;pending=undefined;password.value='';withdrawalError.value=''});
+watch(chains,values=>{chainID.value=treasuryChainID(chainID.value,values)},{immediate:true});
+watch(assets,values=>{if(!values.some(value=>value.id===assetID.value))assetID.value=values[0]?.id||''},{immediate:true});
+watch(walletID,()=>{jobRequests.cancel();jobFlight=undefined;jobsLoading.value=false;jobs.value=[];jobsError.value='';destination.value='';threshold.value='0'});
+watch([walletID,chainID],()=>{balanceRequests.cancel();balanceFlight=undefined;loading.value=false;snapshot.value=undefined;balances.value=[];selected.value=[];loaded.value=false;balanceError.value='';notice.value='';close();void refresh()});
 watch(()=>props.wallets,values=>{if(!values.some(w=>w.id===walletID.value))walletID.value=values[0]?.id||''},{immediate:true});
-watch(()=>props.active,active=>{close();if(active){void loadSettings();void loadJobs()}else{sequence++;jobSequence++}});
-function hideSecrets(){if(document.hidden)password.value=''}
-const clear=()=>{close();snapshot.value=undefined;balances.value=[];jobs.value=[];sequence++;jobSequence++};const unsub=onSessionExpired(clear),unsubAccess=onAccessDenied(clear);
-const poll=serialPoll(async()=>{now.value=Date.now()/1000;if(document.hidden||!props.active||busy.value)return;if(!jobsLoading.value&&activeJobs.value)await loadJobs();if(action.value==='sweep'&&preview.value&&!password.value&&!previewLoading.value&&now.value-preview.value.checked_at>=30)await estimate()},()=>5000);
-onMounted(()=>{void loadSettings();poll.start();document.addEventListener('visibilitychange',hideSecrets)});onUnmounted(()=>{disposed=true;sequence++;jobSequence++;close();poll.stop();document.removeEventListener('visibilitychange',hideSecrets);unsub();unsubAccess()});
+watch(()=>props.active,active=>{close();if(active){void loadSettings()}else cancelReads()});
+watch(autoRefresh,enabled=>{if(enabled)void refresh()});
+function visibilityChanged(){if(document.hidden){password.value='';cancelReads();previewRequests.cancel();previewLoading.value=false}else if(props.active){if(!settings.value)void loadSettings();else if(autoRefresh.value)void refresh()}}
+const clear=()=>{suspended=true;close();cancelReads();snapshot.value=undefined;balances.value=[];jobs.value=[]};
+const unsub=onSessionExpired(clear),unsubAccess=onAccessDenied(clear);
+const poll=serialPoll(async()=>{now.value=Date.now()/1000;if(!readable()||busy.value||!autoRefresh.value||Date.now()-lastRefresh<25000)return;if(!settings.value)await loadSettings();else await refresh()},()=>5000);
+onMounted(()=>{void loadSettings();poll.start();document.addEventListener('visibilitychange',visibilityChanged)});
+onUnmounted(()=>{disposed=true;cancelReads();close();poll.stop();document.removeEventListener('visibilitychange',visibilityChanged);unsub();unsubAccess()});
 </script>
 <template>
-<section class="crypto-treasury"><header class="treasury-heading"><div><h3><WalletCards :size="19"/>{{t('链上余额与提取')}}</h3><p>{{t('按网络核对地址余额，集中补充手续费并跟踪提取进度。')}}</p></div><button type="button" :disabled="loading||jobsLoading" @click="load();loadJobs()"><RefreshCw :size="15" :class="{spin:loading}"/>{{t('刷新余额')}}</button></header><p v-if="error" class="error" role="alert">{{error}}</p><p v-if="notice" class="treasury-note" role="status">{{notice}}</p><div class="treasury-selectors"><label>{{t('钱包')}}<select v-model="walletID" :aria-label="t('钱包')"><option v-for="w in wallets" :key="w.id" :value="w.id">{{w.name}}</option></select></label><label>{{t('网络')}}<select v-model="chainID" :aria-label="t('网络')"><option v-for="c in settings?.chains" :key="c.id" :value="c.id">{{c.name}} · {{c.native_symbol}}</option></select></label></div>
-<p v-if="moduleLoaded&&!moduleEnabled" class="treasury-note">{{t('支付模块已关闭，暂停新提取；已批准任务与历史记录继续保留。')}}</p><template v-if="wallet"><p v-if="wallet.mode==='watch_only'" class="treasury-note">{{t('此钱包仅保存公钥，可查看余额。资产转出请在持有私钥的外部钱包操作。')}}</p><p v-else-if="wallet.recovery_required" class="treasury-note">{{t('请先核对钱包恢复索引，再进行资产提取。')}}</p><p v-else-if="!wallet.backup_confirmed" class="treasury-note">{{t('请先下载并确认钱包备份，再进行资产提取。')}}</p><p v-else-if="snapshot&&!snapshot.operations_supported" class="treasury-note">{{t(snapshot.unavailable_reason||'此网络尚未完成最终性验证，当前仅可查询余额。')}}</p><article v-if="snapshot?.funding_address&&wallet.mode==='hot'" class="gas-funding"><div><h4>{{t('固定 Gas 资金地址')}}</h4><p>{{chain?.name}} · {{t('仅接收本网络原生币')}} {{snapshot.native_symbol}}</p></div><strong class="gas-balance">{{tokenAmount(snapshot.funding_balance_atoms,18)}} <small>{{snapshot.native_symbol}}</small></strong><div class="treasury-copy"><input :value="snapshot.funding_address" readonly :aria-label="t('固定 Gas 资金地址')"/><button type="button" :aria-label="t('复制地址')" @click="copy(snapshot.funding_address)"><Copy :size="16"/></button></div><p class="treasury-note">{{t('此余额用于给收款地址补 Gas 并支付补款手续费；同一地址在其他网络的余额不能在本网络使用。')}}</p></article>
-<div class="treasury-balance-toolbar"><label class="treasury-check"><input v-model="onlyFunded" type="checkbox"/>{{t('只看有余额地址')}}</label><span>{{t('已查询地址')}} {{balances.length}}<template v-if="selected.length"> · {{t('已选择')}} {{selected.length}}</template></span><button v-if="writable" type="button" class="primary" :disabled="loading||busy" @click="open('sweep')"><ArrowUpRight :size="16"/>{{t('提取资产')}}</button></div><p v-if="snapshot" class="treasury-note">{{t('最近查询')}} {{stamp(snapshot.checked_at)}} · {{t('区块')}} #{{snapshot.block_number}}</p><p v-if="loading&&!loaded" role="status">{{t('正在查询链上余额…')}}</p><p v-else-if="loaded&&!visible.length" class="treasury-empty">{{snapshot?.next_after!=null?t('当前已查询地址暂无余额，可继续查询更多地址。'):t('已查询地址暂无余额。')}}</p>
-<div class="treasury-balances"><article v-for="row in visible" :key="row.address_id"><div class="treasury-address"><input v-if="writable" v-model="selected" type="checkbox" :value="row.address_id" :aria-label="t('选择地址')+' '+row.index"/><div><strong>#{{row.index}}</strong><code>{{row.address}}</code><RouterLink v-if="row.order_id" class="treasury-order-link" :to="{path:'/orders',query:{checkout:row.order_id,user_id:row.user_id}}">{{t('关联订单')}} · {{row.order_id}}</RouterLink></div><button type="button" :aria-label="t('复制地址')+' '+row.index" @click="copy(row.address)"><Copy :size="14"/></button></div><dl><div><dt>{{snapshot?.native_symbol}} · Gas</dt><dd>{{tokenAmount(row.native_atoms,18)}}</dd></div><div v-for="token in row.tokens" :key="token.asset_id"><dt>{{token.symbol}}</dt><dd>{{tokenAmount(token.balance_atoms,token.decimals)}}</dd></div></dl></article></div><button v-if="snapshot?.next_after!=null" type="button" :disabled="loading" @click="load(true)">{{loading?t('查询中…'):t('查询更多地址')}}</button>
-</template>
-<section v-if="jobs.length" class="treasury-jobs"><div class="treasury-heading"><h4>{{t('提取任务')}}</h4><button type="button" :disabled="jobsLoading" @click="loadJobs"><RefreshCw :size="15"/>{{t('刷新进度')}}</button></div><article v-for="job in jobs" :key="job.id" class="treasury-job"><header><div><strong>{{chainName(job.chain_id)}} · {{assetFor(job)?.symbol}}</strong><small>{{stamp(job.created)}}</small></div><span :class="{complete:sweepFinished(job)}"><Check v-if="sweepFinished(job)" :size="15"/><LoaderCircle v-else-if="['queued','running'].includes(job.state)" :size="15" class="spin"/>{{sweepJobStateText(job)}}</span></header><p>{{t('完成地址')}} {{job.items.filter(i=>i.state==='complete').length}} / {{job.items.length}}</p><progress :value="job.items.filter(i=>i.state==='complete').length" :max="Math.max(1,job.items.length)" :aria-label="t('提取进度')"/><p v-if="job.error" class="error">{{t(job.error)}}</p><p v-if="['waiting','review_required'].includes(job.state)" class="treasury-note">{{t('任务保留原交易记录。排除余额或网络问题后可重试，已广播交易会继续核对，不会重复转账。')}}</p><details><summary>{{t('交易明细')}}</summary><p class="treasury-note">{{t('收款地址')}}<code>{{job.destination}}</code></p><div v-for="item in job.items" :key="item.id" class="treasury-job-item"><code>{{item.address}}</code><strong>{{tokenAmount(item.amount_atoms,assetFor(job)?.decimals??18)}} {{assetFor(job)?.symbol}}</strong><span>{{sweepStateText(item.state)}}</span><p v-if="item.error" class="error">{{t(item.error)}}</p><p v-if="item.gas_tx_hash">{{t('补 Gas 交易')}}<code>{{item.gas_tx_hash}}</code></p><p v-if="item.sweep_tx_hash">{{t('转出交易')}}<code>{{item.sweep_tx_hash}}</code></p></div></details><button v-if="moduleEnabled&&wallet?.mode==='hot'&&job.state==='waiting'" type="button" :disabled="busy" @click="open('retry',job)">{{t('核对并重试')}}</button><button v-if="wallet?.mode==='hot'&&job.can_cancel" type="button" :disabled="busy" @click="open('cancel',job)">{{t('结束此任务')}}</button></article></section>
-<dialog ref="dialog" class="treasury-dialog" aria-labelledby="treasury-dialog-title" @cancel.prevent="close" @close="action&&close()"><form v-if="action" @submit.prevent="submit"><header><div><span>{{wallet?.name}} · {{action!=='sweep'?chainName(retryJob?.chain_id||''):chain?.name}}</span><h3 id="treasury-dialog-title">{{action==='cancel'?t('结束提取任务'):action==='retry'?t('重试提取任务'):t('提取资产')}}</h3></div><button type="button" :aria-label="t('关闭')" @click="close"><X :size="20"/></button></header><p v-if="formError" class="error" role="alert">{{formError}}</p><fieldset :disabled="busy"><template v-if="action==='sweep'"><div class="treasury-selectors"><label>{{t('提取币种')}}<select v-model="assetID" required><option v-for="a in assets" :key="a.id" :value="a.id">{{a.symbol}}</option></select></label><label>{{t('每地址最低余额')}}<input v-model.trim="threshold" inputmode="decimal" required/></label></div><p class="treasury-note">{{asset?.symbol}} · {{t('代币合约')}}<code>{{asset?.contract}}</code></p><label>{{t('收款地址')}}<input v-model.trim="destination" placeholder="0x…" required spellcheck="false" autocomplete="off"/></label><label>{{t('手续费上限')}} · {{chain?.native_symbol}}<input v-model.trim="cap" inputmode="decimal" required placeholder="0.00"/></label><p class="treasury-note">{{selected.length?t('仅提取已勾选地址中符合最低余额的资产。'):t('提取此钱包全部历史地址中符合最低余额的指定币种，不会兑换其他资产。')}}</p><button type="button" :disabled="previewLoading" @click="estimate"><RefreshCw :size="16" :class="{spin:previewLoading}"/>{{previewLoading?t('正在估算链上费用…'):preview?t('更新费用预估'):t('预览提取')}}</button><article v-if="preview" class="treasury-preview"><h4>{{t('确认提取明细')}}</h4><dl><div><dt>{{t('预计提取')}}</dt><dd>{{tokenAmount(preview.total_atoms,asset?.decimals??18)}} {{asset?.symbol}}</dd></div><div><dt>{{t('代币转账笔数')}}</dt><dd>{{preview.items.length}}</dd></div><div><dt>{{t('补 Gas 差额')}}</dt><dd>{{tokenAmount(preview.total_topup_atoms,18)}} {{preview.native_symbol}}</dd></div><div><dt>{{t('补款交易手续费')}}</dt><dd>{{tokenAmount(previewFundingFees(preview),18)}} {{preview.native_symbol}}</dd></div><div><dt>{{t('代币转账手续费')}}</dt><dd>{{tokenAmount(previewGasFees(preview),18)}} {{preview.native_symbol}}</dd></div><div><dt>{{t('预计总手续费')}}</dt><dd>{{tokenAmount(preview.total_gas_atoms,18)}} {{preview.native_symbol}}</dd></div><div><dt>{{t('Gas 资金余额')}}</dt><dd>{{tokenAmount(preview.funding_balance_atoms,18)}} {{preview.native_symbol}}</dd></div><div><dt>{{t('Gas 资金所需总额')}}</dt><dd>{{tokenAmount(preview.required_funding_atoms,18)}} {{preview.native_symbol}}</dd></div><div v-if="previewFundingShortfall(preview)!=='0'"><dt>{{t('还需补充 Gas 资金')}}</dt><dd>{{tokenAmount(previewFundingShortfall(preview),18)}} {{preview.native_symbol}}</dd></div><div><dt>{{t('批准费用上限')}}</dt><dd>{{tokenAmount(preview.max_gas_atoms,18)}} {{preview.native_symbol}}</dd></div></dl><p v-if="!preview.can_submit" class="error" role="alert">{{t(preview.unavailable_reason)}}</p><p>{{t('费用估算含有限余量，实际手续费以链上收据为准，可能有少量 Gas 留在来源地址。')}}</p><p>{{t('预估有效至')}} {{stamp(preview.expires_at)}}</p><p>{{t('未输入密码时每 30 秒更新预估；输入密码后锁定当前报价，过期需重新更新。')}}</p><p v-if="preview.expires_at<=now" class="error">{{t('预估已过期，请更新费用后确认')}}</p></article></template><template v-else><p class="treasury-note">{{action==='cancel'?t('结束尚未执行的后续操作，已发生的手续费不会退回。存在未确认交易时不能结束任务。'):t('继续核对原任务。已签名或广播的交易不会重新生成，只有链上最终确认后才会完成。')}}</p><code>{{retryJob?.id}}</code></template><label v-if="action!=='sweep'||preview">{{t('管理员当前密码')}}<input v-model="password" type="password" autocomplete="current-password" required/></label><footer><button v-if="action!=='sweep'||preview" type="submit" class="primary" :disabled="busy||previewLoading||(action==='sweep'&&(!preview?.can_submit||preview.expires_at<=now||!preview.items.length))"><LoaderCircle v-if="busy" :size="16" class="spin"/>{{busy?t('提交中…'):action==='cancel'?t('确认结束'):action==='retry'?t('确认重试'):t('确认提取')}}</button><button type="button" @click="close">{{t('关闭')}}</button></footer></fieldset></form></dialog>
+<section class="crypto-treasury">
+  <header class="treasury-heading">
+    <div><h3><WalletCards :size="19"/>{{t('链上余额与提取')}}</h3><p>{{t('按网络核对地址余额，集中补充手续费并跟踪提取进度。')}}</p></div>
+    <button type="button" :disabled="loading||jobsLoading" @click="settings?refresh():loadSettings()"><RefreshCw :size="15" :class="{spin:loading}"/>{{t('刷新余额')}}</button>
+  </header>
+  <p v-if="error" class="error" role="alert">{{error}}</p>
+  <p v-if="notice" class="treasury-note" role="status">{{notice}}</p>
+  <div class="treasury-selectors">
+    <label>{{t('钱包')}}<select v-model="walletID" :aria-label="t('钱包')" :disabled="busy"><option v-for="w in wallets" :key="w.id" :value="w.id">{{w.name}}</option></select></label>
+    <label>{{t('网络')}}<select v-model="chainID" :aria-label="t('网络')" :disabled="busy||!chains.length"><option v-for="c in chains" :key="c.id" :value="c.id">{{c.name}} · {{c.native_symbol}}</option></select></label>
+  </div>
+  <p v-if="moduleLoaded&&!moduleEnabled" class="treasury-note">{{t('支付模块已关闭，暂停新提取；已批准任务与历史记录继续保留。')}}</p>
+  <template v-if="wallet">
+    <p v-if="wallet.mode==='watch_only'" class="treasury-note">{{t('此钱包仅保存公钥，可查看余额。资产转出请在持有私钥的外部钱包操作。')}}</p>
+    <p v-else-if="wallet.recovery_required" class="treasury-note">{{t('请先核对钱包恢复索引，再进行资产提取。')}}</p>
+    <p v-else-if="!wallet.backup_confirmed" class="treasury-note">{{t('请先下载并确认钱包备份，再进行资产提取。')}}</p>
+    <p v-else-if="snapshot&&!snapshot.operations_supported" class="treasury-note">{{t(snapshot.unavailable_reason||'此网络尚未完成最终性验证，当前仅可查询余额。')}}</p>
+    <p v-if="settings&&!chains.length" class="treasury-note">{{t('此钱包没有可用于归集的网络，请核对钱包支持的网络。')}}</p>
+    <article v-if="fundingAddress&&wallet.mode==='hot'" class="gas-funding">
+      <div><h4>{{t('固定 Gas 资金地址')}}</h4><p v-if="chain">{{chain.name}} · {{t('请使用当前网络充值手续费币')}} {{chain.native_symbol}}</p></div>
+      <strong class="gas-balance">{{snapshot?tokenAmount(snapshot.funding_balance_atoms,18):t('待查询')}} <small>{{chain?.native_symbol}}</small></strong>
+      <div class="treasury-copy"><input :value="fundingAddress" readonly :aria-label="t('固定 Gas 资金地址')"/><button type="button" :aria-label="t('复制地址')" @click="copy(fundingAddress)"><Copy :size="16"/></button></div>
+      <p class="treasury-note">{{t('可提前充值少量手续费币。此固定地址不随订单变化，查询暂时失败也可以复制使用。')}} {{t('此余额用于给收款地址补 Gas 并支付补款手续费；同一地址在其他网络的余额不能在本网络使用。')}}</p>
+    </article>
+    <form v-if="wallet.mode==='hot'" class="treasury-withdrawal" @submit.prevent="open('sweep')">
+      <div class="treasury-heading"><div><h4>{{t('归集提现')}}</h4><p>{{t('填写收款地址，系统自动估算费用，核对后用管理员密码确认。')}}</p></div></div>
+      <fieldset :disabled="busy||previewLoading">
+        <label>{{t('提现收款地址')}}<input v-model.trim="destination" placeholder="0x…" required spellcheck="false" autocomplete="off"/></label>
+        <div class="treasury-selectors"><label>{{t('提取币种')}}<select v-model="assetID" required><option v-for="a in assets" :key="a.id" :value="a.id">{{a.symbol}}</option></select></label><label>{{t('每地址最低余额')}}<input v-model.trim="threshold" inputmode="decimal" required/></label></div>
+        <p class="treasury-note">{{selected.length?t('仅提取已勾选地址中符合最低余额的资产。'):t('提取此钱包全部历史地址中符合最低余额的指定币种，不会兑换其他资产。')}}</p>
+        <p v-if="withdrawalError" class="error" role="alert">{{withdrawalError}}</p>
+        <button type="submit" class="primary" :disabled="!writable||!asset||busy||previewLoading"><ArrowUpRight :size="16"/>{{t('一键归集提现')}}</button>
+      </fieldset>
+    </form>
+    <div class="treasury-balance-toolbar">
+      <label class="treasury-check"><input v-model="onlyFunded" type="checkbox"/>{{t('只看有余额地址')}}</label>
+      <label class="treasury-check"><input v-model="autoRefresh" type="checkbox"/>{{t('每 25 秒自动刷新')}}</label>
+      <span>{{t('已查询地址')}} {{balances.length}}<template v-if="selected.length"> · {{t('已选择')}} {{selected.length}}</template></span>
+    </div>
+    <p v-if="snapshot" class="treasury-note">{{t('最近查询')}} {{stamp(snapshot.checked_at)}} · {{t('区块')}} #{{snapshot.block_number}}<span v-if="loading" role="status"> · {{t('查询中…')}}</span></p>
+    <p v-if="loading&&!loaded" role="status">{{t('正在查询链上余额…')}}</p>
+    <p v-else-if="loaded&&!visible.length" class="treasury-empty">{{snapshot?.next_after!=null?t('当前已查询地址暂无余额，可继续查询更多地址。'):t('已查询地址暂无余额。')}}</p>
+    <div class="treasury-balances">
+      <article v-for="row in visible" :key="row.address_id">
+        <div class="treasury-address"><input v-if="writable" v-model="selected" type="checkbox" :value="row.address_id" :disabled="busy||!!action" :aria-label="t('选择地址')+' '+row.index"/><div><strong>#{{row.index}}</strong><code>{{row.address}}</code><RouterLink v-if="row.order_id" class="treasury-order-link" :to="{path:'/orders',query:{checkout:row.order_id,user_id:row.user_id}}">{{t('关联订单')}} · {{row.order_id}}</RouterLink></div><button type="button" :aria-label="t('复制地址')+' '+row.index" @click="copy(row.address)"><Copy :size="14"/></button></div>
+        <dl><div><dt>{{chain?.native_symbol}} · Gas</dt><dd>{{tokenAmount(row.native_atoms,18)}}</dd></div><div v-for="token in row.tokens" :key="token.asset_id"><dt>{{token.symbol}}</dt><dd>{{tokenAmount(token.balance_atoms,token.decimals)}}</dd></div></dl>
+      </article>
+    </div>
+    <button v-if="snapshot?.next_after!=null" type="button" :disabled="loading" @click="load(true)">{{loading?t('查询中…'):t('查询更多地址')}}</button>
+  </template>
+  <section v-if="jobs.length" class="treasury-jobs"><div class="treasury-heading"><h4>{{t('提取任务')}}</h4><button type="button" :disabled="jobsLoading" @click="loadJobs"><RefreshCw :size="15"/>{{t('刷新进度')}}</button></div><article v-for="job in jobs" :key="job.id" class="treasury-job"><header><div><strong>{{chainName(job.chain_id)}} · {{assetFor(job)?.symbol}}</strong><small>{{stamp(job.created)}}</small></div><span :class="{complete:sweepFinished(job)}"><Check v-if="sweepFinished(job)" :size="15"/><LoaderCircle v-else-if="['queued','running'].includes(job.state)" :size="15" class="spin"/>{{sweepJobStateText(job)}}</span></header><p>{{t('完成地址')}} {{job.items.filter(i=>i.state==='complete').length}} / {{job.items.length}}</p><progress :value="job.items.filter(i=>i.state==='complete').length" :max="Math.max(1,job.items.length)" :aria-label="t('提取进度')"/><p v-if="job.error" class="error">{{t(job.error)}}</p><p v-if="['waiting','review_required'].includes(job.state)" class="treasury-note">{{t('任务保留原交易记录。排除余额或网络问题后可重试，已广播交易会继续核对，不会重复转账。')}}</p><details><summary>{{t('交易明细')}}</summary><p class="treasury-note">{{t('收款地址')}}<code>{{job.destination}}</code></p><div v-for="item in job.items" :key="item.id" class="treasury-job-item"><code>{{item.address}}</code><strong>{{tokenAmount(item.amount_atoms,assetFor(job)?.decimals??18)}} {{assetFor(job)?.symbol}}</strong><span>{{sweepStateText(item.state)}}</span><p v-if="item.error" class="error">{{t(item.error)}}</p><p v-if="item.gas_tx_hash">{{t('补 Gas 交易')}}<code>{{item.gas_tx_hash}}</code></p><p v-if="item.sweep_tx_hash">{{t('转出交易')}}<code>{{item.sweep_tx_hash}}</code></p></div></details><button v-if="moduleEnabled&&wallet?.mode==='hot'&&job.state==='waiting'" type="button" :disabled="busy" @click="open('retry',job)">{{t('核对并重试')}}</button><button v-if="wallet?.mode==='hot'&&job.can_cancel" type="button" :disabled="busy" @click="open('cancel',job)">{{t('结束此任务')}}</button></article></section>
+
+  <dialog ref="dialog" class="treasury-dialog" aria-labelledby="treasury-dialog-title" @cancel.prevent="close" @close="action&&close()">
+    <form v-if="action" @submit.prevent="submit">
+      <header><div><span>{{wallet?.name}} · {{action!=='sweep'?chainName(retryJob?.chain_id||''):chain?.name}}</span><h3 id="treasury-dialog-title">{{action==='cancel'?t('结束提取任务'):action==='retry'?t('重试提取任务'):t('确认归集提现')}}</h3></div><button type="button" :aria-label="t('关闭')" @click="close"><X :size="20"/></button></header>
+      <p v-if="formError" class="error" role="alert">{{formError}}</p>
+      <fieldset :disabled="busy">
+        <template v-if="action==='sweep'">
+          <div class="treasury-recipient"><span>{{t('提现收款地址')}}</span><code>{{preview?.destination||destination}}</code><small>{{chain?.name}} · {{asset?.symbol}}</small></div>
+          <p class="treasury-note">{{asset?.symbol}} · {{t('代币合约')}}<code>{{asset?.contract}}</code></p>
+          <p v-if="previewLoading" class="treasury-note" role="status"><LoaderCircle :size="16" class="spin"/> {{t('正在估算链上费用…')}}</p>
+          <button v-else type="button" @click="estimate"><RefreshCw :size="16"/>{{preview?t('更新费用预估'):t('重新估算费用')}}</button>
+          <article v-if="preview" class="treasury-preview">
+            <h4 tabindex="-1">{{t('确认提取明细')}}</h4>
+            <dl>
+              <div><dt>{{t('预计提取')}}</dt><dd>{{tokenAmount(preview.total_atoms,asset?.decimals??18)}} {{asset?.symbol}}</dd></div>
+              <div><dt>{{t('代币转账笔数')}}</dt><dd>{{preview.items.length}}</dd></div>
+              <div><dt>{{t('补 Gas 差额')}}</dt><dd>{{tokenAmount(preview.total_topup_atoms,18)}} {{preview.native_symbol}}</dd></div>
+              <div><dt>{{t('补款交易手续费')}}</dt><dd>{{tokenAmount(previewFundingFees(preview),18)}} {{preview.native_symbol}}</dd></div>
+              <div><dt>{{t('代币转账手续费')}}</dt><dd>{{tokenAmount(previewGasFees(preview),18)}} {{preview.native_symbol}}</dd></div>
+              <div><dt>{{t('预计总手续费')}}</dt><dd>{{tokenAmount(preview.total_gas_atoms,18)}} {{preview.native_symbol}}</dd></div>
+              <div><dt>{{t('Gas 资金余额')}}</dt><dd>{{tokenAmount(preview.funding_balance_atoms,18)}} {{preview.native_symbol}}</dd></div>
+              <div><dt>{{t('Gas 资金所需总额')}}</dt><dd>{{tokenAmount(preview.required_funding_atoms,18)}} {{preview.native_symbol}}</dd></div>
+              <div v-if="previewFundingShortfall(preview)!=='0'"><dt>{{t('还需补充 Gas 资金')}}</dt><dd>{{tokenAmount(previewFundingShortfall(preview),18)}} {{preview.native_symbol}}</dd></div>
+              <div><dt>{{t('批准费用上限')}}</dt><dd>{{tokenAmount(preview.max_gas_atoms,18)}} {{preview.native_symbol}}</dd></div>
+            </dl>
+            <p v-if="!preview.can_submit" class="error" role="alert">{{t(preview.unavailable_reason)}}</p>
+            <p>{{t('费用估算含有限余量，实际手续费以链上收据为准，可能有少量 Gas 留在来源地址。')}}</p>
+            <p>{{t('预估有效至')}} {{stamp(preview.expires_at)}}</p>
+            <p>{{t('确认后按本次预估锁定费用上限；报价过期需重新预估并确认。')}}</p>
+            <p v-if="preview.expires_at<=now" class="error">{{t('预估已过期，请更新费用后确认')}}</p>
+          </article>
+        </template>
+        <template v-else><p class="treasury-note">{{action==='cancel'?t('结束尚未执行的后续操作，已发生的手续费不会退回。存在未确认交易时不能结束任务。'):t('继续核对原任务。已签名或广播的交易不会重新生成，只有链上最终确认后才会完成。')}}</p><code>{{retryJob?.id}}</code></template>
+        <label v-if="action!=='sweep'||preview?.can_submit">{{t('管理员当前密码')}}<input v-model="password" type="password" autocomplete="current-password" required/></label>
+        <footer><button v-if="action!=='sweep'||preview?.can_submit" type="submit" class="primary" :disabled="busy||previewLoading||!password||(action==='sweep'&&(!preview?.can_submit||preview.expires_at<=now||!preview.items.length))"><LoaderCircle v-if="busy" :size="16" class="spin"/>{{busy?t('提交中…'):action==='cancel'?t('确认结束'):action==='retry'?t('确认重试'):t('确认提取')}}</button><button type="button" @click="close">{{t('关闭')}}</button></footer>
+      </fieldset>
+    </form>
+  </dialog>
 </section>
 </template>
 <style scoped>
 .crypto-treasury{display:grid;gap:17px;padding:20px;border:1px solid var(--border);border-radius:13px;min-width:0}.treasury-heading{display:flex;justify-content:space-between;gap:14px;align-items:flex-start}.treasury-heading h3{display:flex;align-items:center;gap:8px;font-size:17px;margin:0}.treasury-heading p,.treasury-note{font-size:12px;line-height:1.8;color:var(--secondary);margin:7px 0 0}.treasury-heading button{flex-shrink:0}.treasury-heading h4,.gas-funding h4{font-size:14px;margin:0}.treasury-selectors{display:grid;grid-template-columns:1fr 1fr;gap:14px}.crypto-treasury label{font-size:12px;display:grid;gap:8px;margin:0;min-width:0}.crypto-treasury select,.crypto-treasury input{min-width:0;width:100%;min-height:44px}.gas-funding{display:grid;grid-template-columns:1fr auto;gap:14px;padding:17px;background:var(--accent-soft);border:1px solid var(--border);border-radius:10px;min-width:0}.gas-funding p{font-size:12px;line-height:1.8;margin:7px 0 0;color:var(--secondary)}.gas-balance{font-size:20px;align-self:center;overflow-wrap:anywhere}.gas-balance small{font-size:12px}.treasury-copy{display:flex;gap:7px;grid-column:1/-1;min-width:0}.treasury-copy input{font:12px monospace}.treasury-copy button{flex-shrink:0}.gas-funding>.treasury-note{grid-column:1/-1;margin:0}.treasury-balance-toolbar{display:flex;align-items:center;gap:15px;flex-wrap:wrap}.treasury-balance-toolbar>span{font-size:12px;color:var(--secondary)}.treasury-balance-toolbar>.primary{margin-left:auto}.crypto-treasury .treasury-check{display:flex;gap:8px;align-items:center}.treasury-check input,.treasury-address>input{width:16px;min-height:16px;flex-shrink:0}.treasury-empty{padding:20px;font-size:12px;color:var(--secondary);border:1px dashed var(--border);border-radius:9px;text-align:center}.treasury-balances{display:grid;gap:11px}.treasury-balances>article{padding:14px;border:1px solid var(--border);border-radius:10px;min-width:0}.treasury-address{display:flex;align-items:center;gap:10px}.treasury-address>div{flex:1;min-width:0;font-size:12px}.treasury-order-link{display:inline-block;margin-top:6px;font-size:11px;overflow-wrap:anywhere}.treasury-address code{display:block;overflow-wrap:anywhere;line-height:1.7;margin-top:4px}.treasury-balances dl{display:flex;gap:15px;flex-wrap:wrap;margin:12px 0 0;padding-top:10px;border-top:1px solid var(--border)}.treasury-balances dl>div{flex:1;min-width:100px}.treasury-balances dt{font-size:11px;color:var(--secondary)}.treasury-balances dd{font-size:13px;overflow-wrap:anywhere;margin:4px 0 0;font-variant-numeric:tabular-nums}.treasury-jobs{display:grid;gap:13px;border-top:1px solid var(--border);padding-top:18px}.treasury-job{padding:16px;border:1px solid var(--border);border-radius:10px;font-size:12px;min-width:0}.treasury-job header{display:flex;gap:12px;align-items:flex-start;justify-content:space-between}.treasury-job header>div{display:grid;gap:6px}.treasury-job header small{color:var(--secondary)}.treasury-job header>span{display:flex;gap:5px;align-items:center}.treasury-job .complete{color:var(--accent-text)}.treasury-job progress{width:100%;height:6px;accent-color:var(--accent)}.treasury-job details{margin:12px 0}.treasury-job summary{cursor:pointer;min-height:28px}.treasury-job code,.treasury-dialog code{display:block;overflow-wrap:anywhere;font-size:11px;line-height:1.8}.treasury-job-item{display:grid;gap:7px;margin-top:14px;padding-top:12px;border-top:1px solid var(--border)}.treasury-job-item p{margin:0;color:var(--secondary)}.treasury-dialog{width:min(650px,calc(100vw - 28px));max-height:calc(100dvh - 32px);overflow:auto;border:1px solid var(--border);border-radius:16px;padding:25px;background:var(--surface);color:var(--text);box-shadow:0 24px 80px #0005}.treasury-dialog::backdrop{background:#05110dde;backdrop-filter:blur(4px)}.treasury-dialog form,.treasury-dialog fieldset{display:grid;gap:18px;min-width:0}.treasury-dialog fieldset{padding:0;margin:0;border:0}.treasury-dialog header{display:flex;justify-content:space-between;gap:14px;align-items:flex-start}.treasury-dialog header span{font-size:12px;color:var(--secondary)}.treasury-dialog h3{font-size:21px;margin:6px 0 0}.treasury-dialog button{min-height:44px}.treasury-preview{background:var(--surface-raised);border:1px solid var(--border);padding:16px;border-radius:11px;min-width:0}.treasury-preview h4{margin:0;font-size:14px}.treasury-preview dl{display:grid;gap:11px;margin:16px 0;font-size:12px}.treasury-preview dl>div{display:flex;justify-content:space-between;gap:20px;align-items:baseline}.treasury-preview dt{color:var(--secondary)}.treasury-preview dd{margin:0;text-align:right;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}.treasury-preview p{font-size:11px;color:var(--secondary);line-height:1.8}.treasury-dialog footer{display:flex;gap:10px}.crypto-treasury .error{font-size:12px;line-height:1.8;overflow-wrap:anywhere}@media(max-width:600px){.crypto-treasury{padding:15px}.treasury-heading{flex-wrap:wrap}.treasury-selectors{grid-template-columns:1fr}.gas-funding{grid-template-columns:1fr}.gas-balance{font-size:18px}.treasury-balance-toolbar>.primary{margin:0;width:100%}.treasury-dialog{padding:18px}.treasury-dialog footer button{flex:1}.treasury-job header{flex-wrap:wrap}.treasury-preview dl>div{gap:12px}.treasury-preview dd{max-width:60%}}
+
+.treasury-withdrawal{display:grid;gap:14px;padding:18px;border:1px solid var(--border);border-radius:12px;background:var(--surface-raised);min-width:0}.treasury-withdrawal fieldset{display:grid;gap:14px;border:0;margin:0;padding:0;min-width:0}.treasury-withdrawal h4{margin:0}.treasury-withdrawal .primary{justify-self:start;min-height:44px}.treasury-recipient{display:grid;gap:9px;padding:14px;border:1px solid var(--border);border-radius:10px;background:var(--accent-soft);min-width:0}.treasury-recipient span,.treasury-recipient small{color:var(--secondary);font-size:12px}.treasury-recipient code{font-size:13px}.treasury-preview .error{color:var(--danger)}@media(max-width:600px){.treasury-withdrawal{padding:14px}.treasury-withdrawal .primary{justify-self:stretch}.treasury-dialog footer{flex-wrap:wrap}}
 </style>

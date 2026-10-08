@@ -22,6 +22,7 @@ type CryptoChain struct {
 	NativeSymbol     string `json:"native_symbol"`
 	Enabled          bool   `json:"enabled"`
 	FinalityVerified bool   `json:"finality_verified"`
+	RPCSource        string `json:"rpc_source"`
 }
 type CryptoAsset struct {
 	ID              string `json:"id"`
@@ -35,6 +36,7 @@ type CryptoAsset struct {
 	RateExpiresAt   int64  `json:"rate_expires_at"`
 	PaymentDecimals int    `json:"payment_decimals"`
 	Enabled         bool   `json:"enabled"`
+	RateSource      string `json:"rate_source"`
 }
 type CryptoPaymentSettings struct {
 	Revision       int64         `json:"revision"`
@@ -43,6 +45,11 @@ type CryptoPaymentSettings struct {
 	InvoiceMinutes int           `json:"invoice_minutes"`
 	Chains         []CryptoChain `json:"chains"`
 	Assets         []CryptoAsset `json:"assets"`
+	RateMode       string        `json:"rate_mode"`
+	RateSource     string        `json:"rate_source"`
+	RateCheckedAt  int64         `json:"rate_checked_at"`
+	RateError      string        `json:"rate_error"`
+	SetupCheckedAt int64         `json:"setup_checked_at"`
 }
 
 func cryptoDefaultSettings() CryptoPaymentSettings {
@@ -81,6 +88,9 @@ func (s *Store) cryptoPaymentSettings() (CryptoPaymentSettings, error) {
 	return v, e
 }
 func cryptoPublicSettings(v CryptoPaymentSettings) CryptoPaymentSettings {
+	if v.RateMode == "" {
+		v.RateMode = "manual"
+	}
 	v.Chains = append([]CryptoChain(nil), v.Chains...)
 	for i := range v.Chains {
 		c := &v.Chains[i]
@@ -89,6 +99,9 @@ func cryptoPublicSettings(v CryptoPaymentSettings) CryptoPaymentSettings {
 		c.RPCURL = ""
 		c.RPCBackupURL = ""
 		c.FinalityVerified = c.ChainID == 1 || c.ChainID == 56
+		if c.RPCSource == "" && c.HasRPC {
+			c.RPCSource = "custom"
+		}
 	}
 	return v
 }
@@ -192,6 +205,24 @@ func (a *App) saveCryptoPaymentSettings(w http.ResponseWriter, r *http.Request, 
 		return commerceFail(409, "支付设置已变化，请刷新")
 	}
 	v := in.CryptoPaymentSettings
+	if v.RateMode == "" {
+		v.RateMode = "manual"
+	}
+	if v.RateMode != "manual" && v.RateMode != "automatic" {
+		return commerceFail(400, "请选择自动或手动汇率")
+	}
+	if v.RateMode == "automatic" && old.RateMode != "automatic" {
+		return commerceFail(400, "请先使用一键启用完成自动收款检查")
+	}
+	v.SetupCheckedAt = old.SetupCheckedAt
+	if v.WalletID != old.WalletID {
+		v.SetupCheckedAt = 0
+	}
+	if v.RateMode == "automatic" {
+		v.RateSource, v.RateCheckedAt, v.RateError = old.RateSource, old.RateCheckedAt, old.RateError
+	} else {
+		v.RateSource, v.RateCheckedAt, v.RateError = "管理员手动汇率", 0, ""
+	}
 	if v.InvoiceMinutes < 15 || v.InvoiceMinutes > 120 || len(v.Chains) != 5 || len(v.Assets) != 9 {
 		return commerceFail(400, "支付设置无效")
 	}
@@ -213,6 +244,10 @@ func (a *App) saveCryptoPaymentSettings(w http.ResponseWriter, r *http.Request, 
 		}
 		if c.RPCBackupURL == "" {
 			c.RPCBackupURL = prev.RPCBackupURL
+		}
+		c.RPCSource = prev.RPCSource
+		if c.RPCURL != prev.RPCURL || c.RPCBackupURL != prev.RPCBackupURL {
+			c.RPCSource, v.SetupCheckedAt = "custom", 0
 		}
 		if c.RPCURL != "" && !cryptoRPCURL(c.RPCURL) || c.RPCBackupURL != "" && !cryptoRPCURL(c.RPCBackupURL) {
 			return commerceFail(400, "RPC 必须使用公网 HTTPS 地址")
@@ -239,17 +274,22 @@ func (a *App) saveCryptoPaymentSettings(w http.ResponseWriter, r *http.Request, 
 		seen[p.ID] = true
 		p.Name, p.Symbol, p.Contract = d.Name, d.Symbol, d.Contract
 		previous, _ := old.asset(p.ID)
+		if v.RateMode == "automatic" {
+			p.CNYPerToken, p.RateUpdatedAt, p.RateExpiresAt, p.RateSource = previous.CNYPerToken, previous.RateUpdatedAt, previous.RateExpiresAt, previous.RateSource
+		} else {
+			p.RateSource = "管理员手动汇率"
+		}
 		if p.CNYPerToken != previous.CNYPerToken || p.RateExpiresAt != previous.RateExpiresAt {
 			p.RateUpdatedAt = now
 		} else {
 			p.RateUpdatedAt = previous.RateUpdatedAt
 		}
-		if p.Enabled {
+		if p.Enabled && v.Enabled {
 			if _, e = cryptoQuote(100, *p); e != nil {
 				return e
 			}
 			if p.RateExpiresAt <= now || p.RateExpiresAt > now+30*86400 {
-				return commerceFail(400, "手动汇率有效期须为未来30天以内")
+				return commerceFail(400, "汇率已过期或有效期超过30天，请先更新报价")
 			}
 		}
 	}
@@ -260,6 +300,11 @@ func (a *App) saveCryptoPaymentSettings(w http.ResponseWriter, r *http.Request, 
 		}
 		if e = cryptoWalletReady(wallet); e != nil {
 			return e
+		}
+		for _, asset := range v.Assets {
+			if asset.Enabled && !cryptoWalletSupports(wallet, asset.ChainID) {
+				return commerceFail(400, "所选钱包未启用该收款网络")
+			}
 		}
 	}
 	v.Revision++
@@ -327,12 +372,13 @@ func (a *App) cryptoOptions(w http.ResponseWriter) error {
 	}
 	s.Enabled = s.Enabled && enabled
 	items := []object{}
+	var wallet CryptoWallet
 	if a.cfg.businessAgent() {
 		s.Enabled = false
 	}
 	if s.Enabled {
-		v, e := cryptoWalletByID(a.store.db, s.WalletID)
-		if e != nil || cryptoWalletReady(v) != nil {
+		wallet, e = cryptoWalletByID(a.store.db, s.WalletID)
+		if e != nil || cryptoWalletReady(wallet) != nil {
 			s.Enabled = false
 		}
 	}
@@ -345,11 +391,14 @@ func (a *App) cryptoOptions(w http.ResponseWriter) error {
 			continue
 		}
 		reason := cryptoChainReason(c)
+		if s.Enabled && !cryptoWalletSupports(wallet, c.ChainID) {
+			reason = "所选钱包未启用该收款网络"
+		}
 		if err := a.store.cryptoChainAvailable(a.store.db, c.ChainID); err != nil {
 			reason = errCryptoFinality.Error()
 		}
 		if v.RateExpiresAt <= time.Now().Unix() {
-			reason = "手动汇率已过期"
+			reason = "汇率已过期，正在等待有效报价"
 		}
 		items = append(items, object{"id": v.ID, "chain_id": v.ChainID, "chain_name": c.Name, "name": v.Name, "symbol": v.Symbol, "contract": v.Contract, "decimals": v.Decimals, "cny_per_token": v.CNYPerToken, "rate_updated_at": v.RateUpdatedAt, "rate_expires_at": v.RateExpiresAt, "payment_decimals": v.PaymentDecimals, "available": s.Enabled && reason == "", "unavailable_reason": reason})
 	}
@@ -362,7 +411,7 @@ func (a *App) cryptoPaymentAPIRoute(w http.ResponseWriter, r *http.Request, acto
 		return false
 	}
 	path := strings.TrimPrefix(r.URL.Path, prefix)
-	if path != "options" && path != "admin/settings" && path != "invoices" && !strings.HasPrefix(path, "invoices/") && path != "admin/invoices" {
+	if path != "options" && path != "admin/settings" && path != "admin/setup" && path != "admin/setup/status" && path != "invoices" && !strings.HasPrefix(path, "invoices/") && path != "admin/invoices" {
 		return false
 	}
 	w.Header().Set("Cache-Control", "no-store")
@@ -376,6 +425,10 @@ func (a *App) cryptoPaymentAPIRoute(w http.ResponseWriter, r *http.Request, acto
 	}
 	if e == nil {
 		switch {
+		case path == "admin/setup" && r.Method == "POST":
+			e = a.cryptoSetupAPI(w, r, actor)
+		case path == "admin/setup/status" && r.Method == "GET":
+			e = a.cryptoSetupStatus(w)
 		case path == "options" && r.Method == "GET":
 			e = a.cryptoOptions(w)
 		case path == "admin/settings" && r.Method == "GET":

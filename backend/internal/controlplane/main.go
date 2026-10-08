@@ -20,6 +20,9 @@ import (
 )
 
 type App struct {
+	cryptoRateMu           sync.Mutex
+	cryptoRateNextAttempt  time.Time
+	cryptoRateFetch        func(context.Context) (cryptoMarketRates, error)
 	paymentClient          *http.Client
 	clientDownloadMu       sync.Mutex
 	clientDownloads        *clientDownloadRelay

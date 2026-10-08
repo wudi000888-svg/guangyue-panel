@@ -1,6 +1,6 @@
 # 加密货币支付与提取接口契约
 
-适用版本：**0.37.0** · 2026-10-09。以下为本版实际接口；未列出的 OKX 绑定、成员 crypto 充值、链上退款和外部签名器接口均未实现。
+适用版本：**0.38.0** · 2026-10-09。以下为本版实际接口；未列出的 OKX 绑定、成员 crypto 充值、链上退款和外部签名器接口均未实现。
 
 ## 请求域、权限与金额
 
@@ -18,8 +18,8 @@
 | 方法与后缀 | 请求要点 / 返回 |
 | --- | --- |
 | `GET /wallets` | `{items: CryptoWallet[]}`，含模式、启停、备份/恢复状态、revision、`next_index` 等公开元数据 |
-| `POST /wallets/hot` | `name,mnemonic,xpub,path,first_address,engine_version,password,operation_id,risk_ack:true`；官方 Wallet Core 4.8.4 生成，服务器独立核对后加密 |
-| `POST /wallets/xpub` | `name,xpub,path,password,operation_id`；返回只读钱包，不保存外部私钥 |
+| `POST /wallets/hot` | `name,mnemonic,xpub,path,first_address,engine_version,supported_chain_ids,password,operation_id,risk_ack:true`；官方 Wallet Core 4.8.4 生成，服务器独立核对后加密 |
+| `POST /wallets/xpub` | `name,xpub,path,supported_chain_ids,password,operation_id`；返回只读钱包，不保存外部私钥 |
 | `GET /wallets/{id}/addresses?after=N` | `{wallet,items,next_after}`，按索引每页最多 200 条；GET 不分配地址 |
 | `POST /wallets/{id}/addresses` | `password,operation_id,revision,label`；手动分配，返回 `{wallet,address}`；不创建订单 |
 | `POST /wallets/{id}/status` | `password,operation_id,revision,enabled`；停用仅停止新地址分配，不删除历史 |
@@ -28,6 +28,8 @@
 | `POST /wallets/{id}/reveal` | `password`；仅热钱包临时返回助记词，前端限时并在离开时清除 |
 | `POST /wallets/restore` | `password,backup_password,backup:{format,data},operation_id`；新恢复分支暂停并要求核对索引 |
 | `POST /wallets/{id}/recovery` | `password,operation_id,revision,next_index,recovery_ack:true`；索引不得低于已知高水位，核对后仍需启用 |
+
+钱包 DTO 新增 `supported_chain_ids`、`funding_address`、`funding_path`。新界面默认 `[56]`，可选 `[1,56]`；显式空列表、重复链或未知链拒绝。历史迁移/旧备份缺失字段默认 `[1,56]`。热钱包固定 Gas 描述可离线派生，xpub 返回空资金地址。新付款、余额查询及新归集任务校验支持链；既有付款单和已批准任务仍继续核对冻结网络。
 
 备份 `format` 为 `guangyue-crypto-wallet-v1`，使用独立口令加密。新站恢复必须核对备份之后的实际分配记录；同一分支不能交给多个独立部署同时分配。地址接口现在同时可读取手动地址和订单分配地址，invoice 的地址不能再用于其他订单。
 
@@ -38,17 +40,22 @@
 ```text
 {
   revision, enabled, wallet_id, invoice_minutes,
+  rate_mode, rate_source, rate_checked_at, rate_error, setup_checked_at,
   chains: [{id, name, chain_id, has_rpc, has_rpc_backup,
-            native_symbol, enabled, finality_verified}],
+            native_symbol, enabled, finality_verified, rpc_source}],
   assets: [{id, chain_id, name, symbol, contract, decimals,
             enabled, cny_per_token, rate_updated_at,
-            rate_expires_at, payment_decimals}]
+            rate_expires_at, payment_decimals, rate_source}]
 }
 ```
 
 `POST /admin/settings` 提交同结构及 `password,operation_id`，RPC 可写 `rpc_url,rpc_backup_url`，空值保留已存配置，返回不回显已存 URL/密钥。链、合约与资产精度来自固定白名单；不能通过提交新的合约扩展资产。`invoice_minutes` 为 15–120，默认 30。启用资产的手动汇率须有效，截止在未来 30 天内；已有 invoice 保留原始快照。
 
-只有 Ethereum（`ethereum`/1）和 BSC（`bsc`/56）能启用自动收款/提取。Arbitrum（`arbitrum`/42161）、OP（`op`/10）、Base（`base`/8453）可配置查询 RPC，但 L2 自动资金操作有服务器硬限制，不能由 `finality_verified` 手工覆盖。
+`POST /admin/setup` 使用 `{wallet_id,chain_ids:[56],asset_ids:["bsc-usdt","bsc-usdc"],password,operation_id}`。仅 owner、支付开启且钱包启用/备份/恢复完成时可操作。内置 RPC、自动行情与所选 Token 全面预检完成后，按原 revision 原子保存；失败、并发配置修改或 RPC 分歧不覆盖原配置。同操作/同规范参数重放原公共 DTO，不再次探测或启用已被关闭的配置。
+
+`GET /admin/setup/status` 返回公共设置及 `readiness:{ready,checked_at,message}`。它是上次成功预检加当前本地设置/报价状态，不宣称实时网络健康。`rpc_source` 为 `built_in/custom`，`rate_mode` 为 `automatic/manual`。自动行情到期前刷新；双来源中一个暂不可用可使用另一个安全有效来源，脱锚/过大分歧停止新报价，旧 invoice 保留快照。高级 `POST /admin/settings` 可关闭或自定义，不能靠提交 `automatic` 从无预检状态绕过 setup。
+
+只有 Ethereum（`ethereum`/1）和 BSC（`bsc`/56）能启用自动收款/提取。Arbitrum（`arbitrum`/42161）、OP（`op`/10）、Base（`base`/8453）仅 API 可配置查询 RPC（钱包须显式包含该链，当前 UI 无入口），但 L2 自动资金操作有服务器硬限制，不能由 `finality_verified` 手工覆盖。
 
 `GET /options` 返回 `{enabled, assets:[...]}`。只列配置中已启用的资产；每项包含上面的资产公开字段以及 `chain_name,available,unavailable_reason`。可用性受钱包、链、RPC、最终性与汇率有效期约束。读取选项不创建 invoice、不消耗地址。
 
@@ -137,12 +144,12 @@ qr_uri, order_state, receipt_state, scan_error, last_scan, finalized_block
   "asset_id": "ethereum-usdt",
   "destination": "<对应网络的 EVM 收款地址>",
   "min_atoms": "1000000",
-  "max_gas_atoms": "10000000000000000",
+  "max_gas_atoms": "",
   "address_ids": ["<可选：仅查询这些已分配地址>"]
 }
 ```
 
-`min_atoms` 是每个地址的该 Token 最低余额，不是任务总额；`max_gas_atoms` 是本任务手续费上限，使用 18 位原生币原子数量。未提供 `address_ids` 时扫描全部历史地址，但超过 1000 个会明确拒绝并要求缩小选择，不能默默取前 1000 个。
+`min_atoms` 是每个地址的该 Token 最低余额，不是任务总额；`max_gas_atoms` 留空时按有限缓冲估算自动设置本任务手续费上限，并在返回字段和密封 quote 中冻结；非空时为明确有限上限。单位为 18 位原生币原子数量。未提供 `address_ids` 时扫描全部历史地址，但超过 1000 个会明确拒绝并要求缩小选择，不能默默取前 1000 个。
 
 预览返回输入快照及 `checked_at,expires_at,block_number,native_symbol,funding_address,funding_balance_atoms,items,quote,can_submit,unavailable_reason`，金额含义如下：
 
@@ -156,7 +163,7 @@ qr_uri, order_state, receipt_state, scan_error, last_scan, finalized_block
 
 每项 `items` 包含 `address_id,address,path,amount_atoms,gas_limit,gas_price_atoms,gas_fee_atoms,topup_atoms,funding_gas_atoms,funding_gas_limit`。Gas limit 也通过字符串返回。预览不进行链上广播。
 
-资金不足或预算过低时仍返回可读预览，以 `can_submit=false` 和 `unavailable_reason` 禁止确认。允许提交时提供约 120 秒有效的服务端加密 `quote`，绑定管理员、钱包、链、资产、来源、金额、目标和预算；客户端不能改写其中字段。界面未输入密码时每 30 秒更新费用，输入密码后锁定当前报价，过期重新估算。
+资金不足或预算过低时仍返回可读预览，以 `can_submit=false` 和 `unavailable_reason` 禁止确认。允许提交时提供约 120 秒有效的服务端加密 `quote`，绑定管理员、钱包、链、资产、来源、金额、目标和预算；客户端不能改写其中字段。界面点击一键归集后生成预览，确认窗口固定显示目标与费用，不自动更换报价；过期需主动重估并重新输入密码。余额自动刷新不创建提取任务。
 
 | 路径 | 请求 / 返回 |
 | --- | --- |
@@ -177,4 +184,4 @@ qr_uri, order_state, receipt_state, scan_error, last_scan, finalized_block
 
 ## 明确不属于当前 API 的长期设计
 
-OKX 挑战绑定、隔离签名服务、跨站共享地址池、市场实时报价、原生币付款、链上部分退款/原路退款、自动跨链，以及 L2 的自动收款/补 Gas/提取均待独立实现与验收。既有管理员退款批准或提供 tx hash，不能把这些能力变成已实现，也不能借用法币手工确认接口将 crypto 标为已退款。
+OKX 挑战绑定、隔离签名服务、跨站共享地址池、自动兑换、原生币付款、链上部分退款/原路退款、自动跨链，以及 L2 的自动收款/补 Gas/提取均待独立实现与验收。既有管理员退款批准或提供 tx hash，不能把这些能力变成已实现，也不能借用法币手工确认接口将 crypto 标为已退款。
