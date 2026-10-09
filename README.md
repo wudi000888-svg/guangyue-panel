@@ -12,7 +12,7 @@
 
 [月庭 Penpot 设计源](docs/designs/penpot/README.md) · [UI UX 施工方案](docs/designs/penpot-courtyard-system.md)
 
-![version](https://img.shields.io/badge/version-0.38.1-2563eb)
+![version](https://img.shields.io/badge/version-0.39.1-2563eb)
 ![license](https://img.shields.io/badge/panel_license-LGPL--3.0-16a34a)
 ![platform](https://img.shields.io/badge/server-Linux_amd64-475569)
 
