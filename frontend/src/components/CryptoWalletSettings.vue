@@ -7,12 +7,13 @@ import { canAllocate, CRYPTO_WALLET_CHAINS, walletChains, validateWalletChains, 
 import { t } from '../i18n';
 import CryptoPaymentSettings from './CryptoPaymentSettings.vue';
 import CryptoTreasury from './CryptoTreasury.vue';
+import { applyWalletList, shouldResumeWalletList } from '../lib/cryptoWalletList';
 
 type Action = '' | 'hot' | 'xpub' | 'restore' | 'backup' | 'confirm' | 'reveal' | 'status' | 'allocate' | 'recover';
 const props = withDefaults(defineProps<{ active?: boolean }>(), { active: true });
 const api = useApi('/commerce/crypto/admin');
 const wallets = ref<CryptoWallet[]>([]), loading = ref(false), loaded = ref(false), busy = ref(false);
-const error = ref(''), notice = ref(''), formError = ref(''), phase = ref('');
+const error = ref(''), listError = ref(''), notice = ref(''), formError = ref(''), phase = ref('');
 const dialog = ref<HTMLDialogElement | null>(null), action = ref<Action>(''), targetID = ref('');
 const targetSnapshot = ref<CryptoWallet>();
 const target = computed(() => targetSnapshot.value);
@@ -23,7 +24,7 @@ function fundingNetwork(wallet:CryptoWallet){const chains=walletChains(wallet);r
 const selectedID = ref(''), addresses = ref<CryptoAddress[]>([]), addressLoading = ref(false), addressError = ref(''), nextAfter = ref<number | null>(null);
 let disposed = false, listSequence = 0, addressSequence = 0, formGeneration = 0;
 let secretTimer: ReturnType<typeof setTimeout> | undefined, request: AbortController | undefined, trigger: HTMLElement | null = null;
-let reads = new AbortController();
+let reads = new AbortController(), resumeList = false;
 // Only this explicit public metadata is retained across a request retry, never passwords or keys.
 let formOperation: { publicKey: string; id: string; revision: number; enabled: boolean } | undefined;
 let backupSelection = 0;
@@ -32,15 +33,25 @@ const title = computed(() => action.value ? t(titles[action.value]) : '');
 
 function clearSecrets() { password.value = ''; backupPassword.value = ''; backupConfirmation.value = ''; }
 function clearMnemonic() { clearTimeout(secretTimer); mnemonic.value = ''; }
-function hideSecrets() { if (document.hidden) { close(); reads.abort(); reads = new AbortController(); } }
+function pauseReads() {
+  resumeList = resumeList || loading.value || !loaded.value;
+  listSequence++; addressSequence++; loading.value = false; addressLoading.value = false;
+  reads.abort(); reads = new AbortController();
+}
+function hideSecrets() {
+  if (document.hidden) { close(); pauseReads(); }
+  else if (shouldResumeWalletList(document.hidden, props.active, disposed, resumeList)) void load();
+}
 function syncWallet(wallet: CryptoWallet) {
   wallets.value = mergeCryptoWallets(wallets.value, [wallet]);
 }
 async function load() {
   if (!props.active || disposed) return;
+  if (document.hidden) { resumeList = true; return; }
+  resumeList = false;
   const sequence = ++listSequence; loading.value = true;
-  try { const result = await api<{ items: CryptoWallet[] }>('/wallets', 'GET', undefined, { signal: reads.signal }); if (disposed || sequence !== listSequence || !props.active) return; wallets.value = mergeCryptoWallets(wallets.value, result.items); loaded.value = true; }
-  catch (reason) { if (!disposed && sequence === listSequence && !isCancelled(reason)) error.value = t((reason as Error).message); }
+  try { const result = await api<{ items: CryptoWallet[] }>('/wallets', 'GET', undefined, { signal: reads.signal }); if (disposed || sequence !== listSequence || !props.active) return; const state = applyWalletList(result, wallets.value); wallets.value = state.wallets; loaded.value = state.loaded; listError.value = state.listError; }
+  catch (reason) { if (!disposed && sequence === listSequence && props.active && !isCancelled(reason)) listError.value = t((reason as Error).message); }
   finally { if (sequence === listSequence) loading.value = false; }
 }
 async function loadAddresses(wallet: CryptoWallet, append = false) {
@@ -163,9 +174,9 @@ async function copyAddress(value: string) {
   try { await navigator.clipboard.writeText(value); notice.value = t('地址已复制'); }
   catch { error.value = t('复制失败，请手动选择地址'); }
 }
-const clearSession = () => { close(); listSequence++; addressSequence++; reads.abort(); wallets.value = []; addresses.value = []; };
+const clearSession = () => { close(); listSequence++; addressSequence++; reads.abort(); wallets.value = []; addresses.value = []; listError.value = ''; loaded.value = false; resumeList = false; };
 const unsubscribeSession = onSessionExpired(clearSession), unsubscribeAccess = onAccessDenied(clearSession);
-watch(() => props.active, active => { if (!active) { close(); reads.abort(); reads = new AbortController(); } else void load(); });
+watch(() => props.active, active => { if (!active) { close(); pauseReads(); } else void load(); });
 onMounted(() => { void load(); document.addEventListener('visibilitychange', hideSecrets); });
 onUnmounted(() => { disposed = true; listSequence++; addressSequence++; formGeneration++; request?.abort(); reads.abort(); resetForm(); dialog.value?.close(); document.removeEventListener('visibilitychange', hideSecrets); unsubscribeSession(); unsubscribeAccess(); });
 </script>
@@ -175,8 +186,8 @@ onUnmounted(() => { disposed = true; listSequence++; addressSequence++; formGene
     <header class="crypto-heading"><div><h3><WalletCards :size="20" />{{ t('加密钱包与地址') }}</h3><p>{{ t('管理热钱包或导入外部 xpub，按需生成独立 EVM 地址。') }}</p></div><span class="crypto-badge">{{ t('链上收款与资产管理') }}</span></header>
     <p class="crypto-scope">{{ t('用户选择加密支付后自动获得专属地址；到账确认、套餐开通与资产提取均可在面板内跟踪。') }}</p>
     <div class="crypto-risk"><ShieldAlert :size="20" /><p>{{ t('密钥保存在面板服务器，仅建议存放小额资金并定期转走') }}<span>{{ t('外部 xpub 模式仅保存公钥，资金由原钱包控制。') }}</span></p></div>
-    <p v-if="error" class="error" role="alert">{{ error }}</p><p v-if="notice" class="integration-notice" role="status">{{ notice }}</p>
-    <div class="crypto-toolbar"><button type="button" class="primary" :disabled="busy" @click="open('hot')"><Plus :size="16" />{{ t('新建热钱包') }}</button><button type="button" :disabled="busy" @click="open('xpub')">{{ t('导入外部 xpub') }}</button><button type="button" :disabled="busy" @click="open('restore')"><ArchiveRestore :size="16" />{{ t('从备份恢复') }}</button><button type="button" class="crypto-refresh" :disabled="busy || loading" @click="error = ''; load()"><RefreshCw :size="16" :class="{ spin: loading }" />{{ t('刷新') }}</button></div>
+    <p v-if="listError" class="error" role="alert">{{ listError }}</p><p v-if="error" class="error" role="alert">{{ error }}</p><p v-if="notice" class="integration-notice" role="status">{{ notice }}</p>
+    <div class="crypto-toolbar"><button type="button" class="primary" :disabled="busy" @click="open('hot')"><Plus :size="16" />{{ t('新建热钱包') }}</button><button type="button" :disabled="busy" @click="open('xpub')">{{ t('导入外部 xpub') }}</button><button type="button" :disabled="busy" @click="open('restore')"><ArchiveRestore :size="16" />{{ t('从备份恢复') }}</button><button type="button" class="crypto-refresh" :disabled="busy || loading" @click="error = ''; listError = ''; load()"><RefreshCw :size="16" :class="{ spin: loading }" />{{ t('刷新') }}</button></div>
     <CryptoPaymentSettings :wallets="wallets" :active="active"/><CryptoTreasury v-if="wallets.length" :wallets="wallets" :active="active"/><p v-if="!loaded && loading" role="status">{{ t('正在读取钱包…') }}</p><p v-else-if="loaded && !wallets.length" class="crypto-empty">{{ t('还没有钱包。新建热钱包即可开始，或导入已有钱包的收款公钥。') }}</p>
     <article v-for="wallet in wallets" :key="wallet.id" :id="'crypto-wallet-'+wallet.id" class="crypto-wallet-card">
       <header><div><strong>{{ wallet.name }}</strong><span>{{ wallet.mode === 'hot' ? t('面板热钱包') : t('外部 xpub · 只读') }}</span></div><div class="crypto-badges"><span v-if="wallet.next_index >= MAX_WALLET_NEXT_INDEX" class="crypto-badge warning">{{ t('地址索引已用尽') }}</span><span v-if="wallet.recovery_required" class="crypto-badge warning">{{ t('待核对恢复索引') }}</span><span v-else-if="wallet.mode === 'hot' && !wallet.backup_confirmed" class="crypto-badge warning">{{ t('待备份确认') }}</span><span :class="['crypto-badge', { enabled: wallet.enabled }]">{{ wallet.enabled ? t('已启用') : t('已暂停生成地址') }}</span></div></header>

@@ -44,6 +44,27 @@ class UpdateTests(unittest.TestCase):
             self.assertEqual(run.call_args_list, [unittest.mock.call('nginx', '-t'), unittest.mock.call('systemctl', 'reload', 'nginx')])
             run.reset_mock(); upgrade.upgrade_panel_proxy(); run.assert_not_called()
 
+    def test_upgrade_repairs_v037_v038_wallet_redirect_without_rewriting_custom_settings(self):
+        panel = self.root / 'nginx-panel.conf'
+        collection = render.CRYPTO_WALLET_COLLECTION_LOCATION
+        original = render.render('panel.example.com', 'node.example.com', 'www.cloudflare.com')['nginx-panel.conf'].replace(collection, '') + '\n# retained custom proxy policy\n'
+        panel.write_text(original)
+        with patch.object(upgrade, 'NGINX_PANEL', panel), patch.object(upgrade, 'run') as run:
+            upgrade.upgrade_panel_proxy()
+            self.assertEqual(panel.read_text().count(collection), 1)
+            self.assertEqual(panel.read_text().replace(collection, ''), original)
+            self.assertEqual(run.call_args_list, [unittest.mock.call('nginx', '-t'), unittest.mock.call('systemctl', 'reload', 'nginx')])
+            run.reset_mock(); upgrade.upgrade_panel_proxy(); run.assert_not_called()
+
+    def test_failed_wallet_collection_reload_restores_legacy_proxy(self):
+        panel = self.root / 'nginx-panel.conf'
+        original = render.render('panel.example.com', 'node.example.com', 'www.cloudflare.com')['nginx-panel.conf'].replace(render.CRYPTO_WALLET_COLLECTION_LOCATION, '')
+        panel.write_text(original)
+        with patch.object(upgrade, 'NGINX_PANEL', panel), patch.object(upgrade, 'run', side_effect=[None, OSError('reload failed'), None, None]):
+            with self.assertRaises(OSError): upgrade.upgrade_panel_proxy()
+        self.assertEqual(panel.read_text(), original)
+        self.assertEqual(list(self.root.glob('.guangyue-panel-*')), [])
+
     def test_failed_restore_proxy_reload_restores_original_fragment(self):
         panel = self.root / 'nginx-panel.conf'
         original = render.render('panel.example.com', 'node.example.com', 'www.cloudflare.com')['nginx-panel.conf'].replace(render.WALLET_RESTORE_LOCATION, '')

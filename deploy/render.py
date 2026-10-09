@@ -18,6 +18,20 @@ WALLET_RESTORE_LOCATION = '''    location = /api/commerce/crypto/admin/wallets/r
     }
 '''
 
+# A proxied prefix ending in / makes Nginx redirect its slashless collection
+# automatically. Keep this exact route so listing/creating wallets reaches the
+# API unchanged instead of exposing the internal HTTPS listener in a 301.
+CRYPTO_WALLET_COLLECTION_LOCATION = '''    location = /api/commerce/crypto/admin/wallets {
+        proxy_pass http://127.0.0.1:19100;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_read_timeout 45s;
+    }
+'''
+
 CRYPTO_TREASURY_LOCATION = '''    location /api/commerce/crypto/admin/wallets/ {
         proxy_pass http://127.0.0.1:19100;
         proxy_http_version 1.1;
@@ -36,6 +50,7 @@ def wallet_restore_location(panel):
     if panel.count(anchor) != 1:
         raise ValueError('Managed panel proxy could not be identified for wallet restore')
     for fragment, marker in [(WALLET_RESTORE_LOCATION, '/api/commerce/crypto/admin/wallets/restore'),
+                             (CRYPTO_WALLET_COLLECTION_LOCATION, 'location = /api/commerce/crypto/admin/wallets {'),
                              (CRYPTO_TREASURY_LOCATION, 'location /api/commerce/crypto/admin/wallets/')]:
         if fragment in panel:
             continue

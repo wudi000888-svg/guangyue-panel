@@ -54,6 +54,17 @@ class RenderTests(unittest.TestCase):
         self.assertEqual(render.wallet_restore_location(panel), panel)
 
         treasury = render.CRYPTO_TREASURY_LOCATION
+        collection = render.CRYPTO_WALLET_COLLECTION_LOCATION
+        self.assertEqual(panel.count(collection), 1)
+        self.assertIn('location = /api/commerce/crypto/admin/wallets {', collection)
+        self.assertIn('proxy_pass http://127.0.0.1:19100;', collection)
+        self.assertIn('proxy_read_timeout 45s;', collection)
+        for directive in ['proxy_set_header Host $host;', 'proxy_set_header X-Real-IP $remote_addr;',
+                          'proxy_set_header X-Forwarded-For $remote_addr;',
+                          'proxy_set_header X-Forwarded-Proto https;']:
+            self.assertIn(directive, collection)
+        self.assertNotIn('add_header', collection)
+        self.assertNotIn('client_max_body_size', collection)
         self.assertEqual(panel.count(treasury), 1)
         self.assertIn('proxy_read_timeout 100s;', treasury)
         self.assertNotIn('add_header', treasury)
@@ -64,6 +75,20 @@ class RenderTests(unittest.TestCase):
         self.assertEqual(render.wallet_restore_location(custom).replace(restore, ''), custom)
         with self.assertRaises(ValueError):
             render.wallet_restore_location(panel.replace('client_max_body_size 16m;', 'client_max_body_size 1m;'))
+
+    def test_v037_and_v038_wallet_collection_upgrade_is_additive_and_idempotent(self):
+        panel = render.render('panel.example.com', 'node.example.com', 'www.cloudflare.com')['nginx-panel.conf']
+        collection = render.CRYPTO_WALLET_COLLECTION_LOCATION
+        for version in ['0.37.0', '0.38.0']:
+            with self.subTest(version=version):
+                legacy = panel.replace(collection, '').replace('access_log off;', '# custom ' + version + '\n    access_log off;', 1)
+                upgraded = render.wallet_restore_location(legacy)
+                self.assertEqual(upgraded.count(collection), 1)
+                self.assertEqual(upgraded.replace(collection, ''), legacy)
+                self.assertEqual(render.wallet_restore_location(upgraded), upgraded)
+        # A conflicting custom collection is never silently overwritten.
+        with self.assertRaisesRegex(ValueError, 'differs from the managed'):
+            render.wallet_restore_location(panel.replace(collection, collection.replace('45s;', '70s;')))
 
     def test_same_domain_and_existing_sites_route_explicitly(self):
         result = render.render('panel.example.com', 'panel.example.com', 'www.cloudflare.com', ['shop.example.com', 'shop.example.com'])
