@@ -400,7 +400,11 @@ onBeforeUnmount(() => { removeAccessListener(); closeOverlays(); desktop?.remove
       <div v-if="pendingHY" class="sync-alert" role="status">{{ t("正在关闭") }}{{ pendingHY }}{{ t("个旧 HY2 连接") }}</div>
       <main id="main-content" ref="pageContent" class="content" tabindex="-1" :aria-label="shellTitle">
         <div v-if="selectedSite" class="remote-context" role="status"><Building2 :size="17"/><div><strong>{{selectedSiteName}}</strong><span>{{t('当前操作将应用于此子站')}}</span></div><button @click="switchSite('')"><ArrowLeft :size="15"/>{{t('返回本站')}}</button></div>
-        <RouterView />
+        <RouterView v-slot="{ Component, route }">
+          <Transition name="page" mode="out-in">
+            <component :is="Component" :key="route.path" />
+          </Transition>
+        </RouterView>
         <footer class="page-footer">
           <span>{{site.panel_name}} · {{site.organization}}</span
           ><span>v{{ state.system.version.split("-")[0] }}</span>
