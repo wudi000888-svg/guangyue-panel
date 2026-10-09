@@ -445,5 +445,7 @@ onBeforeUnmount(() => { removeAccessListener(); closeOverlays(); desktop?.remove
       </section>
     </div>
   </Teleport>
-  <PanelDialogs v-if="!accessDenial" />
+  <!-- Editing dialogs are only part of the authenticated shell. Avoid
+       fetching their sizeable chunk on the public login/access screens. -->
+  <PanelDialogs v-if="!accessDenial && state" />
 </template>
