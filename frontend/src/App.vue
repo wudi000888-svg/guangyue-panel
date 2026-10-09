@@ -8,7 +8,7 @@ import { panelKey } from "./composables/panelContext";
 // the sizeable admin action forms from blocking the login and first paint.
 const PanelDialogs = defineAsyncComponent(() => import("./components/PanelDialogs.vue"));
 const PanelUpdater = defineAsyncComponent(() => import("./components/PanelUpdater.vue"));
-import HeaderBalance from "./components/HeaderBalance.vue";
+const HeaderBalance = defineAsyncComponent(() => import("./components/HeaderBalance.vue"));
 import { Bell, ArrowUpRight, ArrowLeft, ChevronRight, Eye, EyeOff, KeyRound, LoaderCircle, LogOut, Menu, Moon, Sun, PanelLeftClose, PanelLeftOpen, Building2, RefreshCw, Search, ShieldCheck, SlidersHorizontal, X, GripVertical, Grid2X2, FolderInput } from "lucide-vue-next";
 import { t } from "./i18n";
 import { groupNavigation, searchNavigation, sidebarNavigation, MEMBER_NAVIGATION_LABELS } from "./lib/navigation";
@@ -16,7 +16,7 @@ import { allowedRoute } from "./lib/access";
 import { router } from "./router";
 import LanguageSwitcher from "./LanguageSwitcher.vue";
 const RegistrationCaptcha = defineAsyncComponent(() => import("./components/RegistrationCaptcha.vue"));
-import AccessBlocked from "./components/AccessBlocked.vue";
+const AccessBlocked = defineAsyncComponent(() => import("./components/AccessBlocked.vue"));
 import { onAccessDenied, isSiteAccessStatus, isCancelled, type AccessDenial, type SiteAccessStatus } from "./lib/api";
 import { readEmailProof, clearEmailProof } from './lib/email';
 
