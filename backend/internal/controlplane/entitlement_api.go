@@ -181,6 +181,7 @@ func (a *App) entitlementAPI(w http.ResponseWriter, r *http.Request, actor Recor
 			return
 		}
 		a.store.audit(actor.Username, "save_plan", p.ID)
+		a.wakeMountSync()
 		jsonResponse(w, 200, p)
 		return
 	}
@@ -240,6 +241,7 @@ func (a *App) deletePlan(w http.ResponseWriter, _ *http.Request, actor Record, i
 	}
 	a.store.audit(actor.Username, "delete_plan", id)
 	a.status = "pending"
+	a.wakeMountSync()
 	jsonResponse(w, 200, object{"ok": true, "deleted": true, "archived": false, "id": id, "destructive": true})
 }
 
@@ -557,6 +559,7 @@ func (a *App) entitlementBatch(w http.ResponseWriter, r *http.Request, actor Rec
 		return
 	}
 	a.status = "pending"
+	a.wakeMountSync()
 	a.store.audit(actor.Username, "entitlement_"+in.Action, in.OperationID)
 	jsonResponse(w, 200, result)
 }

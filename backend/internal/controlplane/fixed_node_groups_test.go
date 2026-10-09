@@ -86,7 +86,7 @@ func TestPlanNodeSelectionIsScopedToGroupAndSite(t *testing.T) {
 	}{
 		{Node{ID: "vless-main"}, true},
 		{Node{ID: "another-vless"}, false},
-		{Node{ID: "public-node", ManagedBy: publicManager}, true},
+		{Node{ID: "public-node", ManagedBy: publicManager}, false},
 		{mountNodePolicy("child-a", MountedNode{Enabled: true}, Node{ID: "vless-main", PolicyVersion: 1}), true},
 		{mountNodePolicy("child-b", MountedNode{Enabled: true}, Node{ID: "vless-main", PolicyVersion: 1}), false},
 		{mountNodePolicy("child-a", MountedNode{Enabled: true}, Node{ID: "another-vless", PolicyVersion: 1}), false},
@@ -98,6 +98,13 @@ func TestPlanNodeSelectionIsScopedToGroupAndSite(t *testing.T) {
 	u.Entitlement.GroupIDs = []string{}
 	if nodeGroupAllowed(u, Node{ID: "vless-main"}) {
 		t.Fatal("individual selection bypassed package groups")
+	}
+	// Selecting only a mounted child node must never widen access to every
+	// local node in the same entitlement.
+	u.Entitlement.GroupIDs = []string{legacyPrivateGroup, defaultSubsiteGroup}
+	u.Entitlement.NodeIDs = []string{defaultSubsiteGroup + "/child-a/vless-main"}
+	if nodeGroupAllowed(u, Node{ID: "vless-main"}) {
+		t.Fatal("mounted-only selection widened local access")
 	}
 }
 
