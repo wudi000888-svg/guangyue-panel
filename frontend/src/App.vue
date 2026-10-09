@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onBeforeUnmount, provide, ref, watch } from "vue";
+import { computed, defineAsyncComponent, nextTick, onMounted, onBeforeUnmount, provide, ref, watch } from "vue";
 import { RouterView, useRoute } from "vue-router";
 import { usePanel } from "./composables/usePanel";
 import { panelKey } from "./composables/panelContext";
-import PanelDialogs from "./components/PanelDialogs.vue";
-import PanelUpdater from "./components/PanelUpdater.vue";
+// Dialogs, updater and registration captcha are only needed after the shell has
+// loaded (or when the user opens registration). Keeping them async prevents
+// the sizeable admin action forms from blocking the login and first paint.
+const PanelDialogs = defineAsyncComponent(() => import("./components/PanelDialogs.vue"));
+const PanelUpdater = defineAsyncComponent(() => import("./components/PanelUpdater.vue"));
 import HeaderBalance from "./components/HeaderBalance.vue";
 import { Bell, ArrowUpRight, ArrowLeft, ChevronRight, Eye, EyeOff, KeyRound, LoaderCircle, LogOut, Menu, Moon, Sun, PanelLeftClose, PanelLeftOpen, Building2, RefreshCw, Search, ShieldCheck, SlidersHorizontal, X, GripVertical, Grid2X2, FolderInput } from "lucide-vue-next";
 import { t } from "./i18n";
@@ -12,7 +15,7 @@ import { groupNavigation, searchNavigation, sidebarNavigation, MEMBER_NAVIGATION
 import { allowedRoute } from "./lib/access";
 import { router } from "./router";
 import LanguageSwitcher from "./LanguageSwitcher.vue";
-import RegistrationCaptcha from "./components/RegistrationCaptcha.vue";
+const RegistrationCaptcha = defineAsyncComponent(() => import("./components/RegistrationCaptcha.vue"));
 import AccessBlocked from "./components/AccessBlocked.vue";
 import { onAccessDenied, isSiteAccessStatus, isCancelled, type AccessDenial, type SiteAccessStatus } from "./lib/api";
 import { readEmailProof, clearEmailProof } from './lib/email';
