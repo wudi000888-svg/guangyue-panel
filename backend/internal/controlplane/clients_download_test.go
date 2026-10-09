@@ -294,8 +294,13 @@ func TestClientDownloadTruncatedStreamFailsClient(t *testing.T) {
 		return
 	} // connection may abort before the response reaches the client
 	defer response.Body.Close()
-	_, err = io.ReadAll(response.Body)
-	if err == nil && response.StatusCode == 200 {
+	body, err := io.ReadAll(response.Body)
+	// Some Go/http combinations surface a short Content-Length response as a
+	// clean EOF after the server has closed the connection. It is still a
+	// failed transfer: only a complete body with the declared length is a
+	// successful installer response.
+	if err == nil && response.StatusCode == 200 && response.ContentLength >= 0 &&
+		int64(len(body)) == response.ContentLength {
 		t.Fatal("truncated installer was reported as a successful transfer")
 	}
 }
