@@ -34,7 +34,10 @@ type GatewayResponse struct {
 // federation credentials, change passwords, or recursively call another site.
 func AllowedGateway(method, path, scope string) bool {
 	u, err := url.ParseRequestURI(path)
-	if err != nil || u.IsAbs() || u.Host != "" || u.RawQuery != "" || u.Fragment != "" || u.Path != strings.ReplaceAll(u.Path, "//", "/") || strings.Contains(u.Path, "..") || strings.Contains(u.Path, "\\") {
+	if err != nil || u.IsAbs() || u.Host != "" || u.Fragment != "" || u.Path != strings.ReplaceAll(u.Path, "//", "/") || strings.Contains(u.Path, "..") || strings.Contains(u.Path, "\\") {
+		return false
+	}
+	if strings.HasPrefix(u.Path, "/api/updates") && u.RawQuery != "" {
 		return false
 	}
 	if method != "GET" && method != "POST" && method != "PUT" && method != "DELETE" {
