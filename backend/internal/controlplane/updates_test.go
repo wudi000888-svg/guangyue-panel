@@ -48,9 +48,19 @@ func TestUpdateAccessAndNarrowRequest(t *testing.T) {
 	if calls != 1 {
 		t.Fatal(calls)
 	}
-	for _, scope := range []string{"read", "manage"} {
-		if httpapi.AllowedGateway("POST", "/api/updates/apply", scope) {
-			t.Fatal("federation allowed root operation")
+	if httpapi.AllowedGateway("GET", "/api/updates", "read") ||
+		httpapi.AllowedGateway("POST", "/api/updates/check", "read") ||
+		httpapi.AllowedGateway("POST", "/api/updates/apply", "read") {
+		t.Fatal("read-only federation gained updater access")
+	}
+	if !httpapi.AllowedGateway("GET", "/api/updates", "manage") ||
+		!httpapi.AllowedGateway("POST", "/api/updates/check", "manage") ||
+		!httpapi.AllowedGateway("POST", "/api/updates/apply", "manage") {
+		t.Fatal("management federation cannot inspect updater")
+	}
+	for _, path := range []string{"/api/updates/../../etc/passwd", "/api/updates/download", "/api/updates/apply?socket=1"} {
+		if httpapi.AllowedGateway("GET", path, "manage") || httpapi.AllowedGateway("POST", path, "manage") {
+			t.Fatal("unexpected updater path allowed", path)
 		}
 	}
 }

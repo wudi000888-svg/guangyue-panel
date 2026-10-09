@@ -150,6 +150,21 @@ func (a *App) remoteSubsite(id string) (FleetPeer, error) {
 	return a.store.fleetPeer(id)
 }
 func (a *App) callSubsite(ctx context.Context, c SiteConnection, in httpapi.GatewayRequest) (httpapi.GatewayResponse, error) {
+	out, err := a.callSubsiteRaw(ctx, c, in)
+	if err != nil {
+		return out, err
+	}
+	if out.Status < 200 || out.Status >= 300 {
+		return out, errors.New("子站拒绝操作，请检查令牌权限或升级子站")
+	}
+	return out, nil
+}
+
+// callSubsiteRaw is used for controller operations whose status is meaningful
+// to the caller (for example the updater's 409 conflict). It still performs
+// the same endpoint and installation identity checks as callSubsite, but
+// leaves the HTTP status and JSON body intact for the API layer to relay.
+func (a *App) callSubsiteRaw(ctx context.Context, c SiteConnection, in httpapi.GatewayRequest) (httpapi.GatewayResponse, error) {
 	if httpapi.ValidateEndpoint(c.URL, a.cfg.Dev) != nil {
 		return httpapi.GatewayResponse{}, errors.New("子站地址无效")
 	}
@@ -161,9 +176,6 @@ func (a *App) callSubsite(ctx context.Context, c SiteConnection, in httpapi.Gate
 	}
 	if c.SiteID != "" && out.SiteID != c.SiteID || c.InstanceID != "" && out.InstanceID != c.InstanceID {
 		return out, errors.New("子站身份发生变化，请重新导入令牌")
-	}
-	if out.Status < 200 || out.Status >= 300 {
-		return out, errors.New("子站拒绝操作，请检查令牌权限或升级子站")
 	}
 	return out, nil
 }
@@ -349,6 +361,50 @@ func (a *App) directSiteAPI(w http.ResponseWriter, r *http.Request, actor Record
 	a.mu.Unlock()
 	if err != nil || v.Connection == nil {
 		return false
+	}
+	// Version inspection and update/rollback are controller-only operations.
+	// They are relayed through the same scoped management token as the other
+	// sub-site controls and never expose the child's updater socket directly.
+	if len(parts) >= 2 && parts[1] == "updates" {
+		if v.Connection.Scope != "manage" {
+			failure(w, 403, "只读令牌不能调度子站版本")
+			return true
+		}
+		remotePath := "/api/updates"
+		if len(parts) > 2 {
+			remotePath += "/" + strings.Join(parts[2:], "/")
+		}
+		if !httpapi.AllowedGateway(r.Method, remotePath, "manage") {
+			failure(w, 403, "子站版本操作不在授权范围内")
+			return true
+		}
+		var body []byte
+		var readErr error
+		if r.Body != nil {
+			body, readErr = io.ReadAll(http.MaxBytesReader(w, r.Body, 64<<10))
+		}
+		if readErr != nil {
+			failure(w, 413, "版本操作请求过大")
+			return true
+		}
+		ctx, cancel := context.WithTimeout(r.Context(), 35*time.Second)
+		defer cancel()
+		out, callErr := a.callSubsiteRaw(ctx, *v.Connection, httpapi.GatewayRequest{Method: r.Method, Path: remotePath, Body: body})
+		if callErr != nil {
+			failure(w, 502, callErr.Error())
+			return true
+		}
+		if out.Status < 200 || out.Status >= 600 || !json.Valid(out.Body) {
+			failure(w, 502, "子站版本服务响应无效")
+			return true
+		}
+		if out.Status >= 200 && out.Status < 300 && r.Method == "POST" && strings.HasSuffix(remotePath, "/apply") {
+			a.store.audit(actor.Username, "subsite-version-operation", v.ID+":"+remotePath)
+		}
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.WriteHeader(out.Status)
+		_, _ = w.Write(out.Body)
+		return true
 	}
 	if len(parts) == 2 && parts[1] == "node-pool" || len(parts) == 3 && parts[1] == "node-pool" && parts[2] == "sync" {
 		a.mountSiteAPI(w, r, actor, v)
