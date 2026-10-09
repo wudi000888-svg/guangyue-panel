@@ -181,23 +181,19 @@ func planNodeKey(n Node) string {
 }
 
 func planSelectsNode(e *domain.Entitlement, n Node, group string) bool {
-	if e == nil {
+	if e == nil || len(e.NodeIDs) == 0 {
 		return true
 	}
-	filtered := false
 	for _, id := range e.NodeIDs {
-		if strings.HasPrefix(id, group+"/") {
-			filtered = true
-			if id == planNodeKey(n) {
-				return true
-			}
-		} else if !strings.Contains(id, "/") && group != defaultSubsiteGroup {
+		if strings.HasPrefix(id, group+"/") && id == planNodeKey(n) {
+			return true
+		}
+		if !strings.Contains(id, "/") && group != defaultSubsiteGroup {
 			// Old single-node choices can only name this site's nodes.
-			filtered = true
 			if n.AccessKey == "" && id == n.ID {
 				return true
 			}
 		}
 	}
-	return !filtered
+	return false
 }

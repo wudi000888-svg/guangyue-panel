@@ -37,6 +37,9 @@ func AllowedGateway(method, path, scope string) bool {
 	if err != nil || u.IsAbs() || u.Host != "" || u.Fragment != "" || u.Path != strings.ReplaceAll(u.Path, "//", "/") || strings.Contains(u.Path, "..") || strings.Contains(u.Path, "\\") {
 		return false
 	}
+	if strings.HasPrefix(u.Path, "/api/updates") && u.RawQuery != "" {
+		return false
+	}
 	if method != "GET" && method != "POST" && method != "PUT" && method != "DELETE" {
 		return false
 	}
@@ -45,6 +48,17 @@ func AllowedGateway(method, path, scope string) bool {
 	}
 	if (method == "GET" && u.Path == "/api/site-status") || ((method == "PUT" || method == "POST") && u.Path == "/api/site-control") {
 		return true
+	}
+	// A Pro controller may inspect and operate the target site's local updater.
+	// Keep this allowlist deliberately narrow: the gateway never accepts an
+	// arbitrary updater path or a request that can fetch remote files.
+	if scope == "manage" {
+		if method == "GET" && u.Path == "/api/updates" {
+			return true
+		}
+		if method == "POST" && (u.Path == "/api/updates/check" || u.Path == "/api/updates/apply") {
+			return true
+		}
 	}
 	if method == "GET" && u.Path == "/api/node-pool" || method == "POST" && u.Path == "/api/node-mounts/sync" {
 		return true

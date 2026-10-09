@@ -22,6 +22,15 @@ func (a *App) mountLock(id string) *sync.Mutex {
 	_, _ = h.Write([]byte(id))
 	return &a.mountSyncMu[h.Sum32()%64]
 }
+func (a *App) wakeMountSync() {
+	if a.mountWake == nil {
+		return
+	}
+	select {
+	case a.mountWake <- struct{}{}:
+	default:
+	}
+}
 func sameMountConnection(a, b BusinessSite) bool {
 	return a.Connection != nil && b.Connection != nil && a.Connection.Token == b.Connection.Token && a.Connection.InstanceID == b.Connection.InstanceID && a.Connection.URL == b.Connection.URL
 }
@@ -136,6 +145,7 @@ func (a *App) mountSiteAPI(w http.ResponseWriter, r *http.Request, actor Record,
 		err = a.store.saveBusinessSite(current)
 		if err == nil {
 			a.status = "pending"
+			a.wakeMountSync()
 			a.store.audit(actor.Username, "mount-policy", v.ID)
 		}
 		a.mu.Unlock()
@@ -457,6 +467,9 @@ func (a *App) mountLoop(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
+		case <-a.mountWake:
+			// A package or mount policy changed; run the queue immediately
+			// instead of waiting for the next 30-second lease tick.
 		case <-ticker.C:
 		}
 	}

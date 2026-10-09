@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -180,6 +181,51 @@ func TestDirectSubsiteLifecycle(t *testing.T) {
 	}
 	if w = req(t, child, childOwner, "GET", "/api/state", nil); w.Code != 200 {
 		t.Fatal("removal destroyed child")
+	}
+}
+
+func TestManagedSubsiteVersionOperations(t *testing.T) {
+	master, child := testApp(t), testApp(t)
+	master.cfg.Edition = "pro"
+	owner := testUser(t, master, "master-owner", "owner")
+	childOwner := testUser(t, child, "child-owner", "owner")
+	var calls []string
+	child.updateClient = &http.Client{Transport: updateRoundTrip(func(r *http.Request) (*http.Response, error) {
+		calls = append(calls, r.Method+" "+r.URL.Path)
+		if r.URL.Host != "updater" {
+			t.Fatalf("unexpected updater host %s", r.URL.Host)
+		}
+		if r.URL.Path == "/apply" && r.Method == "POST" {
+			var in map[string]string
+			if json.NewDecoder(r.Body).Decode(&in) != nil || in["action"] != "rollback" || in["version"] != "0.38.0" || in["expected_version"] != "0.38.1" {
+				t.Fatalf("invalid forwarded apply request: %#v", in)
+			}
+			return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"stage":"queued","action":"rollback","version":"0.38.0","expected_version":"0.38.1"}`)), Header: make(http.Header)}, nil
+		}
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"available":true,"current_version":"0.38.1","installed_version":"0.38.1","releases":[{"version":"0.39.0","name":"v0.39.0","url":"https://example.invalid/release"}],"rollback_versions":[{"version":"0.38.0","compatible":true}]}`)), Header: make(http.Header)}, nil
+	})}
+	server := httptest.NewServer(child.routes())
+	defer server.Close()
+	child.cfg.PublicURL = server.URL
+	token := fleetToken(t, child, childOwner, "manage")
+	w := req(t, master, owner, "POST", "/api/business-sites/import", object{"token": token, "url": server.URL})
+	if w.Code != 201 {
+		t.Fatalf("import child: %d %s", w.Code, w.Body.String())
+	}
+	var site BusinessSite
+	if json.Unmarshal(w.Body.Bytes(), &site) != nil || site.Connection == nil {
+		t.Fatal("invalid imported site")
+	}
+	w = req(t, master, owner, "GET", "/api/business-sites/"+site.ID+"/updates", nil)
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"current_version":"0.38.1"`) {
+		t.Fatalf("version probe: %d %s", w.Code, w.Body.String())
+	}
+	w = req(t, master, owner, "POST", "/api/business-sites/"+site.ID+"/updates/apply", object{"action": "rollback", "version": "0.38.0", "expected_version": "0.38.1", "request_id": "11111111-2222-4333-a444-555555555555"})
+	if w.Code != 200 || !strings.Contains(w.Body.String(), `"stage":"queued"`) {
+		t.Fatalf("version rollback: %d %s", w.Code, w.Body.String())
+	}
+	if len(calls) != 2 || calls[0] != "GET /state" || calls[1] != "POST /apply" {
+		t.Fatalf("unexpected updater calls: %#v", calls)
 	}
 }
 

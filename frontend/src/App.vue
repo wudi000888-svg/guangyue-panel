@@ -1,19 +1,22 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onBeforeUnmount, provide, ref, watch } from "vue";
+import { computed, defineAsyncComponent, nextTick, onMounted, onBeforeUnmount, provide, ref, watch } from "vue";
 import { RouterView, useRoute } from "vue-router";
 import { usePanel } from "./composables/usePanel";
 import { panelKey } from "./composables/panelContext";
-import PanelDialogs from "./components/PanelDialogs.vue";
-import PanelUpdater from "./components/PanelUpdater.vue";
-import HeaderBalance from "./components/HeaderBalance.vue";
+// Dialogs, updater and registration captcha are only needed after the shell has
+// loaded (or when the user opens registration). Keeping them async prevents
+// the sizeable admin action forms from blocking the login and first paint.
+const PanelDialogs = defineAsyncComponent(() => import("./components/PanelDialogs.vue"));
+const PanelUpdater = defineAsyncComponent(() => import("./components/PanelUpdater.vue"));
+const HeaderBalance = defineAsyncComponent(() => import("./components/HeaderBalance.vue"));
 import { Bell, ArrowUpRight, ArrowLeft, ChevronRight, Eye, EyeOff, KeyRound, LoaderCircle, LogOut, Menu, Moon, Sun, PanelLeftClose, PanelLeftOpen, Building2, RefreshCw, Search, ShieldCheck, SlidersHorizontal, X, GripVertical, Grid2X2, FolderInput } from "lucide-vue-next";
 import { t } from "./i18n";
 import { groupNavigation, searchNavigation, sidebarNavigation, MEMBER_NAVIGATION_LABELS } from "./lib/navigation";
 import { allowedRoute } from "./lib/access";
 import { router } from "./router";
 import LanguageSwitcher from "./LanguageSwitcher.vue";
-import RegistrationCaptcha from "./components/RegistrationCaptcha.vue";
-import AccessBlocked from "./components/AccessBlocked.vue";
+const RegistrationCaptcha = defineAsyncComponent(() => import("./components/RegistrationCaptcha.vue"));
+const AccessBlocked = defineAsyncComponent(() => import("./components/AccessBlocked.vue"));
 import { onAccessDenied, isSiteAccessStatus, isCancelled, type AccessDenial, type SiteAccessStatus } from "./lib/api";
 import { readEmailProof, clearEmailProof } from './lib/email';
 
@@ -189,7 +192,7 @@ onBeforeUnmount(() => { removeAccessListener(); closeOverlays(); desktop?.remove
     <div class="login-language"><LanguageSwitcher/></div>
     <section class="login-scene" :aria-label="t('月映珠江')">
       <div class="login-scene-copy"><span class="courtyard-kicker">GUANGYUE · MOONCOURT</span><h2>{{t('一庭月色，连接四方。')}}</h2><p>{{t('从容管理每一条连接。')}}</p></div>
-      <img class="login-art" src="/design/courtyard-night.svg" alt="" width="1000" height="960"/>
+      <img class="login-art" src="/design/courtyard-night.svg" alt="" width="1000" height="960" fetchpriority="high" decoding="async"/>
       <div class="login-scene-foot"><span>GUANGZHOU · 23.13° N</span><span>{{t('月映珠江')}}</span></div>
     </section>
     <div class="login-entry">
@@ -400,7 +403,11 @@ onBeforeUnmount(() => { removeAccessListener(); closeOverlays(); desktop?.remove
       <div v-if="pendingHY" class="sync-alert" role="status">{{ t("正在关闭") }}{{ pendingHY }}{{ t("个旧 HY2 连接") }}</div>
       <main id="main-content" ref="pageContent" class="content" tabindex="-1" :aria-label="shellTitle">
         <div v-if="selectedSite" class="remote-context" role="status"><Building2 :size="17"/><div><strong>{{selectedSiteName}}</strong><span>{{t('当前操作将应用于此子站')}}</span></div><button @click="switchSite('')"><ArrowLeft :size="15"/>{{t('返回本站')}}</button></div>
-        <RouterView />
+        <RouterView v-slot="{ Component, route }">
+          <Transition name="page" mode="out-in">
+            <component :is="Component" :key="route.path" />
+          </Transition>
+        </RouterView>
         <footer class="page-footer">
           <span>{{site.panel_name}} · {{site.organization}}</span
           ><span>v{{ state.system.version.split("-")[0] }}</span>
@@ -438,5 +445,7 @@ onBeforeUnmount(() => { removeAccessListener(); closeOverlays(); desktop?.remove
       </section>
     </div>
   </Teleport>
-  <PanelDialogs v-if="!accessDenial" />
+  <!-- Editing dialogs are only part of the authenticated shell. Avoid
+       fetching their sizeable chunk on the public login/access screens. -->
+  <PanelDialogs v-if="!accessDenial && state" />
 </template>

@@ -279,6 +279,7 @@ func (a *App) businessAPI(w http.ResponseWriter, r *http.Request, actor Record) 
 			return
 		}
 		a.status = "pending"
+		a.wakeMountSync()
 		a.store.audit(actor.Username, "update-business-site", v.ID)
 		jsonResponse(w, 200, v.public())
 		return

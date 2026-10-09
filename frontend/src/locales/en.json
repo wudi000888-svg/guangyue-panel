@@ -3627,5 +3627,20 @@
   "启用请求已处理，当前收款仍需检查，请查看状态说明。": "The activation request was processed. Payment readiness still needs attention; review the status details.",
   "启用请求已处理，但暂时无法确认当前状态。请刷新查看，勿重复提交。": "The activation request was processed, but the current status could not be confirmed. Refresh to check; do not submit another activation.",
   "收款状态待确认": "Payment status unconfirmed",
-  "确认最新状态": "Check current status"
+  "确认最新状态": "Check current status",
+  "回退到": "Roll back to",
+  "更新到": "Update to",
+  "操作会短暂重启子站服务。": "The sub-site will restart briefly during this operation.",
+  "已提交": "submitted",
+  "版本管理": "Version management",
+  "已检查": "Checked",
+  "可检查子站的可用更新": "Check for updates available on this sub-site",
+  "回退": "Rollback",
+  "更新": "Update",
+  "可用更新": "Available updates",
+  "更新子站": "Update sub-site",
+  "可回退版本": "Rollback versions",
+  "选择版本": "Select a version",
+  "回退子站": "Rollback sub-site",
+  "暂无可用更新或可回退版本。子站会保留本地数据，版本切换期间服务会短暂重启。": "No updates or rollback versions are available. Local data is preserved and the sub-site restarts briefly during a version change."
 }
