@@ -192,7 +192,7 @@ onBeforeUnmount(() => { removeAccessListener(); closeOverlays(); desktop?.remove
     <div class="login-language"><LanguageSwitcher/></div>
     <section class="login-scene" :aria-label="t('月映珠江')">
       <div class="login-scene-copy"><span class="courtyard-kicker">GUANGYUE · MOONCOURT</span><h2>{{t('一庭月色，连接四方。')}}</h2><p>{{t('从容管理每一条连接。')}}</p></div>
-      <img class="login-art" src="/design/courtyard-night.svg" alt="" width="1000" height="960"/>
+      <img class="login-art" src="/design/courtyard-night.svg" alt="" width="1000" height="960" fetchpriority="high" decoding="async"/>
       <div class="login-scene-foot"><span>GUANGZHOU · 23.13° N</span><span>{{t('月映珠江')}}</span></div>
     </section>
     <div class="login-entry">
