@@ -16,6 +16,7 @@ sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import install
 import infrastructure
+from nginx_proxy_integration import verify_wallet_proxy
 
 
 def verify_postgres_schema_recovery(config, directory):
@@ -270,6 +271,7 @@ try:
     assert install.STATE.stat().st_mode & 0o777 == 0o700
     assert Path('/run/guangyue-reality').stat().st_mode & 0o7777 == 0o2750
     run('curl', '-fsS', '--noproxy', '*', '--cacert', str(cert), '--resolve', 'panel.example.com:443:127.0.0.1', 'https://panel.example.com/api/health')
+    verify_wallet_proxy(cert)
     initial = json.loads((install.STATE / 'initial-owner.json').read_text())
     _, cookie = api('/api/login', initial)
     state, _ = api('/api/subscription', cookie=cookie)
@@ -325,6 +327,7 @@ try:
 
     run(sys.executable, str(bundle / 'deploy/upgrade.py'), '--bundle', str(bundle), '--apply')
     install.health()
+    verify_wallet_proxy(cert)
     print('PASS offline backup and successful upgrade')
 
     # A checksum-consistent release whose executable fails must trigger rollback.

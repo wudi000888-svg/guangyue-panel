@@ -464,8 +464,15 @@ func (d *clientDownloadRelay) serve(w http.ResponseWriter, r *http.Request, raw,
 		return
 	}
 	d.mu.Lock()
-	complete, expected, filePath, etag, created := entry.done, entry.expected, entry.file, entry.etag, entry.created
+	complete, expected, filePath, etag, created, entryErr := entry.done, entry.expected, entry.file, entry.etag, entry.created, entry.err
 	d.mu.Unlock()
+	// The fetch may fail after the initial ready signal but before this snapshot.
+	// Never pass a failed completed file to ServeContent: doing so can emit a
+	// shorter 200 response and hide the upstream truncation from the client.
+	if entryErr != nil {
+		clientDownloadFailure(w, entryErr)
+		return
+	}
 	file, err := os.Open(filePath)
 	if err != nil {
 		w.Header().Del("Content-Disposition")
