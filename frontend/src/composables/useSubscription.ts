@@ -1,4 +1,4 @@
-import { computed, onScopeDispose, ref, watch, type Ref, type ComputedRef } from "vue";
+import { computed, onMounted, onScopeDispose, ref, watch, type Ref, type ComputedRef } from "vue";
 import QRCode from "qrcode";
 import { useApi, downloadBlob, getRemoteSite } from "../lib/api";
 import { download } from "../lib/download";
@@ -25,6 +25,46 @@ const subURL = computed(() =>
     : "",
 );
 let subscriptionRequest: AbortController | null = null, subscriptionSequence = 0;
+let subscriptionPollTimer: ReturnType<typeof setTimeout> | undefined;
+const subscriptionPollInterval = 8000;
+const handleVisibility = () => scheduleSubscriptionPoll(0);
+
+function clearSubscriptionPoll() {
+  if (subscriptionPollTimer !== undefined) {
+    clearTimeout(subscriptionPollTimer);
+    subscriptionPollTimer = undefined;
+  }
+}
+
+function scheduleSubscriptionPoll(delay = subscriptionPollInterval) {
+  clearSubscriptionPoll();
+  if (!["subscription", "public-subscription"].includes(page.value)) return;
+  subscriptionPollTimer = setTimeout(() => { void pollSubscription(); }, delay);
+}
+
+async function pollSubscription() {
+  subscriptionPollTimer = undefined;
+  if (!["subscription", "public-subscription"].includes(page.value)) return;
+  if (document.hidden || subLoading.value) {
+    scheduleSubscriptionPoll();
+    return;
+  }
+  try {
+    // Keep the current response visible while a background refresh is in
+    // flight. A transient gateway failure must not make an active
+    // subscription appear empty to the member.
+    await loadSub(false, true);
+  } finally {
+    scheduleSubscriptionPoll();
+  }
+}
+
+function mergeLoadedUser(user: User | undefined) {
+  if (!user || !state.value) return;
+  if (state.value.me.id === user.id) state.value.me = user;
+  const index = state.value.users.findIndex(item => item.id === user.id);
+  if (index >= 0) state.value.users[index] = user;
+}
 function clearSubscription() {
   subscriptionSequence++;
   subscriptionRequest?.abort();
@@ -33,7 +73,7 @@ function clearSubscription() {
   subLoading.value = false;
   subError.value = "";
 }
-async function loadSub(clear = false) {
+async function loadSub(clear = false, preserveCurrent = false) {
   if (!state.value || !["subscription", "public-subscription"].includes(page.value)) {
     clearSubscription();
     return;
@@ -54,10 +94,11 @@ async function loadSub(clear = false) {
     if (page.value !== requestPage || (owner.value ? subUser.value || state.value?.me.id : state.value?.me.id) !== requestUser || subProtocol.value !== requestProtocol || subSource.value!==requestPool) return;
     if (loaded.user?.id !== requestUser || loaded.pool !== requestPool || !Array.isArray(loaded.nodes)) throw new Error(t("订阅节点明细暂不可用，请刷新重试。"));
     sub.value = loaded as Sub;
+    mergeLoadedUser(loaded.user);
   } catch (e) {
     if (!controller.signal.aborted && sequence === subscriptionSequence) {
       subError.value = (e as Error).message;
-      sub.value = null;
+      if (!preserveCurrent) sub.value = null;
     }
   } finally {
     if (sequence === subscriptionSequence) {
@@ -86,7 +127,11 @@ watch([() => {
 }, () => JSON.stringify(state.value?.nodes.map(n => [n.id, n.checked_at, n.quality?.at]))], ([authorization], [previousAuthorization]) => {
   if (page.value === 'subscription' || page.value === 'public-subscription') loadSub(authorization !== previousAuthorization);
 });
-watch(page,()=>{subSource.value=publicSubPage.value?"public":"mixed";},{flush:"sync"});
+watch(page,()=>{
+  subSource.value=publicSubPage.value?"public":"mixed";
+  if (["subscription", "public-subscription"].includes(page.value)) scheduleSubscriptionPoll(0);
+  else clearSubscriptionPoll();
+},{flush:"sync"});
 watch([page, subUser, subProtocol,subSource], () => { loadSub(true); }, { flush: 'sync' });
 let subscriptionQRSequence = 0;
 watch(subURL, async (v) => {
@@ -106,6 +151,15 @@ watch(subURL, async (v) => {
   }
 });
 
-onScopeDispose(()=>{clearSubscription();subscriptionQRSequence++;});
+onMounted(() => {
+  document.addEventListener("visibilitychange", handleVisibility);
+  scheduleSubscriptionPoll();
+});
+onScopeDispose(()=>{
+  clearSubscriptionPoll();
+  document.removeEventListener("visibilitychange", handleVisibility);
+  clearSubscription();
+  subscriptionQRSequence++;
+});
 return {sub,subUser,format,subProtocol,subSource,qr,qrError,subLoading,subError,subURL,clearSubscription,loadSub,showSub,downloadSub};
 }
