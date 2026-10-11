@@ -205,6 +205,14 @@ func (a *App) deletePlan(w http.ResponseWriter, _ *http.Request, actor Record, i
 		return
 	}
 	p, err := a.store.plan(id)
+	if err != nil && (id == defaultAdminPlan || id == defaultDemoPlan) {
+		// Lightweight stores used for imports and tests may defer installation
+		// seeds. Materialize the protected catalog before applying a destructive
+		// delete; the demo deletion marker still prevents it from being reseeded.
+		if seedErr := a.store.initDefaultPlans(); seedErr == nil {
+			p, err = a.store.plan(id)
+		}
+	}
 	if err != nil {
 		failure(w, 404, "套餐不存在")
 		return

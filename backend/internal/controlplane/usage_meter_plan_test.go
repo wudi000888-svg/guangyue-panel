@@ -14,8 +14,8 @@ func TestAccountUsesEntitlementNodeRateAndRevision(t *testing.T) {
 	a := testApp(t)
 	member := testUser(t, a, "meter-rate", "user")
 	member.Entitlement = &domain.Entitlement{
-		PlanID:   "rate-plan",
-		Revision: "ent-one",
+		PlanID:    "rate-plan",
+		Revision:  "ent-one",
 		NodeRates: map[string]int64{"vless-main": 2000},
 	}
 	member.InitMeter("period-rate", 1)

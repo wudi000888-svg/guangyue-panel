@@ -545,6 +545,7 @@ func subscriptionEntries(c Config, r Record, nodes []Node, protocol string) []su
 	entries := []subscriptionEntry{}
 	usedNames := map[string]int{}
 	for _, n := range nodes {
+		n = planNodePolicy(r.Entitlement, n)
 		if !nodeGroupAllowed(r, n) || !n.Enabled || (protocol != "" && protocol != n.Protocol) {
 			continue
 		}

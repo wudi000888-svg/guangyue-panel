@@ -1,7 +1,7 @@
 export interface NavigationItem { id: string; label: string }
 
 export const DEFAULT_ADMIN_SIDEBAR = ['overview', 'users', 'plans', 'nodes', 'fleet', 'settings'];
-export const DEFAULT_MEMBER_SIDEBAR = ['subscription', 'node-square', 'shop', 'orders', 'settings'];
+export const DEFAULT_MEMBER_SIDEBAR = ['subscription', 'shop', 'orders', 'settings'];
 export const MEMBER_NAVIGATION: NavigationItem[] = [
   { id: 'subscription', label: '我的服务' }, { id: 'node-square', label: '节点广场' }, { id: 'shop', label: '选购套餐' },
   { id: 'orders', label: '我的订单' }, { id: 'wallet', label: '我的钱包' },

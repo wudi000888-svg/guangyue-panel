@@ -90,6 +90,14 @@ func (a *App) register(w http.ResponseWriter, r *http.Request) {
 	record := Record{User: User{Username: input.Username, Role: "user", Enabled: true, Created: now}, Credentials: Credentials{HY2: randomToken(24), Token: randomToken(32), VLESS: map[string]string{}}, Password: hash}
 	record.InitMeter("period-"+randomToken(12), now)
 	plan, err := a.store.plan(defaultDemoPlan)
+	if err != nil {
+		// Imported or otherwise empty stores can defer bootstrap seeding. The
+		// deletion marker is honored by initDefaultPlans, so an administrator
+		// deletion is never undone by a registration attempt.
+		if seedErr := a.store.initDefaultPlans(); seedErr == nil {
+			plan, err = a.store.plan(defaultDemoPlan)
+		}
+	}
 	if err != nil || plan.Archived {
 		failure(w, 409, "默认演示套餐不可用，请联系管理员")
 		return

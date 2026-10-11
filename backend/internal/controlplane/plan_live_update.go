@@ -57,13 +57,15 @@ func syncActivePlanEntitlements(tx *persistence.Tx, p Plan) (int, error) {
 			// (quota/expiry) stay attached to the user's purchase snapshot.
 			groupsChanged := !sameStrings(u.Entitlement.GroupIDs, p.GroupIDs)
 			nodesChanged := !sameStrings(u.Entitlement.NodeIDs, p.NodeIDs)
+			ratesChanged := !sameNodeRates(u.Entitlement.NodeRates, p.NodeRates)
 			protocolChanged := u.VLESS != p.VLESS || u.HY2 != p.HY2
 			// A plan version can also advance for billing, naming, or copy edits.
 			// Those changes must keep the purchased snapshot intact. Only a node
 			// policy/protocol change is live-propagated to current subscribers.
-			if groupsChanged || nodesChanged || protocolChanged {
+			if groupsChanged || nodesChanged || ratesChanged || protocolChanged {
 				u.Entitlement.GroupIDs = append([]string{}, p.GroupIDs...)
 				u.Entitlement.NodeIDs = append([]string{}, p.NodeIDs...)
+				u.Entitlement.NodeRates = cloneNodeRates(p.NodeRates)
 				u.Entitlement.Version = p.Version
 				u.VLESS, u.HY2 = p.VLESS, p.HY2
 				u.Entitlement.Revision = randomToken(12)

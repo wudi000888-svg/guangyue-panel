@@ -88,7 +88,9 @@ func TestNodeSquareHonorsIndividualPlanNodeSelection(t *testing.T) {
 	if w.Code != 200 {
 		t.Fatalf("node square: %d %s", w.Code, w.Body.String())
 	}
-	var response struct{ Nodes []NodeSquareNode `json:"nodes"` }
+	var response struct {
+		Nodes []NodeSquareNode `json:"nodes"`
+	}
 	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
 		t.Fatal(err)
 	}

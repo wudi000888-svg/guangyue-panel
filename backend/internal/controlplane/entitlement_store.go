@@ -24,22 +24,23 @@ type NodeGroup struct {
 	Revision    string `json:"revision"`
 }
 type Plan struct {
-	ID          string   `json:"id"`
-	Version     int      `json:"version"`
-	Name        string   `json:"name"`
-	Description string   `json:"description"`
-	Category    string   `json:"category"`
-	Notes       string   `json:"notes"`
-	Archived    bool     `json:"archived"`
-	Sort        int      `json:"sort"`
-	Quota       int64    `json:"quota"`
-	ValidDays   int      `json:"valid_days"`
-	Cycle       string   `json:"cycle"`
-	Timezone    string   `json:"timezone"`
-	GroupIDs    []string `json:"group_ids"`
-	NodeIDs     []string `json:"node_ids"`
-	VLESS       bool     `json:"vless"`
-	HY2         bool     `json:"hy2"`
+	ID          string           `json:"id"`
+	Version     int              `json:"version"`
+	Name        string           `json:"name"`
+	Description string           `json:"description"`
+	Category    string           `json:"category"`
+	Notes       string           `json:"notes"`
+	Archived    bool             `json:"archived"`
+	Sort        int              `json:"sort"`
+	Quota       int64            `json:"quota"`
+	ValidDays   int              `json:"valid_days"`
+	Cycle       string           `json:"cycle"`
+	Timezone    string           `json:"timezone"`
+	GroupIDs    []string         `json:"group_ids"`
+	NodeIDs     []string         `json:"node_ids"`
+	NodeRates   map[string]int64 `json:"node_rates,omitempty"`
+	VLESS       bool             `json:"vless"`
+	HY2         bool             `json:"hy2"`
 	// System plans are seeded by the installation and retained as stable
 	// entry points for the administrator and the demo experience.
 	System bool   `json:"system,omitempty"`
@@ -62,6 +63,17 @@ func normalizeNodePolicy(n Node) Node {
 	return n
 }
 func nodeRate(n Node) int64 { return normalizeNodePolicy(n).RateMilli }
+
+func cloneNodeRates(in map[string]int64) map[string]int64 {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]int64, len(in))
+	for key, rate := range in {
+		out[key] = rate
+	}
+	return out
+}
 
 func readDocuments[T any](s *Store, table string) ([]T, error) {
 	// The table names are package-owned constants, never request input.
@@ -177,6 +189,18 @@ func sameStrings(a, b []string) bool {
 	}
 	for i := range a {
 		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func sameNodeRates(a, b map[string]int64) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for key, rate := range a {
+		if b[key] != rate {
 			return false
 		}
 	}

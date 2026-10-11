@@ -364,6 +364,12 @@ func (a *App) orderAction(w http.ResponseWriter, r *http.Request, actor Record) 
 		return commerceFail(404, "订单不存在")
 	}
 	if actor.Role != "owner" && actor.ID != o.UserID {
+		// Keep ordinary checkout actions opaque to other members, while refund
+		// review actions explicitly report the permission failure so the member
+		// UI can explain why the request was rejected.
+		if in.Action == "request_refund" || in.Action == "cancel_refund" || in.Action == "reject_refund" {
+			return commerceFail(403, "无权操作此订单")
+		}
 		return commerceFail(404, "订单不存在")
 	}
 	u, e := a.store.record(o.UserID)

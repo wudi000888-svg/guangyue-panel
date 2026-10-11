@@ -18,7 +18,7 @@ import (
 	"strings"
 )
 
-const version = "0.39.5"
+const version = "0.39.6"
 
 const businessAdoptionFile = "business-adoption.json"
 
@@ -314,17 +314,17 @@ type User = domain.User
 type Record = domain.Record
 type Credentials = domain.Credentials
 type Node struct {
-	AccessKey      string       `json:"access_key,omitempty"`
-	PolicyVersion  int          `json:"policy_version"`
-	RateMilli      int64        `json:"rate_milli"`
-	RateRevision   string       `json:"rate_revision"`
-	GroupIDs       []string     `json:"group_ids"`
-	DNS            *NodeDNS     `json:"dns,omitempty"`
-	DefaultDirect  bool         `json:"default_direct,omitempty"`
-	RealitySNI     string       `json:"reality_sni,omitempty"`
-	RealityIP      string       `json:"reality_ip,omitempty"`
-	Quality        *IPQuality   `json:"quality,omitempty"`
-	ManagedBy      string       `json:"managed_by,omitempty"`
+	AccessKey     string     `json:"access_key,omitempty"`
+	PolicyVersion int        `json:"policy_version"`
+	RateMilli     int64      `json:"rate_milli"`
+	RateRevision  string     `json:"rate_revision"`
+	GroupIDs      []string   `json:"group_ids"`
+	DNS           *NodeDNS   `json:"dns,omitempty"`
+	DefaultDirect bool       `json:"default_direct,omitempty"`
+	RealitySNI    string     `json:"reality_sni,omitempty"`
+	RealityIP     string     `json:"reality_ip,omitempty"`
+	Quality       *IPQuality `json:"quality,omitempty"`
+	ManagedBy     string     `json:"managed_by,omitempty"`
 	// SquareVisible is an explicit administrator opt-in for the member-facing
 	// node directory. It is deliberately separate from Enabled and entitlement
 	// membership so publishing a node never grants access to it.

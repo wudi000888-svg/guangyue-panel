@@ -27,15 +27,19 @@ type QuotaMeter struct {
 }
 
 type Entitlement struct {
-	PlanID     string   `json:"plan_id"`
-	Version    int      `json:"version"`
-	Name       string   `json:"name"`
-	GroupIDs   []string `json:"group_ids"`
-	NodeIDs    []string `json:"node_ids"`
-	Cycle      string   `json:"cycle"`
-	Timezone   string   `json:"timezone"`
-	AssignedAt int64    `json:"assigned_at"`
-	Revision   string   `json:"revision"`
+	PlanID   string   `json:"plan_id"`
+	Version  int      `json:"version"`
+	Name     string   `json:"name"`
+	GroupIDs []string `json:"group_ids"`
+	NodeIDs  []string `json:"node_ids"`
+	// NodeRates contains package-scoped billing multipliers keyed by the
+	// canonical plan node selection key. An absent entry falls back to the
+	// node's default policy multiplier.
+	NodeRates  map[string]int64 `json:"node_rates,omitempty"`
+	Cycle      string           `json:"cycle"`
+	Timezone   string           `json:"timezone"`
+	AssignedAt int64            `json:"assigned_at"`
+	Revision   string           `json:"revision"`
 }
 
 // PlanSlot is a paused entitlement.  Purchasing another package activates it
@@ -43,13 +47,14 @@ type Entitlement struct {
 // protocol permissions and node selection of the previous package.  Slots are
 // restored in LIFO order, so A -> B -> C returns to B and then A.
 type PlanSlot struct {
-	Entitlement *Entitlement `json:"entitlement"`
-	Quota       int64        `json:"quota"`
-	Expires     int64        `json:"expires"`
-	PausedAt    int64        `json:"paused_at"`
-	VLESS       bool         `json:"vless"`
-	HY2         bool         `json:"hy2"`
-	Meter       *QuotaMeter  `json:"meter,omitempty"`
+	Entitlement *Entitlement     `json:"entitlement"`
+	NodeRates   map[string]int64 `json:"node_rates,omitempty"`
+	Quota       int64            `json:"quota"`
+	Expires     int64            `json:"expires"`
+	PausedAt    int64            `json:"paused_at"`
+	VLESS       bool             `json:"vless"`
+	HY2         bool             `json:"hy2"`
+	Meter       *QuotaMeter      `json:"meter,omitempty"`
 }
 
 func (u User) QuotaUpload() int64 {

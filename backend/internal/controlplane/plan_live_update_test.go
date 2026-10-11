@@ -85,3 +85,54 @@ func TestEditingPlanRefreshesActiveSubscriptionNodes(t *testing.T) {
 		t.Fatalf("updated plan version missing: %+v (%v)", saved, err)
 	}
 }
+
+func TestEditingPlanRefreshesNodeRateOverrideAndMetering(t *testing.T) {
+	a := testApp(t)
+	owner := testUser(t, a, "owner", "owner")
+	member := testUser(t, a, "rate-member", "user")
+
+	plan := Plan{
+		Name:      "Rate override",
+		Quota:     1024 * 1024,
+		ValidDays: 30,
+		Cycle:     "30d",
+		Timezone:  "UTC",
+		GroupIDs:  []string{legacyPrivateGroup},
+		NodeIDs:   []string{"vless-main"},
+		NodeRates: map[string]int64{"vless-main": 2000},
+		VLESS:     true,
+	}
+	plan = decoded[Plan](t, req(t, a, owner, "POST", "/api/plans", plan), 200)
+	applyTestEntitlement(t, a, owner, entitlementRequest{IDs: []int64{member.ID}, Action: "assign", PlanID: plan.ID})
+	member, err := a.store.record(member.ID)
+	if err != nil || member.Entitlement == nil {
+		t.Fatalf("assign rate plan: %v", err)
+	}
+	if member.Entitlement.NodeRates["vless-main"] != 2000 {
+		t.Fatalf("entitlement node rate = %#v", member.Entitlement.NodeRates)
+	}
+	entries, err := a.subscriptionCatalogSource(member, "local", "vless")
+	if err != nil || len(entries) != 1 || entries[0].node.RateMilli != 2000 {
+		t.Fatalf("subscription rate = %d (%v), want 2000", len(entries), err)
+	}
+
+	// An account sample of 1 KiB is charged at the package override (2 KiB).
+	if err = a.store.account([]Counter{{Key: "plan-rate", Generation: "one", UserID: member.ID, NodeID: "vless-main", Protocol: "vless", Direction: "up", Value: 1024}}); err != nil {
+		t.Fatalf("account: %v", err)
+	}
+	member, _ = a.store.record(member.ID)
+	if member.Meter.Upload != 2048 {
+		t.Fatalf("weighted upload = %d, want 2048", member.Meter.Upload)
+	}
+
+	// Editing the plan propagates a new override to the active entitlement.
+	plan.NodeRates = map[string]int64{"vless-main": 500}
+	updated := req(t, a, owner, "POST", "/api/plans", plan)
+	if updated.Code != 200 {
+		t.Fatalf("update rate plan: %d %s", updated.Code, updated.Body.String())
+	}
+	member, _ = a.store.record(member.ID)
+	if member.Entitlement.NodeRates["vless-main"] != 500 {
+		t.Fatalf("updated entitlement node rates = %#v", member.Entitlement.NodeRates)
+	}
+}

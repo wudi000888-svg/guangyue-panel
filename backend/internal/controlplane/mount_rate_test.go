@@ -11,9 +11,9 @@ func TestMountedPlanRateIsAppliedByChildMeter(t *testing.T) {
 	f.policy(t, []MountedNode{{NodeID: "vless-main", Enabled: true, GroupIDs: []string{defaultSubsiteGroup}}}, []BusinessGrant{{UserID: f.user.ID, Budget: 600}})
 	f.user, _ = f.master.store.record(f.user.ID)
 	f.user.Entitlement = &domain.Entitlement{
-		Revision: "mounted-rate",
-		GroupIDs: []string{defaultSubsiteGroup},
-		NodeIDs: []string{defaultSubsiteGroup + "/" + f.site.ID + "/vless-main"},
+		Revision:  "mounted-rate",
+		GroupIDs:  []string{defaultSubsiteGroup},
+		NodeIDs:   []string{defaultSubsiteGroup + "/" + f.site.ID + "/vless-main"},
 		NodeRates: map[string]int64{defaultSubsiteGroup + "/" + f.site.ID + "/vless-main": 2000},
 	}
 	if err := f.master.store.save(&f.user); err != nil {
