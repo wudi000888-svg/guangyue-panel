@@ -38,7 +38,7 @@ const downloadScope = new AbortController();
 watch([link, qrOpen], async ([value, open]) => {
   const sequence = ++qrSequence; qr.value = ''; error.value = '';
   if (!value || !open) return;
-  try { const image = await QRCode.toDataURL(value, { width: 240, margin: 3, color: { dark: '#173D36', light: '#ffffff' } }); if (sequence === qrSequence) qr.value = image; }
+  try { const image = await QRCode.toDataURL(value, { width: 240, margin: 3, color: { dark: '#0b1220', light: '#ffffff' } }); if (sequence === qrSequence) qr.value = image; }
   catch { if (sequence === qrSequence) error.value = t('订阅二维码生成失败，请使用复制地址。'); }
 });
 async function saveConfig() {
