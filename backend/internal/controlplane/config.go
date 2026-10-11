@@ -325,6 +325,10 @@ type Node struct {
 	RealityIP      string       `json:"reality_ip,omitempty"`
 	Quality        *IPQuality   `json:"quality,omitempty"`
 	ManagedBy      string       `json:"managed_by,omitempty"`
+	// SquareVisible is an explicit administrator opt-in for the member-facing
+	// node directory. It is deliberately separate from Enabled and entitlement
+	// membership so publishing a node never grants access to it.
+	SquareVisible  bool         `json:"square_visible,omitempty"`
 	Upstream       object       `json:"upstream,omitempty"`
 	UpstreamType   string       `json:"upstream_type,omitempty"`
 	BridgePort     int          `json:"bridge_port,omitempty"`

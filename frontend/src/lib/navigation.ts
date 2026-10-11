@@ -1,9 +1,9 @@
 export interface NavigationItem { id: string; label: string }
 
 export const DEFAULT_ADMIN_SIDEBAR = ['overview', 'users', 'plans', 'nodes', 'fleet', 'settings'];
-export const DEFAULT_MEMBER_SIDEBAR = ['subscription', 'shop', 'orders', 'settings'];
+export const DEFAULT_MEMBER_SIDEBAR = ['subscription', 'node-square', 'shop', 'orders', 'settings'];
 export const MEMBER_NAVIGATION: NavigationItem[] = [
-  { id: 'subscription', label: '我的服务' }, { id: 'shop', label: '选购套餐' },
+  { id: 'subscription', label: '我的服务' }, { id: 'node-square', label: '节点广场' }, { id: 'shop', label: '选购套餐' },
   { id: 'orders', label: '我的订单' }, { id: 'wallet', label: '我的钱包' },
   { id: 'clients', label: '使用指南' }, { id: 'tickets', label: '联系支持' },
   { id: 'messages', label: '消息通知' }, { id: 'settings', label: '个人设置' },
@@ -26,7 +26,7 @@ export function groupNavigation<T extends NavigationItem>(items: T[], administra
     { id: 'support', label: '服务与支持', routes: ['tickets', 'messages', 'clients'] },
     { id: 'system', label: '系统管理', routes: ['tasks', 'system', 'settings'] },
   ] : [
-    { id: 'service', label: '我的服务', routes: ['subscription', 'shop', 'overview'] },
+    { id: 'service', label: '我的服务', routes: ['subscription', 'node-square', 'shop', 'overview'] },
     { id: 'account', label: '订单与钱包', routes: ['orders', 'wallet'] },
     { id: 'support', label: '帮助与支持', routes: ['clients', 'tickets', 'messages'] },
     { id: 'preferences', label: '设置与更多', routes: ['settings'] },

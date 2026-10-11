@@ -52,6 +52,7 @@ export type Node = {
   dns?: {mode: string; doh?: string; ipv6?: string};
 	quality?: IPQuality;
 	managed_by?: string;
+  square_visible?: boolean;
   speed?: SpeedResult;
   upstream_type?: string;
   exit_id?: string;

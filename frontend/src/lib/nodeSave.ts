@@ -2,7 +2,7 @@ import { ApiError, isCancelled, requestGeneration } from './api';
 import { t } from '../i18n';
 import type { Node, State } from '../types';
 
-export type NodeSaveInput = Pick<Node, 'id' | 'protocol' | 'enabled' | 'exit_id' | 'reality_sni' | 'dns' | 'rate_milli' | 'group_ids' | 'policy_version'> & { save_request_id: string };
+export type NodeSaveInput = Pick<Node, 'id' | 'protocol' | 'enabled' | 'exit_id' | 'reality_sni' | 'dns' | 'rate_milli' | 'group_ids' | 'policy_version' | 'square_visible'> & { save_request_id: string };
 type Client = <T>(path: string, method?: string, body?: unknown, options?: RequestInit) => Promise<T>;
 
 export class NodeSaveUncertain extends Error {

@@ -333,10 +333,11 @@ useModalFocus(computed(()=>!!modal.value || !!confirmation.value), computed(()=>
         <div class="check-row">
           <label v-if="!editingDefaultDirect"
             ><input v-model="nodeForm.enabled" type="checkbox" />{{ t("节点启用") }}</label
-          ><span v-else class="badge neutral"><ShieldCheck :size="12"/>{{t('默认直连')}}</span><span class="tag" :class="nodeForm.protocol">{{
+          ><label class="square-publish-toggle"><input v-model="nodeForm.square_visible" type="checkbox" />{{ t("在节点广场展示") }}</label><span v-if="editingDefaultDirect" class="badge neutral"><ShieldCheck :size="12"/>{{t('默认直连')}}</span><span class="tag" :class="nodeForm.protocol">{{
             nodeForm.protocol.toUpperCase()
           }}</span>
         </div>
+        <p v-if="nodeForm.square_visible" class="field-help">{{t('仅展示节点名称、协议、地区和可用套餐，不会公开出口地址或连接凭据。')}}</p>
         <section class="node-dns-settings"><label>{{t('节点倍率')}}<input v-model.number="nodeRate" type="number" min="0" max="100" step="0.01" required/></label><p class="field-help">{{t('实际使用 1 GiB 消耗对应倍率的配额；0×免扣配额，仍统计实际流量。')}}</p><p class="field-help">{{t('本地节点自动加入默认本地节点组，用户使用权限由套餐决定。')}}</p></section>
         <div v-if="editingDefaultDirect" class="default-direct-notice"><ShieldCheck :size="18"/><div><strong>{{t('保留服务器默认直连入口')}}</strong><p>{{t('此节点固定使用本机出口，保持启用，不能删除或绑定其他出口。')}}</p><button type="button" class="text-button" :disabled="busy" @click="editNode(undefined, nodeForm.protocol)"><Plus :size="14"/>{{t('绑定 IP 池出口请新增节点')}}</button></div></div>
         <details v-if="nodeForm.protocol === 'vless'" class="node-protocol-settings"><summary><SlidersHorizontal :size="17"/><span>{{t('Reality 伪装域名')}}</span><ChevronDown :size="16"/></summary><div class="node-protocol-body">

@@ -22,6 +22,7 @@ export const router = createRouter({
     { path: '/nodes', component: () => import('./pages/NodesPage.vue'), meta: { owner: true } },
     { path: '/subsite-nodes', component: () => import('./pages/SubsiteNodesPage.vue'), meta: { owner: true, pro: true } },
     { path: '/subscription', component: () => import('./pages/SubscriptionPage.vue') },
+    { path: '/node-square', component: () => import('./pages/NodeSquarePage.vue') },
     { path: '/public/:tab?', component: () => import('./pages/PublicPoolPage.vue'), meta: { owner: true, publicFeatures: true } },
     { path: '/public-nodes', component: () => import('./pages/NodesPage.vue'), meta: { owner: true, publicFeatures: true } },
     { path: '/public-subscription', component: () => import('./pages/SubscriptionPage.vue'), meta: { owner: true, publicFeatures: true } },
