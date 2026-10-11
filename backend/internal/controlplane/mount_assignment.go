@@ -100,7 +100,10 @@ func (a *App) refreshMountGrants(v *BusinessSite) error {
 				if s.ID == v.ID {
 					continue
 				}
-				available = max(int64(0), available-siteReservation(s, u.ID))
+				// Configured grants are ceilings and may exceed the member's
+				// remaining quota. Only quota already issued to another site
+				// consumes capacity until that site's usage is settled.
+				available = max(int64(0), available-siteRuntimeReservation(s, u.ID))
 				// An unacknowledged unlimited grant cannot be replaced by a
 				// finite one while its final usage is still unknown.
 				if s.IssuedUnlimited[u.ID] {

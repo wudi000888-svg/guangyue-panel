@@ -94,6 +94,27 @@ func TestAutomaticMountBudgetsRespectOtherSitesAndOfflineReservations(t *testing
 	if err := f.master.store.saveBusinessSite(other); err != nil {
 		t.Fatal(err)
 	}
+	// A configured ceiling on an unissued site must not consume the current
+	// site's share. Only Issued quota is a live reservation.
+	other.Grants = []BusinessGrant{{UserID: f.user.ID, Quota: 900}}
+	if err := f.master.store.saveBusinessSite(other); err != nil {
+		t.Fatal(err)
+	}
+	s.Grants = nil
+	if err := f.master.store.saveBusinessSite(s); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.master.refreshMountGrants(&s); err != nil {
+		t.Fatal(err)
+	}
+	if siteReservation(s, f.user.ID) != 333 {
+		t.Fatal("pending configured grant consumed quota", siteReservation(s, f.user.ID))
+	}
+	// Restore the normal empty grant before exercising the fair-share path.
+	s.Grants = nil
+	if err := f.master.store.saveBusinessSite(s); err != nil {
+		t.Fatal(err)
+	}
 	if err := f.master.refreshMountGrants(&other); err != nil {
 		t.Fatal(err)
 	}
