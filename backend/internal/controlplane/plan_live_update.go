@@ -84,4 +84,3 @@ func syncActivePlanEntitlements(tx *persistence.Tx, p Plan) (int, error) {
 	}
 	return updated, nil
 }
-

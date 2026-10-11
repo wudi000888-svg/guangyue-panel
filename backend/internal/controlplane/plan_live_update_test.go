@@ -85,4 +85,3 @@ func TestEditingPlanRefreshesActiveSubscriptionNodes(t *testing.T) {
 		t.Fatalf("updated plan version missing: %+v (%v)", saved, err)
 	}
 }
-
