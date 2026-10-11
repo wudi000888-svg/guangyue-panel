@@ -36,6 +36,10 @@ func TestEditingPlanRefreshesActiveSubscriptionNodes(t *testing.T) {
 	if err != nil || len(before) != 1 || before[0].node.ID != "vless-main" {
 		t.Fatalf("initial plan subscription = %d (%v), want vless only", len(before), err)
 	}
+	beforeHash, err := a.desiredCoreHash()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	// Add HY2 to the same plan. This is the operation that currently leaves
 	// already-issued entitlements with their old NodeIDs and stale subscriptions.
@@ -68,6 +72,13 @@ func TestEditingPlanRefreshesActiveSubscriptionNodes(t *testing.T) {
 	// frontend cache while leaving the persisted entitlement stale cannot pass.
 	if current.Entitlement == nil || len(current.Entitlement.NodeIDs) != 2 {
 		t.Fatal("active entitlement did not receive the edited node selection")
+	}
+	afterHash, err := a.desiredCoreHash()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if beforeHash == afterHash {
+		t.Fatal("core authorization hash did not change with the edited node selection")
 	}
 	var saved Plan
 	if err := json.Unmarshal(updated.Body.Bytes(), &saved); err != nil || saved.Version != plan.Version+1 {

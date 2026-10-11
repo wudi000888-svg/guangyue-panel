@@ -71,12 +71,18 @@ func (a *App) desiredCoreHash() (string, error) {
 	}
 	users := []object{}
 	for _, u := range records {
+		selectedNodes := []string(nil)
+		if u.Mount != nil {
+			selectedNodes = u.Mount.NodeIDs
+		} else if u.Entitlement != nil {
+			selectedNodes = u.Entitlement.NodeIDs
+		}
 		users = append(users, object{"id": u.ID, "active": u.Active(), "vless": u.VLESS, "hy2": u.HY2, "credentials": u.Credentials, "mount_nodes": func() []string {
 			if u.Mount != nil {
 				return u.Mount.NodeIDs
 			}
 			return nil
-		}(), "groups": u.AllowedGroups})
+		}(), "selected_nodes": selectedNodes, "groups": u.AllowedGroups})
 	}
 	b, err := json.Marshal(object{"memberships": memberships, "hy2_optimized": a.cfg.HY2Optimized, "vless": nodeHash(nodes, "vless"), "hy2": nodeHash(nodes, "hy2"), "users": users, "sni": a.cfg.RealitySNI, "target": a.cfg.RealityTarget})
 	return digest(string(b)), err
