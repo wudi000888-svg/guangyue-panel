@@ -195,8 +195,9 @@ func (a *App) entitlementAPI(w http.ResponseWriter, r *http.Request, actor Recor
 // deletePlan intentionally performs a destructive catalog delete. Issued user
 // entitlements and order history are snapshots and remain untouched; active
 // offers for the removed plan are removed so the shop cannot sell a dangling
-// catalog entry. System plans remain protected because bootstrap depends on
-// their stable IDs.
+// catalog entry. The administrator plan remains protected because bootstrap
+// depends on its stable ID. The demo plan is an optional catalog item and may
+// be deleted; existing entitlements and order snapshots remain intact.
 func (a *App) deletePlan(w http.ResponseWriter, _ *http.Request, actor Record, id string) {
 	id = strings.TrimSpace(id)
 	if id == "" || strings.Contains(id, "/") {
@@ -208,8 +209,8 @@ func (a *App) deletePlan(w http.ResponseWriter, _ *http.Request, actor Record, i
 		failure(w, 404, "套餐不存在")
 		return
 	}
-	if p.System || id == defaultAdminPlan || id == defaultDemoPlan {
-		failure(w, 400, "系统预置套餐不能删除")
+	if id == defaultAdminPlan || (p.System && id != defaultDemoPlan) {
+		failure(w, 400, "管理员套餐不能删除")
 		return
 	}
 	offers, err := readDocuments[Offer](a.store, "commerce_offers")

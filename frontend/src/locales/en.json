@@ -2336,6 +2336,7 @@
   "套餐统一决定账号额度、有效期和节点权限。": "Plans define account quota, validity, and node access.",
   "删除套餐": "Delete plan",
   "系统预置套餐不能删除。": "System plans cannot be deleted.",
+  "管理员套餐不能删除。": "The administrator plan cannot be deleted.",
   "删除无引用套餐会移除套餐和版本记录；存在用户、商品或订单引用时会自动归档并保留历史。": "An unreferenced plan and its versions are removed; referenced plans are archived to preserve history.",
   "删除节点组": "Delete node group",
   "只有未被套餐、用户、节点或子站挂载引用的节点组可以删除，请先移除引用。": "Only node groups with no plan, user, node, or child-site mount references can be deleted. Remove references first.",
