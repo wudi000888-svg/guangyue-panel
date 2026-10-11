@@ -155,12 +155,16 @@ watch(subURL, async (v) => {
 });
 
 onMounted(() => {
-  document.addEventListener("visibilitychange", handleVisibility);
+  if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
+    document.addEventListener("visibilitychange", handleVisibility);
+  }
   scheduleSubscriptionPoll();
 });
 onScopeDispose(()=>{
   clearSubscriptionPoll();
-  document.removeEventListener("visibilitychange", handleVisibility);
+  if (typeof document !== "undefined" && typeof document.removeEventListener === "function") {
+    document.removeEventListener("visibilitychange", handleVisibility);
+  }
   clearSubscription();
   subscriptionQRSequence++;
 });
