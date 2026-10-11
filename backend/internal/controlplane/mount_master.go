@@ -306,6 +306,15 @@ func (a *App) syncMountSiteLocked(ctx context.Context, id string) (resultErr err
 			if g.UserID != u.ID || g.Quota > 0 && v.Usage[u.ID].total() >= g.Quota {
 				continue
 			}
+			issued, allowed, e := a.effectiveBusinessGrant(u, v, g)
+			if e != nil {
+				a.mu.Unlock()
+				return e
+			}
+			if !allowed {
+				continue
+			}
+			g = issued
 			nodes := []string{}
 			for _, m := range v.Mount.Nodes {
 				n, ok := mountSource(catalog, m.NodeID)

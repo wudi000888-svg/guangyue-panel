@@ -272,8 +272,8 @@ func TestBusinessAllocationsAndCounterRollback(t *testing.T) {
 	a.store.saveBusinessSite(site)
 	second, _ := createBusinessTest(t, a, owner, "west")
 	second.Grants = []BusinessGrant{{UserID: u.ID, Quota: 300}}
-	if a.validateBusinessPolicy(second) == nil {
-		t.Fatal("oversubscribed quota accepted")
+	if err := a.validateBusinessPolicy(second); err != nil {
+		t.Fatalf("oversubscribed site quota should be accepted: %v", err)
 	}
 	site.Usage[u.ID] = BusinessUsage{Upload: 40, Download: 60, VLESS: 100}
 	a.store.saveBusinessSite(site)
@@ -295,6 +295,130 @@ func TestBusinessAllocationsAndCounterRollback(t *testing.T) {
 		t.Fatal("cross-site exclusive binding accepted")
 	}
 	_ = nodes
+}
+
+func TestBusinessOverallocatedGrantsUseGlobalRemainingAtRuntime(t *testing.T) {
+	a := testApp(t)
+	a.cfg.Edition = "pro"
+	owner := testUser(t, a, "owner", "owner")
+	u := testUser(t, a, "alice", "user")
+	u.Quota = 1000
+	u.InitMeter("runtime-overallocated", time.Now().Unix())
+	a.store.save(&u)
+	first, _ := createBusinessTest(t, a, owner, "east2")
+	first.Grants = []BusinessGrant{{UserID: u.ID, Quota: 800}}
+	if err := a.validateBusinessPolicy(first); err != nil {
+		t.Fatalf("overallocated runtime grant should be accepted: %v", err)
+	}
+	a.store.saveBusinessSite(first)
+	second, _ := createBusinessTest(t, a, owner, "west2")
+	second.Grants = []BusinessGrant{{UserID: u.ID, Quota: 500}}
+	if err := a.validateBusinessPolicy(second); err != nil {
+		t.Fatalf("second overallocated runtime grant should be accepted: %v", err)
+	}
+	a.store.saveBusinessSite(second)
+
+	if snapshot, err := a.businessSnapshot(&first); err != nil || len(snapshot.Users) != 1 || snapshot.Users[0].User.Quota != 800 {
+		t.Fatalf("first site did not receive its configured runtime allowance: users=%d quota=%d err=%v", len(snapshot.Users), func() int64 {
+			if len(snapshot.Users) == 0 {
+				return 0
+			}
+			return snapshot.Users[0].User.Quota
+		}(), err)
+	}
+	if snapshot, err := a.businessSnapshot(&second); err != nil || len(snapshot.Users) != 1 || snapshot.Users[0].User.Quota != 200 {
+		t.Fatalf("second site was not capped by the remaining global quota: users=%d quota=%d err=%v", len(snapshot.Users), func() int64 {
+			if len(snapshot.Users) == 0 {
+				return 0
+			}
+			return snapshot.Users[0].User.Quota
+		}(), err)
+	}
+
+	// Pull-site child meters are cumulative across snapshots. After the first
+	// site has consumed 400 bytes, the next snapshot must keep its cumulative
+	// ceiling at 800, rather than replacing it with the 400 bytes left after
+	// the other site's issued reservation.
+	first, _ = a.store.businessSite(first.ID)
+	first.Usage[u.ID] = BusinessUsage{Upload: 400, VLESS: 400}
+	if err := a.store.saveBusinessSite(first); err != nil {
+		t.Fatal(err)
+	}
+	u, _ = a.store.record(u.ID)
+	u.Meter.Upload = u.Meter.BaseUpload + 400
+	if err := a.store.save(&u); err != nil {
+		t.Fatal(err)
+	}
+	first, _ = a.store.businessSite(first.ID)
+	snapshot, err := a.businessSnapshot(&first)
+	if err != nil || len(snapshot.Users) != 1 || snapshot.Users[0].User.Quota != 800 {
+		t.Fatalf("repeated snapshot did not preserve cumulative site ceiling: users=%d quota=%d err=%v", len(snapshot.Users), func() int64 {
+			if len(snapshot.Users) == 0 {
+				return 0
+			}
+			return snapshot.Users[0].User.Quota
+		}(), err)
+	}
+	// Subscription visibility follows the effective grant sent in the last
+	// snapshot. A stale configured ceiling must not keep nodes visible after
+	// the issued allowance has been consumed.
+	first, _ = a.store.businessSite(first.ID)
+	first.Info = &BusinessInfo{Protocol: 2, VLESSHost: "vless.test", HY2Host: "hy.test", RealitySNI: "reality.test", RealityPublic: "public", ShortID: "12345678"}
+	first.Applied = first.Desired
+	first.LeaseUntil = time.Now().Add(time.Hour).Unix()
+	first.SentGrants = []BusinessGrant{{UserID: u.ID, Quota: 200}}
+	first.Usage[u.ID] = BusinessUsage{Upload: 100, VLESS: 100}
+	if err := a.store.saveBusinessSite(first); err != nil {
+		t.Fatal(err)
+	}
+	current, _ := a.store.record(u.ID)
+	groups := []string{defaultSubsiteGroup}
+	current.NodeGroupIDs = &groups
+	if err := a.store.save(&current); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := a.subscriptionCatalogSource(current, "mixed", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	visible := false
+	for _, entry := range entries {
+		if entry.siteID == first.ID {
+			visible = true
+		}
+	}
+	if !visible {
+		t.Fatal("subscription did not expose an active pull site before its issued grant was exhausted")
+	}
+	first.Usage[u.ID] = BusinessUsage{Upload: 200, VLESS: 200}
+	if err := a.store.saveBusinessSite(first); err != nil {
+		t.Fatal(err)
+	}
+	entries, err = a.subscriptionCatalogSource(current, "mixed", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if entry.siteID == first.ID {
+			t.Fatal("subscription exposed a site after its issued grant was exhausted")
+		}
+	}
+
+	u, _ = a.store.record(u.ID)
+	u.Meter.Upload = u.Meter.BaseUpload + 1000
+	a.store.save(&u)
+	first, _ = a.store.businessSite(first.ID)
+	snapshot, err = a.businessSnapshot(&first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snapshot.Users) != 0 {
+		t.Fatal("exhausted global quota still issued a child authorization")
+	}
+	first, _ = a.store.businessSite(first.ID)
+	if len(first.Grants) != 1 || first.Grants[0].Quota != 800 {
+		t.Fatal("global exhaustion rewrote the configured site grant")
+	}
 }
 
 func TestBusinessMonthlyBudgetStopsNewAuthorizations(t *testing.T) {

@@ -105,6 +105,14 @@ func (a *App) businessSnapshot(v *BusinessSite) (BusinessSnapshot, error) {
 			if g.Quota > 0 && used.total() >= g.Quota {
 				continue
 			}
+			issued, allowed, err := a.effectiveBusinessSnapshotGrant(r, *v, g)
+			if err != nil {
+				return out, err
+			}
+			if !allowed {
+				continue
+			}
+			g = issued
 			if v.Info != nil && v.Info.Protocol < 2 && (r.Entitlement != nil || r.NodeGroupIDs != nil) {
 				continue
 			}

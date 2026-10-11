@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"strconv"
 	"strings"
 	"time"
@@ -374,7 +373,5 @@ func (a *App) businessOwnerEnabled(v BusinessSite) bool {
 	u, e := a.store.record(v.OwnerID)
 	return e == nil && u.Enabled && u.Role == "owner"
 }
-
-var errBusinessQuota = errors.New("业务站预分配额度超过用户剩余额度，请先调整站点额度")
 
 func nowBusiness() int64 { return time.Now().Unix() }
