@@ -39,8 +39,71 @@ func openConfiguredStore(cfg Config) (*Store, error) {
 		s.db.Close()
 		return nil, err
 	}
+	if err = s.repairLegacyOrderSnapshots(); err != nil {
+		s.db.Close()
+		return nil, err
+	}
 	s.commerceErr = s.validateCommerce(false)
 	return s, nil
+}
+
+// repairLegacyOrderSnapshots fixes the one inconsistent shape introduced by
+// migration 017. That migration moved refund_requested rows back to the
+// completed state in the relational column, but left the embedded JSON order
+// snapshot untouched. Repair the JSON in Go so SQLite BLOB and PostgreSQL
+// BYTEA stores are handled identically; unknown or malformed snapshots are
+// left for validateCommerce to reject as integrity failures.
+func (s *Store) repairLegacyOrderSnapshots() error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	rows, err := tx.Query("SELECT id,doc FROM commerce_orders WHERE state='completed'")
+	if err != nil {
+		return err
+	}
+	type repair struct {
+		id  string
+		old []byte
+		doc []byte
+	}
+	var repairs []repair
+	for rows.Next() {
+		var id string
+		var doc []byte
+		if err = rows.Scan(&id, &doc); err != nil {
+			rows.Close()
+			return err
+		}
+		var snapshot map[string]json.RawMessage
+		if json.Unmarshal(doc, &snapshot) != nil {
+			continue
+		}
+		var state string
+		if raw, ok := snapshot["state"]; !ok || json.Unmarshal(raw, &state) != nil || state != "refund_requested" {
+			continue
+		}
+		snapshot["state"] = json.RawMessage(`"completed"`)
+		repaired, marshalErr := json.Marshal(snapshot)
+		if marshalErr != nil {
+			rows.Close()
+			return marshalErr
+		}
+		repairs = append(repairs, repair{id: id, old: doc, doc: repaired})
+	}
+	if err = errors.Join(rows.Err(), rows.Close()); err != nil {
+		return err
+	}
+	if len(repairs) == 0 {
+		return tx.Commit()
+	}
+	for _, item := range repairs {
+		if _, err = tx.Exec("UPDATE commerce_orders SET doc=? WHERE id=? AND state='completed' AND doc=?", item.doc, item.id, item.old); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 // Import targets must remain empty until the source snapshot is copied. Schema
