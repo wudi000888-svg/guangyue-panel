@@ -199,7 +199,7 @@ func (a *App) applyMountSync(tokenID string, in MountSync, catalog MountCatalog)
 	}
 	requested := map[int64]MountUser{}
 	for _, u := range in.Users {
-		if u.UserID <= 0 || len(u.Generation) != 64 || u.PeriodID == "" || len(u.PeriodID) > 100 || len(u.NodeIDs) > 64 || u.Quota < 0 || u.Quota > 1<<60 || u.Expires < 0 {
+		if u.UserID <= 0 || len(u.Generation) != 64 || u.PeriodID == "" || len(u.PeriodID) > 100 || len(u.NodeIDs) > 64 || len(u.NodeRates) > len(u.NodeIDs) || len(u.RateRevision) > 100 || u.Quota < 0 || u.Quota > 1<<60 || u.Expires < 0 {
 			return out, errors.New("挂载用户权限无效")
 		}
 		if _, ok := requested[u.UserID]; ok {
@@ -212,6 +212,11 @@ func (a *App) applyMountSync(tokenID string, in MountSync, catalog MountCatalog)
 				return out, errors.New("来源节点不存在、停用或重复")
 			}
 			seen[id] = true
+		}
+		for id, rate := range u.NodeRates {
+			if !seen[id] || rate < 0 || rate > 100000 || rate%10 != 0 {
+				return out, errors.New("挂载用户节点倍率无效")
+			}
 		}
 		sort.Strings(u.NodeIDs)
 		requested[u.UserID] = u
@@ -296,6 +301,13 @@ func (a *App) applyMountSync(tokenID string, in MountSync, catalog MountCatalog)
 			r.Mount.LeaseUntil = deadline
 			r.Mount.Revision = in.Sequence
 			r.Mount.NodeIDs = append([]string{}, u.NodeIDs...)
+			if u.RateRevision != "" || len(u.NodeRates) > 0 {
+				r.Entitlement = &domain.Entitlement{Revision: u.RateRevision, NodeRates: cloneNodeRates(u.NodeRates)}
+			} else {
+				// A later sync may remove the package override; do not leave the
+				// previous child-side policy charging stale rates.
+				r.Entitlement = nil
+			}
 			r.Expires = u.Expires
 			r.Quota = u.Quota
 			r.VLESS = u.VLESS

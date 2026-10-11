@@ -61,7 +61,13 @@ func (s *Store) account(counters []Counter) error {
 	}
 	policies := map[string]Node{}
 	for _, n := range nodes {
-		policies[n.ID] = normalizeNodePolicy(n)
+		n = normalizeNodePolicy(n)
+		// Core counters normally carry the node ID, while mounted and
+		// business identities may carry the site-qualified selection key.
+		// Keep both lookups pointed at the same policy so package overrides
+		// are applied consistently regardless of the counter source.
+		policies[n.ID] = n
+		policies[planNodeKey(n)] = n
 	}
 	s.runtimeMu.RLock()
 	defer s.runtimeMu.RUnlock()
@@ -73,7 +79,10 @@ func (s *Store) account(counters []Counter) error {
 	// This small retained policy lets a deleted node's final core counters settle
 	// without bringing the node or any group membership back into configuration.
 	for id, n := range policies {
-		b, _ := json.Marshal(Node{ID: id, PolicyVersion: 1, RateMilli: n.RateMilli, RateRevision: n.RateRevision})
+		// Preserve the access key and source metadata in the retained document;
+		// deleted mounted nodes still need their canonical key to resolve a
+		// package-specific multiplier while their final counters settle.
+		b, _ := json.Marshal(n)
 		if _, err = tx.Exec("INSERT INTO node_meter_policies(id,doc) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET doc=excluded.doc", id, b); err != nil {
 			return err
 		}
@@ -132,6 +141,12 @@ func (s *Store) account(counters []Counter) error {
 				return err
 			}
 		}
+		// The node catalog stores the default policy. An active package can
+		// override that multiplier for a selected node; apply the same scoped
+		// policy used by subscription rendering before weighting traffic and
+		// before choosing the node_usage aggregation key. The resulting rate
+		// revision keeps default and package-specific samples isolated.
+		n = planNodePolicy(u.Entitlement, n)
 		var raw, weighted, residue, protocol *int64
 		if c.Direction == "up" {
 			raw, weighted, residue = &u.Upload, &u.Meter.Upload, &u.Meter.UploadRemainder

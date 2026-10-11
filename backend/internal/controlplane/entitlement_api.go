@@ -324,6 +324,7 @@ func (a *App) validatePlan(p *Plan) error {
 		}
 	}
 	seenNodes := map[string]bool{}
+	seenNodeCanonical := map[string]bool{}
 	selectedGroups := map[string]bool{}
 	for _, id := range p.GroupIDs {
 		selectedGroups[id] = true
@@ -343,10 +344,58 @@ func (a *App) validatePlan(p *Plan) error {
 		if !belongsToSelectedGroup {
 			return errors.New("套餐单独节点必须属于已选择的节点组")
 		}
+		canonical := planNodeKey(node)
+		if seenNodeCanonical[canonical] {
+			return errors.New("套餐单独节点重复")
+		}
 		seenNodes[id] = true
+		seenNodeCanonical[canonical] = true
 	}
 	sort.Strings(p.NodeIDs)
+	if len(p.NodeRates) > 512 {
+		return errors.New("套餐节点倍率配置过多")
+	}
+	if len(p.NodeRates) > 0 && len(p.NodeIDs) == 0 {
+		return errors.New("套餐节点倍率必须先选择组内单独节点")
+	}
+	selectedRateNodes := map[string]bool{}
+	for _, id := range p.NodeIDs {
+		selectedRateNodes[id] = true
+		if node, ok := nodesByID[id]; ok {
+			selectedRateNodes[planNodeKey(node)] = true
+		}
+	}
+	seenRateNodes := map[string]bool{}
+	for id, rate := range p.NodeRates {
+		if id == "" || rate < 0 || rate > 100000 || rate%10 != 0 {
+			return errors.New("套餐节点倍率无效")
+		}
+		node, ok := nodesByID[id]
+		if !ok {
+			return errors.New("套餐节点倍率对应的节点不存在")
+		}
+		canonical := planNodeKey(node)
+		if !selectedRateNodes[id] && !selectedRateNodes[canonical] {
+			return errors.New("套餐节点倍率必须属于已选择的单独节点")
+		}
+		if !selectedGroupsForNode(node, selectedGroups) {
+			return errors.New("套餐节点倍率必须属于已选择的节点组")
+		}
+		if seenRateNodes[canonical] {
+			return errors.New("套餐节点倍率对应的节点重复")
+		}
+		seenRateNodes[canonical] = true
+	}
 	return nil
+}
+
+func selectedGroupsForNode(node Node, selected map[string]bool) bool {
+	for _, groupID := range normalizeNodePolicy(node).GroupIDs {
+		if selected[groupID] {
+			return true
+		}
+	}
+	return false
 }
 
 type entitlementRequest struct {
@@ -506,7 +555,7 @@ func (a *App) entitlementBatch(w http.ResponseWriter, r *http.Request, actor Rec
 			u.NodeGroupIDs = &ids
 		case "assign":
 			u.NodeGroupIDs = nil
-			u.Entitlement = &domain.Entitlement{PlanID: plan.ID, Version: plan.Version, Name: plan.Name, GroupIDs: append([]string{}, plan.GroupIDs...), NodeIDs: append([]string{}, plan.NodeIDs...), Cycle: plan.Cycle, Timezone: plan.Timezone, AssignedAt: time.Now().Unix(), Revision: randomToken(12)}
+			u.Entitlement = &domain.Entitlement{PlanID: plan.ID, Version: plan.Version, Name: plan.Name, GroupIDs: append([]string{}, plan.GroupIDs...), NodeIDs: append([]string{}, plan.NodeIDs...), NodeRates: cloneNodeRates(plan.NodeRates), Cycle: plan.Cycle, Timezone: plan.Timezone, AssignedAt: time.Now().Unix(), Revision: randomToken(12)}
 			u.Quota, u.VLESS, u.HY2 = plan.Quota, plan.VLESS, plan.HY2
 			u.Expires = 0
 			if plan.ValidDays > 0 {

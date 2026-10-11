@@ -54,6 +54,10 @@ func restorePreviousPlan(r *Record, now int64) bool {
 	if r.Entitlement == nil {
 		return false
 	}
+	// Always restore the snapshot, including an explicitly empty map. Leaving
+	// the active package's rates in place when the previous package had none
+	// would silently keep charging the wrong multiplier after restoration.
+	r.Entitlement.NodeRates = cloneNodeRates(slot.NodeRates)
 	r.NodeGroupIDs = nil
 	r.Quota, r.VLESS, r.HY2 = slot.Quota, slot.VLESS, slot.HY2
 	if slot.Expires == 0 {

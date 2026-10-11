@@ -42,6 +42,11 @@ type MountUser struct {
 	PeriodID   string   `json:"period_id"`
 	UserID     int64    `json:"user_id"`
 	NodeIDs    []string `json:"node_ids"`
+	// NodeRates carries the active package overrides to the child runtime.
+	// Mounted identities do not retain the master's entitlement, so without
+	// this field the child would display one multiplier and charge another.
+	NodeRates  map[string]int64 `json:"node_rates,omitempty"`
+	RateRevision string  `json:"rate_revision,omitempty"`
 	Generation string   `json:"generation"`
 	Quota      int64    `json:"quota"`
 	Expires    int64    `json:"expires"`
