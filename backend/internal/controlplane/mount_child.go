@@ -301,7 +301,7 @@ func (a *App) applyMountSync(tokenID string, in MountSync, catalog MountCatalog)
 			r.Mount.LeaseUntil = deadline
 			r.Mount.Revision = in.Sequence
 			r.Mount.NodeIDs = append([]string{}, u.NodeIDs...)
-			if u.RateRevision != "" || len(u.NodeRates) > 0 {
+			if len(u.NodeRates) > 0 {
 				r.Entitlement = &domain.Entitlement{Revision: u.RateRevision, NodeRates: cloneNodeRates(u.NodeRates)}
 			} else {
 				// A later sync may remove the package override; do not leave the

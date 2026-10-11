@@ -34,4 +34,3 @@ func TestValidatePlanAcceptsCanonicalMountedRateKey(t *testing.T) {
 		t.Fatalf("canonical mounted node rate rejected: %v", err)
 	}
 }
-

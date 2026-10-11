@@ -66,4 +66,3 @@ func TestAccountUsesEntitlementNodeRateAndRevision(t *testing.T) {
 		t.Fatalf("missing entitlement revision in usage rows: %+v", rows)
 	}
 }
-

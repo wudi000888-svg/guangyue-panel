@@ -37,4 +37,3 @@ func TestMountedPlanRateIsAppliedByChildMeter(t *testing.T) {
 		t.Fatalf("mounted traffic was charged at the default rate: %#v", current.Meter)
 	}
 }
-

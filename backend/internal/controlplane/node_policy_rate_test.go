@@ -20,4 +20,3 @@ func TestRestorePreviousPlanClearsNodeRateOverride(t *testing.T) {
 		t.Fatalf("stale node-rate override survived restore: %+v", r.Entitlement)
 	}
 }
-
