@@ -1,0 +1,25 @@
+{
+  "theme": "Pearl River Night",
+  "site": "https://ip.minminlove.top",
+  "verified_at": "2026-10-11",
+  "files": [
+    {
+      "path": "assets/pearl-river-theme.css",
+      "source": "/assets/pearl-river-theme.css",
+      "bytes": 11429,
+      "sha256": "77b8f847be949f2455d008aad88d13b08fde99aa45f85b3717abdc4f06139dd5"
+    },
+    {
+      "path": "design/pearl-river-night.png",
+      "source": "/design/pearl-river-night.png",
+      "bytes": 1895925,
+      "sha256": "7d3d92baa450714d6a3bc9f08c15262f0e7bc3cc22c31c4e4a1e77d82053ac05"
+    },
+    {
+      "path": "design/moon-seal-theme.svg",
+      "source": "/design/moon-seal-theme.svg",
+      "bytes": 370,
+      "sha256": "26ca5f5f0f2310499d53dbe6d30e02ed0f718a0de9b32cc929afb3ac6b3873d9"
+    }
+  ]
+}

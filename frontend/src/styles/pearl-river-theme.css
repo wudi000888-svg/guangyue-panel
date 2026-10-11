@@ -1,0 +1,249 @@
+/* Pearl River Night theme: visual layer only. */
+:root {
+  --canvas: #e7edf5;
+  --bg: var(--canvas);
+  --surface: rgba(249, 251, 255, 0.94);
+  --surface-raised: rgba(239, 245, 253, 0.96);
+  --surface-soft: rgba(247, 250, 255, 0.92);
+  --surface-muted: rgba(231, 238, 247, 0.94);
+  --surface-hover: rgba(226, 236, 248, 0.98);
+  --surface-table: rgba(251, 253, 255, 0.98);
+  --text: #152238;
+  --secondary: #52637c;
+  --muted: #6c7d94;
+  --border: rgba(37, 63, 96, 0.18);
+  --input: rgba(246, 249, 253, 0.98);
+  --input-bg: var(--input);
+  --input-border: rgba(61, 91, 126, 0.34);
+  --accent: #285fa9;
+  --accent-text: #214f8d;
+  --accent-soft: rgba(40, 95, 169, 0.12);
+  --accent-contrast: #ffffff;
+  --green: #1e6645;
+  --red: #ab303e;
+  --warning: #805200;
+  --info: #2c6794;
+  --success: #1e6645;
+  --danger: var(--red);
+  --overlay: rgba(11, 18, 32, 0.54);
+  --success-soft: rgba(30, 102, 69, 0.12);
+  --danger-soft: rgba(171, 48, 62, 0.1);
+  --warning-soft: rgba(128, 82, 0, 0.11);
+  --info-soft: rgba(44, 103, 148, 0.1);
+  --nav-bg: rgba(12, 20, 34, 0.96);
+  --nav-text: #d7e1ee;
+  --nav-muted: #aab8cc;
+  --nav-selected: #f1f6fd;
+  --nav-hover: rgba(131, 185, 255, 0.08);
+  --nav-active: rgba(131, 185, 255, 0.16);
+  --nav-border: rgba(185, 204, 231, 0.16);
+  --topbar-bg: rgba(15, 24, 40, 0.9);
+  --gy-night: #0b1220;
+  --gy-night-deep: #101827;
+  --gy-moon: #d6c097;
+  --gy-jade: #285fa9;
+  --gy-cinnabar: #ab303e;
+  --gy-seal: var(--gy-cinnabar);
+  --gy-bronze: #80602d;
+  --gy-gold: #80602d;
+  --gy-ink: var(--text);
+  --gy-paper: #f4f8fc;
+  --shadow-card: 0 12px 30px rgba(24, 47, 79, 0.12);
+  --shadow-popover: 0 18px 50px rgba(12, 25, 46, 0.24);
+  --gy-shadow: var(--shadow-card);
+  --gy-focus: 0 0 0 3px rgba(40, 95, 169, 0.24);
+  --wallpaper-overlay: linear-gradient(90deg, rgba(232, 239, 248, 0.91) 0%, rgba(232, 239, 248, 0.82) 38%, rgba(232, 239, 248, 0.72) 100%), linear-gradient(180deg, rgba(224, 234, 245, 0.42), rgba(224, 234, 245, 0.78));
+  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --canvas: #0b1220;
+  --bg: var(--canvas);
+  --surface: rgba(21, 31, 49, 0.9);
+  --surface-raised: rgba(27, 40, 61, 0.96);
+  --surface-soft: rgba(21, 31, 49, 0.84);
+  --surface-muted: rgba(31, 45, 68, 0.94);
+  --surface-hover: rgba(33, 50, 76, 0.98);
+  --surface-table: rgba(18, 28, 44, 0.97);
+  --text: #eaf0f7;
+  --secondary: #b5c3d6;
+  --muted: #96a7bd;
+  --border: rgba(185, 204, 231, 0.16);
+  --input: rgba(12, 21, 35, 0.96);
+  --input-bg: var(--input);
+  --input-border: rgba(185, 204, 231, 0.24);
+  --accent: #83b9ff;
+  --accent-text: #a9ceff;
+  --accent-soft: rgba(131, 185, 255, 0.16);
+  --accent-contrast: #08182d;
+  --green: #9ae0bc;
+  --red: #ffabb0;
+  --warning: #f4cc83;
+  --info: #a9d0f2;
+  --success: #9ae0bc;
+  --danger: var(--red);
+  --overlay: rgba(4, 9, 18, 0.76);
+  --success-soft: rgba(67, 149, 105, 0.18);
+  --danger-soft: rgba(153, 61, 76, 0.22);
+  --warning-soft: rgba(164, 112, 46, 0.2);
+  --info-soft: rgba(60, 108, 151, 0.22);
+  --nav-bg: rgba(12, 20, 34, 0.96);
+  --nav-text: #dce8f7;
+  --nav-muted: #aab8cc;
+  --nav-selected: #f3f7fd;
+  --nav-hover: rgba(131, 185, 255, 0.08);
+  --nav-active: rgba(131, 185, 255, 0.16);
+  --nav-border: rgba(185, 204, 231, 0.16);
+  --topbar-bg: rgba(15, 24, 40, 0.9);
+  --gy-night: #0b1220;
+  --gy-night-deep: #101827;
+  --gy-moon: #d6c097;
+  --gy-jade: #83b9ff;
+  --gy-cinnabar: #ffabb0;
+  --gy-seal: var(--gy-cinnabar);
+  --gy-bronze: #d6c097;
+  --gy-gold: #d6c097;
+  --gy-ink: var(--text);
+  --gy-paper: #eaf0f7;
+  --shadow-card: 0 14px 34px rgba(0, 0, 0, 0.2);
+  --shadow-popover: 0 18px 52px rgba(0, 0, 0, 0.46);
+  --gy-shadow: var(--shadow-card);
+  --gy-focus: 0 0 0 3px rgba(131, 185, 255, 0.28);
+  --wallpaper-overlay: linear-gradient(90deg, rgba(7, 14, 25, 0.88) 0%, rgba(7, 14, 25, 0.72) 35%, rgba(7, 14, 25, 0.58) 60%, rgba(7, 14, 25, 0.76) 100%), linear-gradient(180deg, rgba(8, 15, 27, 0.16), rgba(8, 15, 27, 0.84));
+  color-scheme: dark;
+}
+
+html, body { background: var(--canvas); }
+body { color: var(--text); }
+
+.app-shell {
+  position: relative;
+  isolation: isolate;
+  background-color: var(--canvas);
+  background-image: var(--wallpaper-overlay), url("/design/pearl-river-night.png");
+  background-size: cover, cover;
+  background-position: center, center;
+  background-attachment: fixed, fixed;
+  background-repeat: no-repeat;
+}
+
+.main-area, .content { background: transparent; }
+.sidebar {
+  background: linear-gradient(180deg, rgba(12, 20, 34, 0.98), rgba(12, 20, 34, 0.86));
+  border-right-color: var(--nav-border);
+  box-shadow: 14px 0 32px rgba(4, 10, 20, 0.18);
+  backdrop-filter: blur(14px);
+}
+.topbar {
+  background: var(--topbar-bg);
+  border-bottom-color: var(--border);
+  box-shadow: 0 8px 22px rgba(4, 10, 20, 0.12);
+  backdrop-filter: blur(12px);
+}
+.brand-name { color: var(--nav-selected); }
+.brand-name small, .nav-caption, .sidebar-version, .sidebar-setting { color: var(--nav-muted); }
+.brand-icon { filter: drop-shadow(0 0 12px rgba(214, 192, 151, 0.18)); }
+.brand-icon img, .login-brand img, .access-brand img { content: url("/design/moon-seal-theme.svg"); }
+.workspace { background: var(--nav-hover); border-color: var(--nav-border); }
+.workspace-symbol, .workspace > svg { color: var(--gy-jade); }
+.workspace small { color: var(--nav-muted); }
+.navigation-search { color: var(--nav-muted); border-color: var(--nav-border); }
+.navigation-search:hover { color: var(--nav-selected); background: var(--nav-hover); border-color: var(--gy-jade); }
+.navigation-search kbd { border-color: var(--nav-border); color: var(--nav-selected); }
+.nav-group button { color: var(--nav-text); }
+.nav-group button:hover, .sidebar-setting:hover { color: var(--nav-selected); background: var(--nav-hover); }
+.nav-group button.selected, .nav-group .nav-entry.selected {
+  color: var(--nav-selected);
+  background: linear-gradient(90deg, rgba(131, 185, 255, 0.18), rgba(131, 185, 255, 0.08));
+  box-shadow: inset 3px 0 var(--gy-jade), inset 0 0 0 1px rgba(131, 185, 255, 0.08);
+}
+.nav-group button.selected svg, .nav-group .nav-entry.selected svg { color: var(--gy-jade); }
+.sidebar-bottom { border-top-color: var(--nav-border); }
+.sidebar .version-badge { background: var(--nav-hover); color: var(--nav-text); }
+
+button { border-color: var(--input-border); background: var(--surface); color: var(--secondary); }
+button:hover { background: var(--surface-hover); border-color: var(--accent); color: var(--text); }
+button.primary, .primary { background: var(--accent); border-color: var(--accent); color: var(--accent-contrast); box-shadow: 0 8px 18px rgba(40, 95, 169, 0.18); }
+button.primary:hover, .primary:hover { background: color-mix(in srgb, var(--accent) 88%, var(--text)); color: var(--accent-contrast); }
+.icon:hover { background: var(--accent-soft); color: var(--accent-text); }
+input, select, textarea { background: var(--input); border-color: var(--input-border); color: var(--text); }
+input:focus, select:focus, textarea:focus, .search:focus-within { border-color: var(--accent); box-shadow: var(--gy-focus); }
+input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
+
+.panel, .chart-card, .network-card, .settings-card, .node-card, .plan-card, .site-card,
+.metrics > div, .import-report, .resource-membership-notice, .mobile-tools-panel {
+  background: var(--surface);
+  border-color: var(--border);
+  box-shadow: var(--gy-shadow);
+}
+.metrics > div { min-height: 130px; }
+.metric-icon { background: var(--accent-soft); color: var(--accent-text); }
+.section-heading, .page-heading { color: var(--text); }
+.ui-page-heading p, .page-context, .page-breadcrumb, .table-caption { color: var(--muted); }
+.header-balance { background: var(--surface-raised); border-color: var(--border); color: var(--accent-text); }
+.avatar { background: var(--accent-soft); color: var(--accent-text); }
+.edition-badge, .count, .tag, .badge { background: var(--surface-raised); border-color: var(--border); color: var(--secondary); }
+.success, .ui-status-success { color: var(--success); background: var(--success-soft); }
+.warning, .ui-status-warning { color: var(--warning); background: var(--warning-soft); }
+.danger, .ui-status-danger { color: var(--danger); background: var(--danger-soft); }
+.info, .ui-status-info { color: var(--info); background: var(--info-soft); }
+
+.table-scroll, .table-wrap {
+  background: var(--surface-table);
+  border-color: var(--border);
+  box-shadow: 0 14px 34px rgba(4, 10, 20, 0.12);
+}
+table { background: var(--surface-table); }
+th { background: var(--surface-raised); color: var(--secondary); border-bottom-color: var(--border); }
+td { color: var(--secondary); border-bottom-color: var(--border); }
+td strong { color: var(--text); }
+tbody tr:hover { background: var(--surface-hover); }
+.adaptive-table tbody tr { background: var(--surface-table); border-color: var(--border); }
+.adaptive-table td:first-child, .adaptive-table td:last-child:not(:first-child) { border-color: var(--border); }
+.row-action-button:hover, .text-button:hover, .link-button:hover { background: var(--accent-soft); color: var(--accent-text); }
+
+.modal-shade, .message-overlay, .navigation-shade, .nav-shade, .mobile-tools-shade {
+  background: var(--overlay);
+  backdrop-filter: blur(5px);
+}
+.modal, .compose-card, .version-popover, .navigation-palette, .message-list, .message-detail,
+.mobile-tools-panel {
+  background: var(--surface-raised);
+  border-color: var(--border);
+  color: var(--text);
+  box-shadow: var(--shadow-popover);
+}
+.modal-head, .modal-footer, .compose-card > footer, .message-row { border-color: var(--border); }
+.navigation-palette-input { border-bottom-color: var(--border); }
+.navigation-results > button.active { background: var(--accent-soft); }
+.navigation-result-icon { background: var(--surface); color: var(--accent-text); }
+.toast { background: var(--nav-bg); border-color: var(--nav-border); color: var(--nav-selected); box-shadow: var(--shadow-popover); }
+
+.login-screen { background: var(--canvas); }
+.login-scene {
+  background-color: var(--gy-night);
+  background-image: linear-gradient(90deg, rgba(7, 14, 25, 0.68), rgba(7, 14, 25, 0.24)), url("/design/pearl-river-night.png");
+  background-size: cover;
+  background-position: center;
+}
+.login-art { opacity: 0; pointer-events: none; }
+.login-scene:after { background: linear-gradient(180deg, rgba(7, 14, 25, 0.16), rgba(7, 14, 25, 0.74)); }
+.login-entry { background: var(--surface-soft); }
+.login-brand, .login-form h1 { color: var(--text); }
+.login-form .eyebrow, .courtyard-kicker { color: var(--gy-moon); }
+.login-notice { background: var(--accent-soft); color: var(--secondary); border-color: var(--border); }
+
+.mobile-quick-nav { background: var(--nav-bg); border-top-color: var(--nav-border); box-shadow: 0 -8px 20px rgba(4, 10, 20, 0.18); }
+.mobile-quick-nav button { color: var(--nav-muted); }
+.mobile-quick-nav button.selected { background: var(--nav-active); color: var(--nav-selected); }
+.mobile-menu, .mobile-tools-button { color: var(--nav-selected); }
+
+* { scrollbar-color: var(--accent) var(--surface-raised); }
+*:focus-visible { outline-color: var(--accent); }
+
+@media (max-width: 900px) {
+  .topbar { background: var(--topbar-bg); }
+  .sidebar { background: linear-gradient(180deg, rgba(12, 20, 34, 0.99), rgba(12, 20, 34, 0.96)); }
+  .content { background: transparent; }
+}
