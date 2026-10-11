@@ -364,7 +364,7 @@ func TestBusinessOverallocatedGrantsUseGlobalRemainingAtRuntime(t *testing.T) {
 	u.Meter.Upload = u.Meter.BaseUpload + 1000
 	a.store.save(&u)
 	first, _ = a.store.businessSite(first.ID)
-	snapshot, err := a.businessSnapshot(&first)
+	snapshot, err = a.businessSnapshot(&first)
 	if err != nil {
 		t.Fatal(err)
 	}
