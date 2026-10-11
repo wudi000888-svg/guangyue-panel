@@ -174,6 +174,9 @@ func (a *App) entitlementAPI(w http.ResponseWriter, r *http.Request, actor Recor
 			_, e = tx.Exec("INSERT INTO plan_versions(plan_id,version,doc) VALUES(?,?,?)", p.ID, p.Version, b)
 		}
 		if e == nil {
+			_, e = syncActivePlanEntitlements(tx, p)
+		}
+		if e == nil {
 			e = tx.Commit()
 		}
 		if e != nil {
@@ -181,6 +184,7 @@ func (a *App) entitlementAPI(w http.ResponseWriter, r *http.Request, actor Recor
 			return
 		}
 		a.store.audit(actor.Username, "save_plan", p.ID)
+		a.status = "pending"
 		a.wakeMountSync()
 		jsonResponse(w, 200, p)
 		return

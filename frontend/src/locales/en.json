@@ -2547,6 +2547,8 @@
   "基本信息": "Basic information",
   "套餐已删除": "Plan deleted",
   "套餐设置已保存": "Plan settings saved",
+  "套餐设置已保存，当前成员订阅会立即同步": "Plan settings saved. Current member subscriptions sync immediately.",
+  "保存后会立即同步当前生效成员；额度、到期时间和排队套餐快照保持不变。": "Active members sync immediately after saving; quota, expiry and queued-plan snapshots stay unchanged.",
   "套餐销售、支付与邮件服务": "Plan sales, payments and email",
   "子站已移除": "Subsite removed",
   "子站已连接，可开始挂载节点。": "Subsite connected. You can now mount its nodes.",
