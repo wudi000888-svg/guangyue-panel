@@ -107,8 +107,15 @@ func TestAutomaticMountBudgetsRespectOtherSitesAndOfflineReservations(t *testing
 	if err := f.master.refreshMountGrants(&s); err != nil {
 		t.Fatal(err)
 	}
-	if siteReservation(s, f.user.ID) != 333 {
-		t.Fatal("pending configured grant consumed quota", siteReservation(s, f.user.ID))
+	var currentQuota int64
+	for _, g := range s.Grants {
+		if g.UserID == f.user.ID {
+			currentQuota = g.Quota
+			break
+		}
+	}
+	if currentQuota != 333 || siteReservation(s, f.user.ID) != 500 {
+		t.Fatal("pending configured grant consumed quota", currentQuota, siteReservation(s, f.user.ID))
 	}
 	// Restore the normal empty grant before exercising the fair-share path.
 	s.Grants = nil
