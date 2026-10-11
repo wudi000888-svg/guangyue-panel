@@ -35,7 +35,7 @@ def purchase_plan(call, member, password, plan, user_id, bundle):
     assert worker.returncode == 0 and worker.stdout.startswith(b'\x89PNG'), 'installed image worker failed'
     image = member('/support/upload', {'name': 'screenshot.png', 'mime': 'image/png', 'data': base64.b64encode(png).decode()})
     ticket = member('/support/tickets', {'title': 'Order support', 'category': 'order', 'body': 'CI support fixture', 'order_id': order['id'], 'attachments': [image['id']], 'operation_id': secrets.token_hex(16)})
-    call('/support/reply', {'id': ticket['id'], 'body': 'Internal CI note', 'internal': True, 'operation_id': secrets.token_hex(16)})
+    call('/support/reply', {'id': ticket['id'], 'revision': ticket['revision'], 'body': 'Internal CI note', 'internal': True, 'operation_id': secrets.token_hex(16)})
     if member('/state')['me']['role'] != 'owner':
         assert all(not row['internal'] for row in member('/support/ticket?id=' + ticket['id'])['replies']), 'private support note leaked'
     call('/commerce/settings', {'settings': settings, 'password': password})
