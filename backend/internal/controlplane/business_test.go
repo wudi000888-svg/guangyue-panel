@@ -363,7 +363,9 @@ func TestBusinessOverallocatedGrantsUseGlobalRemainingAtRuntime(t *testing.T) {
 	// snapshot. A stale configured ceiling must not keep nodes visible after
 	// the issued allowance has been consumed.
 	first, _ = a.store.businessSite(first.ID)
+	first.Info = &BusinessInfo{Protocol: 2, VLESSHost: "vless.test", HY2Host: "hy.test", RealitySNI: "reality.test", RealityPublic: "public", ShortID: "12345678"}
 	first.Applied = first.Desired
+	first.LeaseUntil = time.Now().Add(time.Hour).Unix()
 	first.SentGrants = []BusinessGrant{{UserID: u.ID, Quota: 200}}
 	first.Usage[u.ID] = BusinessUsage{Upload: 200, VLESS: 200}
 	if err := a.store.saveBusinessSite(first); err != nil {
