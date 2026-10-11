@@ -335,6 +335,31 @@ func TestBusinessOverallocatedGrantsUseGlobalRemainingAtRuntime(t *testing.T) {
 		}(), err)
 	}
 
+	// Pull-site child meters are cumulative across snapshots. After the first
+	// site has consumed 400 bytes, the next snapshot must keep its cumulative
+	// ceiling at 800, rather than replacing it with the 400 bytes left after
+	// the other site's issued reservation.
+	first, _ = a.store.businessSite(first.ID)
+	first.Usage[u.ID] = BusinessUsage{Upload: 400, VLESS: 400}
+	if err := a.store.saveBusinessSite(first); err != nil {
+		t.Fatal(err)
+	}
+	u, _ = a.store.record(u.ID)
+	u.Meter.Upload = u.Meter.BaseUpload + 400
+	if err := a.store.save(&u); err != nil {
+		t.Fatal(err)
+	}
+	first, _ = a.store.businessSite(first.ID)
+	snapshot, err := a.businessSnapshot(&first)
+	if err != nil || len(snapshot.Users) != 1 || snapshot.Users[0].User.Quota != 800 {
+		t.Fatalf("repeated snapshot did not preserve cumulative site ceiling: users=%d quota=%d err=%v", len(snapshot.Users), func() int64 {
+			if len(snapshot.Users) == 0 {
+				return 0
+			}
+			return snapshot.Users[0].User.Quota
+		}(), err)
+	}
+
 	u, _ = a.store.record(u.ID)
 	u.Meter.Upload = u.Meter.BaseUpload + 1000
 	a.store.save(&u)

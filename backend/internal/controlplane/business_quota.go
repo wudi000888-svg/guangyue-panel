@@ -113,10 +113,10 @@ func (a *App) effectiveBusinessGrant(user Record, site BusinessSite, grant Busin
 	return grant, true, nil
 }
 
-// effectiveBusinessSnapshotGrant is used by pull-based business sites. Their
-// delegated meter is rebased to zero on every snapshot, so the issued quota is
-// an incremental allowance for the new lease rather than the site's cumulative
-// watermark used by mounted sites.
+// effectiveBusinessSnapshotGrant is used by pull-based business sites. The
+// child keeps its consumed meter when a new snapshot is applied, so the quota
+// sent here is a cumulative ceiling. The configured grant is capped by the
+// site's usage plus the remaining global allowance.
 func (a *App) effectiveBusinessSnapshotGrant(user Record, site BusinessSite, grant BusinessGrant) (BusinessGrant, bool, error) {
 	if grant.UserID != user.ID {
 		return grant, false, nil
@@ -135,10 +135,14 @@ func (a *App) effectiveBusinessSnapshotGrant(user Record, site BusinessSite, gra
 	if remaining <= 0 {
 		return grant, false, nil
 	}
-	if grant.Quota == 0 || grant.Quota > remaining {
-		grant.Quota = remaining
+	maxQuota, err := domain.AddCounter(used, remaining)
+	if err != nil {
+		return grant, false, err
 	}
-	if grant.Quota <= 0 {
+	if grant.Quota == 0 || grant.Quota > maxQuota {
+		grant.Quota = maxQuota
+	}
+	if grant.Quota <= used {
 		return grant, false, nil
 	}
 	return grant, true, nil
