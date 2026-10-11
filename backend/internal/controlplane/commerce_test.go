@@ -338,6 +338,94 @@ func TestCommerceRefundRequiresMemberRequestAndOwnerApproval(t *testing.T) {
 	assertLedger(t, a)
 }
 
+func TestCommerceRefundDecisionActionsAreIdempotentAndNotify(t *testing.T) {
+	a := testApp(t)
+	owner := testUser(t, a, "owner", "owner")
+	user := testUser(t, a, "member", "user")
+	other := testUser(t, a, "other", "user")
+	offer := commerceOffer(t, a, owner)
+	fundWallet(t, a, owner, user, "3000")
+	order := newOrder(t, a, user, offer)
+	orderDo(t, a, user, order, "confirm")
+	if e := a.commerceWork(time.Now().Unix()); e != nil {
+		t.Fatal(e)
+	}
+	order, _ = a.store.order(order.ID)
+
+	if w := req(t, a, user, "POST", "/api/commerce/orders/action", object{"id": order.ID, "action": "request_refund", "operation_id": randomToken(24)}); w.Code != 200 {
+		t.Fatalf("refund request failed: %d %s", w.Code, w.Body.String())
+	}
+	if w := req(t, a, other, "POST", "/api/commerce/orders/action", object{"id": order.ID, "action": "cancel_refund", "operation_id": randomToken(24)}); w.Code != 403 {
+		t.Fatalf("another member cancelled the refund request: %d %s", w.Code, w.Body.String())
+	}
+	cancelID := randomToken(24)
+	cancelInput := object{"id": order.ID, "action": "cancel_refund", "operation_id": cancelID}
+	firstCancel := req(t, a, user, "POST", "/api/commerce/orders/action", cancelInput)
+	if firstCancel.Code != 200 {
+		t.Fatalf("cancel refund failed: %d %s", firstCancel.Code, firstCancel.Body.String())
+	}
+	secondCancel := req(t, a, user, "POST", "/api/commerce/orders/action", cancelInput)
+	if secondCancel.Code != 200 || secondCancel.Body.String() != firstCancel.Body.String() {
+		t.Fatalf("cancel refund was not idempotent: first=%d second=%d", firstCancel.Code, secondCancel.Code)
+	}
+	var ownerCancelMessages int
+	if e := a.store.db.QueryRow("SELECT COUNT(*) FROM messages m JOIN message_recipients r ON r.message_id=m.id WHERE r.user_id=? AND m.title=?", owner.ID, "退款申请已取消").Scan(&ownerCancelMessages); e != nil {
+		t.Fatal(e)
+	}
+	if ownerCancelMessages != 1 {
+		t.Fatalf("cancel replay duplicated owner notification: %d", ownerCancelMessages)
+	}
+	var cancelAudits int
+	if e := a.store.db.QueryRow("SELECT COUNT(*) FROM audit WHERE actor=? AND action=? AND target=?", user.Username, "order-cancel_refund", order.ID).Scan(&cancelAudits); e != nil {
+		t.Fatal(e)
+	}
+	if cancelAudits != 1 {
+		t.Fatalf("cancel replay duplicated audit: %d", cancelAudits)
+	}
+
+	// A new request can be made after cancellation.  The rejection reason is
+	// normalized before the idempotency fingerprint, so whitespace-only changes
+	// on a retry still replay the first decision.
+	if w := req(t, a, user, "POST", "/api/commerce/orders/action", object{"id": order.ID, "action": "request_refund", "operation_id": randomToken(24)}); w.Code != 200 {
+		t.Fatalf("second refund request failed: %d %s", w.Code, w.Body.String())
+	}
+	rejectID := randomToken(24)
+	rejectInput := object{"id": order.ID, "action": "reject_refund", "reason": "权益已开始使用", "password": commerceTestPassword, "operation_id": rejectID}
+	firstReject := req(t, a, owner, "POST", "/api/commerce/orders/action", rejectInput)
+	if firstReject.Code != 200 {
+		t.Fatalf("reject refund failed: %d %s", firstReject.Code, firstReject.Body.String())
+	}
+	retryReject := req(t, a, owner, "POST", "/api/commerce/orders/action", object{"id": order.ID, "action": "reject_refund", "reason": "  权益已开始使用  ", "password": commerceTestPassword, "operation_id": rejectID})
+	if retryReject.Code != 200 || retryReject.Body.String() != firstReject.Body.String() {
+		t.Fatalf("reject refund was not idempotent: first=%d second=%d", firstReject.Code, retryReject.Code)
+	}
+	var rejectionEvents int
+	if e := a.store.db.QueryRow("SELECT COUNT(*) FROM commerce_events WHERE id LIKE ?", "order:"+order.ID+":refund_rejected:%").Scan(&rejectionEvents); e != nil {
+		t.Fatal(e)
+	}
+	if rejectionEvents != 1 {
+		t.Fatalf("reject replay duplicated member event: %d", rejectionEvents)
+	}
+	if e := a.commerceNotifications(time.Now().Unix()); e != nil {
+		t.Fatal(e)
+	}
+	var memberDecisionMessages int
+	if e := a.store.db.QueryRow("SELECT COUNT(*) FROM messages m JOIN message_recipients r ON r.message_id=m.id WHERE r.user_id=? AND m.body LIKE ?", user.ID, "%退款申请已拒绝%").Scan(&memberDecisionMessages); e != nil {
+		t.Fatal(e)
+	}
+	if memberDecisionMessages != 1 {
+		t.Fatalf("member rejection notification missing or duplicated: %d", memberDecisionMessages)
+	}
+	var rejectionAudits int
+	if e := a.store.db.QueryRow("SELECT COUNT(*) FROM audit WHERE actor=? AND action=? AND target LIKE ?", owner.Username, "order-reject_refund", order.ID+"%").Scan(&rejectionAudits); e != nil {
+		t.Fatal(e)
+	}
+	if rejectionAudits != 1 {
+		t.Fatalf("reject replay duplicated audit: %d", rejectionAudits)
+	}
+	assertLedger(t, a)
+}
+
 func TestFreeOfferAndPerUserPurchaseLimit(t *testing.T) {
 	a := testApp(t)
 	owner := testUser(t, a, "owner", "owner")
