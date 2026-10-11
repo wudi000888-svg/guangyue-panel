@@ -89,6 +89,22 @@ func TestPublicRegistrationUsesDemoPlanAndOptionalSlider(t *testing.T) {
 		t.Fatal("proof reused")
 	}
 }
+
+func TestRegistrationDoesNotRecreateDeletedDemoPlan(t *testing.T) {
+	a := testApp(t)
+	owner := testUser(t, a, "owner", "owner")
+	if w := req(t, a, owner, "DELETE", "/api/plans/"+defaultDemoPlan, nil); w.Code != 200 {
+		t.Fatalf("demo deletion status=%d body=%s", w.Code, w.Body.String())
+	}
+	setRegistrationSettings(t, a, true, false)
+	if w := req(t, a, Record{}, "POST", "/api/register", signupBody("blocked-member", "")); w.Code != 409 {
+		t.Fatalf("registration without demo plan status=%d body=%s", w.Code, w.Body.String())
+	}
+	if _, err := a.store.plan(defaultDemoPlan); err == nil {
+		t.Fatal("registration recreated deleted demo plan")
+	}
+}
+
 func TestRegistrationPuzzleRejectsIncorrectExpiredAndCrossClientAttempts(t *testing.T) {
 	for _, mode := range []string{"wrong", "expired", "client", "trace"} {
 		t.Run(mode, func(t *testing.T) {
