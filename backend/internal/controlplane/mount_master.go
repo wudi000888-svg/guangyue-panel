@@ -316,6 +316,7 @@ func (a *App) syncMountSiteLocked(ctx context.Context, id string) (resultErr err
 			}
 			g = issued
 			nodes := []string{}
+			nodeRates := map[string]int64{}
 			for _, m := range v.Mount.Nodes {
 				n, ok := mountSource(catalog, m.NodeID)
 				if !ok || !m.Enabled || !n.Enabled {
@@ -324,13 +325,21 @@ func (a *App) syncMountSiteLocked(ctx context.Context, id string) (resultErr err
 				n = mountNodePolicy(v.ID, m, n)
 				if nodeGroupAllowed(u, n) && (n.Protocol == "vless" && u.VLESS || n.Protocol == "hy2" && u.HY2) {
 					nodes = append(nodes, n.ID)
+					effective := planNodePolicy(u.Entitlement, n)
+					if effective.RateMilli != n.RateMilli {
+						nodeRates[n.ID] = effective.RateMilli
+					}
 				}
 			}
 			if len(nodes) == 0 {
 				continue
 			}
 			sort.Strings(nodes)
-			request.Users = append(request.Users, MountUser{UserID: u.ID, NodeIDs: nodes, Generation: mountGeneration(u), PeriodID: u.Meter.PeriodID, Quota: g.Quota, Expires: u.Expires, VLESS: u.VLESS, HY2: u.HY2})
+			rateRevision := ""
+			if u.Entitlement != nil {
+				rateRevision = u.Entitlement.Revision
+			}
+			request.Users = append(request.Users, MountUser{UserID: u.ID, NodeIDs: nodes, NodeRates: nodeRates, RateRevision: rateRevision, Generation: mountGeneration(u), PeriodID: u.Meter.PeriodID, Quota: g.Quota, Expires: u.Expires, VLESS: u.VLESS, HY2: u.HY2})
 			grants = append(grants, g)
 			v.PeriodRules[businessUsageKey(u.ID)+"/"+u.Meter.PeriodID] = true
 		}

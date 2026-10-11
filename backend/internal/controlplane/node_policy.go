@@ -3,6 +3,7 @@ package controlplane
 import (
 	"github.com/wudi000888-svg/guangyue-panel/backend/internal/domain"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -14,6 +15,7 @@ func cloneEntitlement(e *domain.Entitlement) *domain.Entitlement {
 	v := *e
 	v.GroupIDs = append([]string{}, e.GroupIDs...)
 	v.NodeIDs = append([]string{}, e.NodeIDs...)
+	v.NodeRates = cloneNodeRates(e.NodeRates)
 	return &v
 }
 
@@ -34,6 +36,7 @@ func pauseCurrentPlan(r *Record, now int64) {
 	}
 	slot := domain.PlanSlot{
 		Entitlement: cloneEntitlement(r.Entitlement),
+		NodeRates:   cloneNodeRates(r.Entitlement.NodeRates),
 		Quota:       r.Quota,
 		Expires:     r.Expires,
 		PausedAt:    now,
@@ -54,6 +57,10 @@ func restorePreviousPlan(r *Record, now int64) bool {
 	if r.Entitlement == nil {
 		return false
 	}
+	// Always restore the snapshot, including an explicitly empty map. Leaving
+	// the active package's rates in place when the previous package had none
+	// would silently keep charging the wrong multiplier after restoration.
+	r.Entitlement.NodeRates = cloneNodeRates(slot.NodeRates)
 	r.NodeGroupIDs = nil
 	r.Quota, r.VLESS, r.HY2 = slot.Quota, slot.VLESS, slot.HY2
 	if slot.Expires == 0 {
@@ -87,13 +94,37 @@ func restorePreviousPlan(r *Record, now int64) bool {
 func assignPlan(r *Record, p Plan, now int64) {
 	r.NodeGroupIDs = nil
 	r.InitMeter("period-"+randomToken(12), now)
-	r.Entitlement = &domain.Entitlement{PlanID: p.ID, Version: p.Version, Name: p.Name, GroupIDs: append([]string{}, p.GroupIDs...), NodeIDs: append([]string{}, p.NodeIDs...), Cycle: p.Cycle, Timezone: p.Timezone, AssignedAt: now, Revision: randomToken(12)}
+	r.Entitlement = &domain.Entitlement{PlanID: p.ID, Version: p.Version, Name: p.Name, GroupIDs: append([]string{}, p.GroupIDs...), NodeIDs: append([]string{}, p.NodeIDs...), NodeRates: cloneNodeRates(p.NodeRates), Cycle: p.Cycle, Timezone: p.Timezone, AssignedAt: now, Revision: randomToken(12)}
 	r.Quota, r.VLESS, r.HY2 = p.Quota, p.VLESS, p.HY2
 	r.Expires = 0
 	if p.ValidDays > 0 {
 		r.Expires = now + int64(p.ValidDays)*86400
 	}
 	r.Meter.End, _ = domain.NextPeriod(now, p.Cycle, p.Timezone)
+}
+
+// planNodePolicy applies a package-scoped multiplier without mutating the
+// persisted node policy. The plan key is preferred, while the plain node ID is
+// accepted for older plans that stored local selections before qualified keys
+// were introduced.
+func planNodePolicy(e *domain.Entitlement, n Node) Node {
+	if e == nil || len(e.NodeRates) == 0 {
+		return n
+	}
+	key := planNodeKey(n)
+	rate, ok := e.NodeRates[key]
+	if !ok {
+		rate, ok = e.NodeRates[n.ID]
+		if ok {
+			key = n.ID
+		}
+	}
+	if !ok || rate == n.RateMilli {
+		return n
+	}
+	n.RateMilli = rate
+	n.RateRevision = n.RateRevision + ":plan:" + e.Revision + ":" + digest(key+":"+strconv.FormatInt(rate, 10))
+	return n
 }
 
 func (a *App) nodePolicyAPI(w http.ResponseWriter, r *http.Request, actor Record) {

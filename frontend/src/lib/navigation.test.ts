@@ -24,6 +24,12 @@ describe('shell navigation', () => {
     expect(groupNavigation(items, true)[0]?.items.map(item => item.id)).toEqual(['nodes', 'subsite-nodes', 'ips']);
   });
 
+  it('keeps the node square in the member service section', () => {
+    const items = ['subscription', 'node-square', 'shop', 'orders', 'settings'].map(id => ({ id, label: id }));
+    const groups = groupNavigation(items, false);
+    expect(groups[0]?.items.map(item => item.id)).toEqual(['subscription', 'node-square', 'shop']);
+  });
+
   it('searches translated labels, groups, descriptions and route names without empty-query loss', () => {
     const items = [
       { id: 'nodes', label: '本地节点', group: '节点与站点', description: '管理接入节点' },

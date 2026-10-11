@@ -146,7 +146,7 @@ watch(subURL, async (v) => {
     const image = await QRCode.toDataURL(v, {
         width: 240,
         margin: 2,
-        color: { dark: "#172c29", light: "#ffffff" },
+        color: { dark: "#0b1220", light: "#ffffff" },
       });
     if (sequence === subscriptionQRSequence && subURL.value === v) qr.value = image;
   } catch {

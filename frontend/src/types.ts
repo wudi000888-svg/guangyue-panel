@@ -8,9 +8,9 @@ export type SiteSettings = {
 };
 
 export type QuotaMeter = {period_id:string;start:number;end:number;pending_reset:boolean;upload:number;download:number;base_upload:number;base_download:number;raw_base_upload:number;raw_base_download:number};
-export type Entitlement = {plan_id:string;version:number;name:string;group_ids:string[];node_ids:string[];cycle:string;timezone:string;assigned_at:number;revision:string};
-export type PlanSlot = {entitlement:Entitlement;quota:number;expires:number;paused_at:number;vless:boolean;hy2:boolean;meter?:QuotaMeter};
-export type Plan = {id:string;version:number;name:string;description:string;category:string;notes:string;archived:boolean;sort:number;quota:number;valid_days:number;cycle:string;timezone:string;group_ids:string[];node_ids:string[];vless:boolean;hy2:boolean;price?:string;system?:boolean;kind?:string};
+export type Entitlement = {plan_id:string;version:number;name:string;group_ids:string[];node_ids:string[];node_rates?:Record<string,number>;cycle:string;timezone:string;assigned_at:number;revision:string};
+export type PlanSlot = {entitlement:Entitlement;node_rates?:Record<string,number>;quota:number;expires:number;paused_at:number;vless:boolean;hy2:boolean;meter?:QuotaMeter};
+export type Plan = {id:string;version:number;name:string;description:string;category:string;notes:string;archived:boolean;sort:number;quota:number;valid_days:number;cycle:string;timezone:string;group_ids:string[];node_ids:string[];node_rates?:Record<string,number>;vless:boolean;hy2:boolean;price?:string;system?:boolean;kind?:string};
 export type NodeGroup = {id:string;name:string;description:string;scope:'private'|'public'|'subsite';enabled:boolean;sort:number;revision:string};
 export type GroupMember = {selection_key?:string;site_id:string;site_name?:string;source?:'local'|'public'|'mounted'|'business';node_id:string;name:string;protocol:string;entry_host?:string;entry_port?:number;exit_ip?:string;enabled?:boolean;status?:'ready'|'disabled'|'pending';rate_milli?:number};
 export type User = {
@@ -52,6 +52,7 @@ export type Node = {
   dns?: {mode: string; doh?: string; ipv6?: string};
 	quality?: IPQuality;
 	managed_by?: string;
+  square_visible?: boolean;
   speed?: SpeedResult;
   upstream_type?: string;
   exit_id?: string;

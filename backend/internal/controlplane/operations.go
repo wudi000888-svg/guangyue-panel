@@ -77,7 +77,12 @@ func (a *App) desiredCoreHash() (string, error) {
 		} else if u.Entitlement != nil {
 			selectedNodes = u.Entitlement.NodeIDs
 		}
-		users = append(users, object{"id": u.ID, "active": u.Active(), "vless": u.VLESS, "hy2": u.HY2, "credentials": u.Credentials, "mount_nodes": func() []string {
+		users = append(users, object{"id": u.ID, "active": u.Active(), "vless": u.VLESS, "hy2": u.HY2, "credentials": u.Credentials, "node_rates": func() map[string]int64 {
+			if u.Entitlement == nil {
+				return nil
+			}
+			return u.Entitlement.NodeRates
+		}(), "mount_nodes": func() []string {
 			if u.Mount != nil {
 				return u.Mount.NodeIDs
 			}

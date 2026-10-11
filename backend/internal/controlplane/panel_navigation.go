@@ -21,7 +21,7 @@ func sidebarDefinition(role string) (defaults, permitted []string, ok bool) {
 			[]string{"overview", "monitor", "users", "plans", "shop", "subscription", "wallet", "orders", "redeem-codes", "nodes", "subsite-nodes", "node-groups", "ips", "public", "public-nodes", "public-subscription", "fleet", "pairing", "tickets", "messages", "clients", "tasks", "system", "settings"}, true
 	case "member":
 		return []string{"subscription", "shop", "orders", "settings"},
-			[]string{"overview", "subscription", "shop", "wallet", "orders", "tickets", "messages", "clients", "settings"}, true
+			[]string{"overview", "subscription", "node-square", "shop", "wallet", "orders", "tickets", "messages", "clients", "settings"}, true
 	default:
 		return nil, nil, false
 	}

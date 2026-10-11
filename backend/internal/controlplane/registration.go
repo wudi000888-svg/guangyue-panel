@@ -91,6 +91,9 @@ func (a *App) register(w http.ResponseWriter, r *http.Request) {
 	record.InitMeter("period-"+randomToken(12), now)
 	plan, err := a.store.plan(defaultDemoPlan)
 	if err != nil {
+		// Imported or otherwise empty stores can defer bootstrap seeding. The
+		// deletion marker is honored by initDefaultPlans, so an administrator
+		// deletion is never undone by a registration attempt.
 		if seedErr := a.store.initDefaultPlans(); seedErr == nil {
 			plan, err = a.store.plan(defaultDemoPlan)
 		}

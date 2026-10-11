@@ -71,6 +71,37 @@ func TestPlanAndNodeGroupDeletionHonorsReferences(t *testing.T) {
 	}
 
 }
+
+func TestPlanDeletionKeepsAdminButAllowsDemo(t *testing.T) {
+	a := testApp(t)
+	owner := testUser(t, a, "owner", "owner")
+
+	if w := req(t, a, owner, "DELETE", "/api/plans/"+defaultAdminPlan, nil); w.Code != 400 {
+		t.Fatalf("admin plan deletion status=%d body=%s", w.Code, w.Body.String())
+	}
+	if w := req(t, a, owner, "DELETE", "/api/plans/"+defaultDemoPlan, nil); w.Code != 200 {
+		t.Fatalf("demo plan deletion status=%d body=%s", w.Code, w.Body.String())
+	}
+	if _, err := a.store.plan(defaultDemoPlan); err == nil {
+		t.Fatal("demo plan still exists after deletion")
+	}
+}
+
+func TestDeletedDemoPlanIsNotReseeded(t *testing.T) {
+	a := testApp(t)
+	owner := testUser(t, a, "owner", "owner")
+
+	if w := req(t, a, owner, "DELETE", "/api/plans/"+defaultDemoPlan, nil); w.Code != 200 {
+		t.Fatalf("demo plan deletion status=%d body=%s", w.Code, w.Body.String())
+	}
+	if err := a.store.initDefaultPlans(); err != nil {
+		t.Fatalf("reinitializing defaults: %v", err)
+	}
+	if _, err := a.store.plan(defaultDemoPlan); err == nil {
+		t.Fatal("deleted demo plan was reseeded")
+	}
+}
+
 func applyTestEntitlement(t *testing.T, a *App, owner Record, in entitlementRequest) {
 	t.Helper()
 	in.Preview = true

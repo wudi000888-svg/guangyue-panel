@@ -195,8 +195,9 @@ func (a *App) entitlementAPI(w http.ResponseWriter, r *http.Request, actor Recor
 // deletePlan intentionally performs a destructive catalog delete. Issued user
 // entitlements and order history are snapshots and remain untouched; active
 // offers for the removed plan are removed so the shop cannot sell a dangling
-// catalog entry. System plans remain protected because bootstrap depends on
-// their stable IDs.
+// catalog entry. The administrator plan remains protected because bootstrap
+// depends on its stable ID. The demo plan is an optional catalog item and may
+// be deleted; existing entitlements and order snapshots remain intact.
 func (a *App) deletePlan(w http.ResponseWriter, _ *http.Request, actor Record, id string) {
 	id = strings.TrimSpace(id)
 	if id == "" || strings.Contains(id, "/") {
@@ -204,12 +205,20 @@ func (a *App) deletePlan(w http.ResponseWriter, _ *http.Request, actor Record, i
 		return
 	}
 	p, err := a.store.plan(id)
+	if err != nil && (id == defaultAdminPlan || id == defaultDemoPlan) {
+		// Lightweight stores used for imports and tests may defer installation
+		// seeds. Materialize the protected catalog before applying a destructive
+		// delete; the demo deletion marker still prevents it from being reseeded.
+		if seedErr := a.store.initDefaultPlans(); seedErr == nil {
+			p, err = a.store.plan(id)
+		}
+	}
 	if err != nil {
 		failure(w, 404, "套餐不存在")
 		return
 	}
-	if p.System || id == defaultAdminPlan || id == defaultDemoPlan {
-		failure(w, 400, "系统预置套餐不能删除")
+	if id == defaultAdminPlan || (p.System && id != defaultDemoPlan) {
+		failure(w, 400, "管理员套餐不能删除")
 		return
 	}
 	offers, err := readDocuments[Offer](a.store, "commerce_offers")
@@ -235,6 +244,12 @@ func (a *App) deletePlan(w http.ResponseWriter, _ *http.Request, actor Record, i
 	}
 	if err == nil {
 		_, err = tx.Exec("DELETE FROM plans WHERE id=?", id)
+	}
+	if err == nil && id == defaultDemoPlan {
+		// Keep the destructive choice across restarts. The bootstrap seed is
+		// allowed to create the demo plan on first install, but must not silently
+		// restore an administrator-deleted catalog item.
+		_, err = tx.Exec("INSERT INTO meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", planDeletedMetaPrefix+defaultDemoPlan, "1")
 	}
 	if err == nil {
 		err = tx.Commit()
@@ -317,6 +332,7 @@ func (a *App) validatePlan(p *Plan) error {
 		}
 	}
 	seenNodes := map[string]bool{}
+	seenNodeCanonical := map[string]bool{}
 	selectedGroups := map[string]bool{}
 	for _, id := range p.GroupIDs {
 		selectedGroups[id] = true
@@ -336,10 +352,58 @@ func (a *App) validatePlan(p *Plan) error {
 		if !belongsToSelectedGroup {
 			return errors.New("套餐单独节点必须属于已选择的节点组")
 		}
+		canonical := planNodeKey(node)
+		if seenNodeCanonical[canonical] {
+			return errors.New("套餐单独节点重复")
+		}
 		seenNodes[id] = true
+		seenNodeCanonical[canonical] = true
 	}
 	sort.Strings(p.NodeIDs)
+	if len(p.NodeRates) > 512 {
+		return errors.New("套餐节点倍率配置过多")
+	}
+	if len(p.NodeRates) > 0 && len(p.NodeIDs) == 0 {
+		return errors.New("套餐节点倍率必须先选择组内单独节点")
+	}
+	selectedRateNodes := map[string]bool{}
+	for _, id := range p.NodeIDs {
+		selectedRateNodes[id] = true
+		if node, ok := nodesByID[id]; ok {
+			selectedRateNodes[planNodeKey(node)] = true
+		}
+	}
+	seenRateNodes := map[string]bool{}
+	for id, rate := range p.NodeRates {
+		if id == "" || rate < 0 || rate > 100000 || rate%10 != 0 {
+			return errors.New("套餐节点倍率无效")
+		}
+		node, ok := nodesByID[id]
+		if !ok {
+			return errors.New("套餐节点倍率对应的节点不存在")
+		}
+		canonical := planNodeKey(node)
+		if !selectedRateNodes[id] && !selectedRateNodes[canonical] {
+			return errors.New("套餐节点倍率必须属于已选择的单独节点")
+		}
+		if !selectedGroupsForNode(node, selectedGroups) {
+			return errors.New("套餐节点倍率必须属于已选择的节点组")
+		}
+		if seenRateNodes[canonical] {
+			return errors.New("套餐节点倍率对应的节点重复")
+		}
+		seenRateNodes[canonical] = true
+	}
 	return nil
+}
+
+func selectedGroupsForNode(node Node, selected map[string]bool) bool {
+	for _, groupID := range normalizeNodePolicy(node).GroupIDs {
+		if selected[groupID] {
+			return true
+		}
+	}
+	return false
 }
 
 type entitlementRequest struct {
@@ -499,7 +563,7 @@ func (a *App) entitlementBatch(w http.ResponseWriter, r *http.Request, actor Rec
 			u.NodeGroupIDs = &ids
 		case "assign":
 			u.NodeGroupIDs = nil
-			u.Entitlement = &domain.Entitlement{PlanID: plan.ID, Version: plan.Version, Name: plan.Name, GroupIDs: append([]string{}, plan.GroupIDs...), NodeIDs: append([]string{}, plan.NodeIDs...), Cycle: plan.Cycle, Timezone: plan.Timezone, AssignedAt: time.Now().Unix(), Revision: randomToken(12)}
+			u.Entitlement = &domain.Entitlement{PlanID: plan.ID, Version: plan.Version, Name: plan.Name, GroupIDs: append([]string{}, plan.GroupIDs...), NodeIDs: append([]string{}, plan.NodeIDs...), NodeRates: cloneNodeRates(plan.NodeRates), Cycle: plan.Cycle, Timezone: plan.Timezone, AssignedAt: time.Now().Unix(), Revision: randomToken(12)}
 			u.Quota, u.VLESS, u.HY2 = plan.Quota, plan.VLESS, plan.HY2
 			u.Expires = 0
 			if plan.ValidDays > 0 {

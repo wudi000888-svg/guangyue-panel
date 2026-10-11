@@ -248,6 +248,8 @@ func (a *App) dispatchAuthenticated(w http.ResponseWriter, r *http.Request, acto
 		a.userUsage(w, r, actor)
 	case r.Method == "GET" && r.URL.Path == "/api/node-quality":
 		a.memberNodeQuality(w, r, actor)
+	case r.Method == "GET" && r.URL.Path == "/api/node-square":
+		a.nodeSquare(w, r, actor)
 	case r.URL.Path == "/api/site-status" || r.URL.Path == "/api/site-control":
 		a.siteControlAPI(w, r, actor)
 	case r.Method == "POST" && r.URL.Path == "/api/adopt":

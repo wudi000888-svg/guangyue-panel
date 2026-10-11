@@ -337,11 +337,17 @@ func (a *App) orderAction(w http.ResponseWriter, r *http.Request, actor Record) 
 		OperationID      string `json:"operation_id"`
 		Password         string `json:"password"`
 		PaymentAttemptID string `json:"payment_attempt_id"`
+		Reason           string `json:"reason"`
 	}
 	if !decode(w, r, &in) {
 		return nil
 	}
-	if in.Action == "refund" {
+	// Normalize user supplied text before calculating the idempotency
+	// fingerprint.  Retrying the same operation with surrounding whitespace
+	// must replay the original response instead of being treated as a new
+	// command.
+	in.Reason = strings.TrimSpace(in.Reason)
+	if in.Action == "refund" || in.Action == "reject_refund" {
 		if _, e := a.commerceActor(actor, true, in.Password); e != nil {
 			return e
 		}
@@ -358,6 +364,12 @@ func (a *App) orderAction(w http.ResponseWriter, r *http.Request, actor Record) 
 		return commerceFail(404, "订单不存在")
 	}
 	if actor.Role != "owner" && actor.ID != o.UserID {
+		// Keep ordinary checkout actions opaque to other members, while refund
+		// review actions explicitly report the permission failure so the member
+		// UI can explain why the request was rejected.
+		if in.Action == "request_refund" || in.Action == "cancel_refund" || in.Action == "reject_refund" {
+			return commerceFail(403, "无权操作此订单")
+		}
 		return commerceFail(404, "订单不存在")
 	}
 	u, e := a.store.record(o.UserID)
@@ -467,6 +479,30 @@ func (a *App) orderAction(w http.ResponseWriter, r *http.Request, actor Record) 
 		}
 		o.State = "refund_requested"
 		o.Message = "退款申请已提交，等待管理员审核"
+	case "cancel_refund":
+		if actor.ID != o.UserID {
+			return commerceFail(403, "退款申请需由所属用户取消")
+		}
+		if old != "refund_requested" {
+			return commerceFail(409, "当前没有待处理的退款申请")
+		}
+		o.State = "completed"
+		o.Message = "退款申请已取消"
+	case "reject_refund":
+		if actor.Role != "owner" {
+			return commerceFail(403, "需要管理员权限")
+		}
+		if old != "refund_requested" {
+			return commerceFail(409, "当前没有待处理的退款申请")
+		}
+		if len([]rune(in.Reason)) > 500 {
+			return commerceFail(400, "退款拒绝理由不能超过 500 个字符")
+		}
+		o.State = "completed"
+		o.Message = "退款申请已拒绝"
+		if in.Reason != "" {
+			o.Message += "：" + in.Reason
+		}
 	case "refund":
 		if old != "completed" && old != "refund_requested" || u.Entitlement == nil || u.Entitlement.Revision != o.AppliedRevision {
 			return commerceFail(409, "订单存在后续权益变化，不能自动退款")
@@ -544,8 +580,23 @@ func (a *App) orderAction(w http.ResponseWriter, r *http.Request, actor Record) 
 	if e = saveOrder(tx, o, old); e == nil {
 		e = txUser(tx, u.User)
 	}
-	if e == nil && in.Action == "request_refund" {
-		e = a.notifyCommerceOwners(tx, o.ID+" 用户 #"+strconv.FormatInt(o.UserID, 10)+" 已提交退款申请，请在订单中心审核。", now)
+	if e == nil {
+		switch in.Action {
+		case "request_refund":
+			e = a.notifyCommerceOwners(tx, o.ID+" 用户 #"+strconv.FormatInt(o.UserID, 10)+" 已提交退款申请，请在订单中心审核。", now)
+		case "cancel_refund":
+			// Keep administrators informed when a pending review disappears.
+			e = a.notifyCommerceOwnersTitle(tx, "退款申请已取消", o.ID+" 用户 #"+strconv.FormatInt(o.UserID, 10)+" 已取消退款申请。", now)
+		case "reject_refund":
+			message := "订单 " + o.ID + " 的退款申请已拒绝。"
+			if in.Reason != "" {
+				message += " 原因：" + in.Reason
+			}
+			// The member must be told about a decision even when they are not
+			// looking at the order page.  Delivery is handled by the existing
+			// commerce event worker after this transaction commits.
+			e = a.store.commerceEvent(tx, u.ID, "order:"+o.ID+":refund_rejected:"+in.OperationID, message)
+		}
 	}
 	if e == nil {
 		e = a.store.saveCommerceRequest(tx, actor.ID, in.OperationID, in, o)
@@ -555,6 +606,13 @@ func (a *App) orderAction(w http.ResponseWriter, r *http.Request, actor Record) 
 	}
 	if e != nil {
 		return e
+	}
+	if in.Action == "request_refund" || in.Action == "cancel_refund" || in.Action == "reject_refund" || in.Action == "refund" {
+		target := o.ID
+		if in.Action == "reject_refund" && in.Reason != "" {
+			target += " reason=" + in.Reason
+		}
+		a.store.audit(actor.Username, "order-"+in.Action, target)
 	}
 	a.status = "pending"
 	jsonResponse(w, 200, o)
@@ -723,8 +781,12 @@ func (a *App) failProvisioning(o Order, message string) error {
 // Refund requests are intentionally visible to administrators without changing
 // the user's entitlement or issuing any money movement before approval.
 func (a *App) notifyCommerceOwners(tx *persistence.Tx, body string, now int64) error {
+	return a.notifyCommerceOwnersTitle(tx, "退款申请待审核", body, now)
+}
+
+func (a *App) notifyCommerceOwnersTitle(tx *persistence.Tx, title, body string, now int64) error {
 	var messageID int64
-	if err := tx.QueryRow("INSERT INTO messages(sender_id,sender_name,title,body,category,created) VALUES(NULL,'System',?,?, 'account',?) RETURNING id", "退款申请待审核", body, now).Scan(&messageID); err != nil {
+	if err := tx.QueryRow("INSERT INTO messages(sender_id,sender_name,title,body,category,created) VALUES(NULL,'System',?,?, 'account',?) RETURNING id", title, body, now).Scan(&messageID); err != nil {
 		return err
 	}
 	rows, err := tx.Query("SELECT id,doc FROM users")

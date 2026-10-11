@@ -12,6 +12,7 @@ const legacyPublicGroup = "legacy-public"
 const defaultSubsiteGroup = "default-subsite"
 const defaultAdminPlan = "plan-admin"
 const defaultDemoPlan = "plan-demo"
+const planDeletedMetaPrefix = "plan_deleted:"
 
 type NodeGroup struct {
 	ID          string `json:"id"`
@@ -23,22 +24,23 @@ type NodeGroup struct {
 	Revision    string `json:"revision"`
 }
 type Plan struct {
-	ID          string   `json:"id"`
-	Version     int      `json:"version"`
-	Name        string   `json:"name"`
-	Description string   `json:"description"`
-	Category    string   `json:"category"`
-	Notes       string   `json:"notes"`
-	Archived    bool     `json:"archived"`
-	Sort        int      `json:"sort"`
-	Quota       int64    `json:"quota"`
-	ValidDays   int      `json:"valid_days"`
-	Cycle       string   `json:"cycle"`
-	Timezone    string   `json:"timezone"`
-	GroupIDs    []string `json:"group_ids"`
-	NodeIDs     []string `json:"node_ids"`
-	VLESS       bool     `json:"vless"`
-	HY2         bool     `json:"hy2"`
+	ID          string           `json:"id"`
+	Version     int              `json:"version"`
+	Name        string           `json:"name"`
+	Description string           `json:"description"`
+	Category    string           `json:"category"`
+	Notes       string           `json:"notes"`
+	Archived    bool             `json:"archived"`
+	Sort        int              `json:"sort"`
+	Quota       int64            `json:"quota"`
+	ValidDays   int              `json:"valid_days"`
+	Cycle       string           `json:"cycle"`
+	Timezone    string           `json:"timezone"`
+	GroupIDs    []string         `json:"group_ids"`
+	NodeIDs     []string         `json:"node_ids"`
+	NodeRates   map[string]int64 `json:"node_rates,omitempty"`
+	VLESS       bool             `json:"vless"`
+	HY2         bool             `json:"hy2"`
 	// System plans are seeded by the installation and retained as stable
 	// entry points for the administrator and the demo experience.
 	System bool   `json:"system,omitempty"`
@@ -61,6 +63,17 @@ func normalizeNodePolicy(n Node) Node {
 	return n
 }
 func nodeRate(n Node) int64 { return normalizeNodePolicy(n).RateMilli }
+
+func cloneNodeRates(in map[string]int64) map[string]int64 {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]int64, len(in))
+	for key, rate := range in {
+		out[key] = rate
+	}
+	return out
+}
 
 func readDocuments[T any](s *Store, table string) ([]T, error) {
 	// The table names are package-owned constants, never request input.
@@ -182,6 +195,18 @@ func sameStrings(a, b []string) bool {
 	return true
 }
 
+func sameNodeRates(a, b map[string]int64) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for key, rate := range a {
+		if b[key] != rate {
+			return false
+		}
+	}
+	return true
+}
+
 // initDefaultPlans is intentionally run from bootstrap rather than the
 // entitlement migration. The migration must remain a no-op for existing user
 // data and tests that exercise only the legacy group upgrade; bootstrap is the
@@ -200,7 +225,9 @@ func (s *Store) initDefaultPlans() error {
 	}
 	plans := []Plan{
 		{ID: defaultAdminPlan, Version: 1, Name: "管理员套餐", Description: "系统管理员完整管理权限。", Category: "系统", Notes: "系统预置套餐", Sort: 0, Quota: 0, ValidDays: 0, Cycle: "none", Timezone: "Asia/Shanghai", GroupIDs: []string{legacyPrivateGroup, legacyPublicGroup, defaultSubsiteGroup}, VLESS: true, HY2: true, System: true, Kind: "admin"},
-		{ID: defaultDemoPlan, Version: 1, Name: "演示套餐", Description: "用于快速体验本站普通节点的演示套餐。", Category: "系统", Notes: "系统预置套餐", Sort: 1, Quota: 0, ValidDays: 30, Cycle: "30d", Timezone: "Asia/Shanghai", GroupIDs: []string{legacyPrivateGroup}, VLESS: true, HY2: true, Price: 0, System: true, Kind: "demo"},
+	}
+	if s.meta(planDeletedMetaPrefix+defaultDemoPlan) != "1" {
+		plans = append(plans, Plan{ID: defaultDemoPlan, Version: 1, Name: "演示套餐", Description: "用于快速体验本站普通节点的演示套餐。", Category: "系统", Notes: "系统预置套餐", Sort: 1, Quota: 0, ValidDays: 30, Cycle: "30d", Timezone: "Asia/Shanghai", GroupIDs: []string{legacyPrivateGroup}, VLESS: true, HY2: true, Price: 0, System: true, Kind: "demo"})
 	}
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -227,9 +254,10 @@ func (s *Store) initDefaultPlans() error {
 // every account has one canonical entitlement and no independent mode remains.
 func (s *Store) migrateUsersToPlans() error {
 	demo, err := s.plan(defaultDemoPlan)
-	if err != nil {
+	if err != nil && s.meta(planDeletedMetaPrefix+defaultDemoPlan) != "1" {
 		return err
 	}
+	demoAvailable := err == nil
 	admin, err := s.plan(defaultAdminPlan)
 	if err != nil {
 		return err
@@ -243,11 +271,15 @@ func (s *Store) migrateUsersToPlans() error {
 			continue
 		}
 		now := time.Now().Unix()
-		p := demo
 		if users[i].Role == "owner" {
-			p = admin
+			assignPlan(&users[i], admin, now)
+		} else if demoAvailable {
+			assignPlan(&users[i], demo, now)
+		} else {
+			// The administrator intentionally removed the optional demo plan.
+			// Leave regular members unentitled until they purchase a plan.
+			continue
 		}
-		assignPlan(&users[i], p, now)
 		if err = s.save(&users[i]); err != nil {
 			return err
 		}
