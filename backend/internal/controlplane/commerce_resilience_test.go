@@ -194,7 +194,7 @@ func TestSupportInternalImagesAndRetention(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	ticket = decoded[Ticket](t, req(t, a, owner, "POST", "/api/support/reply", object{"id": ticket.ID, "body": "private", "internal": true, "attachments": []string{id}, "operation_id": randomToken(24)}), 200)
+	ticket = decoded[Ticket](t, req(t, a, owner, "POST", "/api/support/reply", object{"id": ticket.ID, "revision": ticket.Revision, "body": "private", "internal": true, "attachments": []string{id}, "operation_id": randomToken(24)}), 200)
 	if w := req(t, a, u, "GET", "/api/support/attachment?id="+id, nil); w.Code != 404 {
 		t.Fatal("private image exposed")
 	}

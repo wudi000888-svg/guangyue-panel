@@ -12,7 +12,8 @@ export interface PaymentAttempt {id:string;purpose?:'order'|'topup';order_id:str
 export interface PaymentReceipt {id:string;provider_id:string;external_ref:string;attempt_id:string;order_id:string;user_id:number;amount:string;currency:string;state:string;reason:string;created:number;updated:number}
 export interface PaymentCheckout {attempt:PaymentAttempt;checkout_url:string;type:'redirect'}
 export interface PaymentDiagnostic {ok:boolean;message:string;checked_at:number;last_event_at:number;pending:number;refund_required:number}
-export interface Order {id:string;user_id:number;state:string;created:number;updated:number;expires:number;offer:Offer;action:string;before_expiry:number;message:string;payment_attempt_id?:string;payment_provider_id?:string}
+export interface RefundRequest {id:string;order_id:string;user_id:number;state:string;revision:number;reason?:string;actor_id?:number;created:number;updated:number;decided_by?:number;decided_at?:number}
+export interface Order {id:string;user_id:number;state:string;created:number;updated:number;expires:number;offer:Offer;action:string;before_expiry:number;message:string;refund_status?:string;refund_request_id?:string;refund_request?:RefundRequest;payment_attempt_id?:string;payment_provider_id?:string}
 export interface Redemption {id:string;batch_id:string;suffix:string;amount:string;expires:number;state:string;redeemed_by:number;redeemed_at:number;note:string;has_secret?:boolean}
 export interface Ticket {id:string;user_id:number;title:string;category:string;state:string;priority:string;order_id:string;site_id:string;node_id:string;resource:string;created:number;updated:number;closed:number;revision:string}
 export interface TicketReply {id:string;ticket_id:string;user_id:number;sender:string;body:string;internal:boolean;attachments:string[];created:number}

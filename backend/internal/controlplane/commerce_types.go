@@ -98,6 +98,23 @@ type Wallet struct {
 	Currency  string `json:"currency"`
 }
 
+// RefundRequest is the review aggregate for an order.  Its revision is part
+// of every mutating command so a stale admin or member page cannot decide a
+// later request for the same order.
+type RefundRequest struct {
+	ID        string `json:"id"`
+	OrderID   string `json:"order_id"`
+	UserID    int64  `json:"user_id"`
+	State     string `json:"state"`
+	Revision  int64  `json:"revision"`
+	Reason    string `json:"reason,omitempty"`
+	ActorID   int64  `json:"actor_id,omitempty"`
+	Created   int64  `json:"created"`
+	Updated   int64  `json:"updated"`
+	DecidedBy int64  `json:"decided_by,omitempty"`
+	DecidedAt int64  `json:"decided_at,omitempty"`
+}
+
 func (s *Store) wallet(user int64) (Wallet, error) {
 	v := Wallet{UserID: user, Currency: "CNY"}
 	e := s.db.QueryRow("SELECT available,held FROM wallet_accounts WHERE user_id=?", user).Scan(&v.Available, &v.Held)
@@ -160,7 +177,7 @@ func (s *Store) commercePending(user int64) (bool, error) {
 }
 func (s *Store) commercePendingExcept(user int64, exclude string) (bool, error) {
 	var n int
-	query := "SELECT COUNT(*) FROM commerce_orders WHERE user_id=? AND state IN ('pending','provisioning','refund_requested','refunding')"
+	query := "SELECT COUNT(*) FROM commerce_orders WHERE user_id=? AND state IN ('pending','provisioning','refunding')"
 	args := []any{user}
 	if exclude != "" {
 		query += " AND id<>?"

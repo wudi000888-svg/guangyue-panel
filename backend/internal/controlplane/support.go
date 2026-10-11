@@ -137,45 +137,23 @@ func (a *App) supportGet(w http.ResponseWriter, r *http.Request, actor Record, p
 		jsonResponse(w, 200, object{"items": out})
 		return nil
 	case "tickets":
-		query := "SELECT doc FROM support_tickets"
-		args := []any{}
-		clauses := []string{}
-		// The first page must not depend on a sentinel value. Ticket IDs are
-		// opaque text and database collations differ between SQLite and
-		// PostgreSQL, so an artificial upper bound can hide every ticket.
-		if before := strings.TrimSpace(r.URL.Query().Get("before")); before != "" {
-			clauses = append(clauses, "id<?")
-			args = append(args, before)
+		stateQuery := r.URL.Query().Get("state")
+		if stateQuery == "" {
+			stateQuery = r.URL.Query().Get("filter")
 		}
-		if actor.Role != "owner" {
-			clauses = append(clauses, "user_id=?")
-			args = append(args, actor.ID)
+		states, ok := ticketStateFilter(stateQuery)
+		if !ok {
+			return commerceFail(400, "工单状态无效")
 		}
-		if len(clauses) > 0 {
-			query += " WHERE " + strings.Join(clauses, " AND ")
+		queryText := r.URL.Query().Get("search")
+		if queryText == "" {
+			queryText = r.URL.Query().Get("q")
 		}
-		query += " ORDER BY id DESC LIMIT 50"
-		rows, e := a.store.db.Query(query, args...)
+		out, next, more, e := a.supportTicketPage(actor, states, queryText, r.URL.Query().Get("before"))
 		if e != nil {
 			return e
 		}
-		defer rows.Close()
-		out := []Ticket{}
-		for rows.Next() {
-			var b []byte
-			var t Ticket
-			if e = rows.Scan(&b); e != nil {
-				return e
-			}
-			if e = json.Unmarshal(b, &t); e != nil {
-				return e
-			}
-			out = append(out, t)
-		}
-		if e = rows.Err(); e != nil {
-			return e
-		}
-		jsonResponse(w, 200, object{"items": out})
+		jsonResponse(w, 200, object{"items": out, "next_before": next, "has_more": more})
 	case "ticket":
 		t, e := a.store.visibleTicket(r.URL.Query().Get("id"), actor)
 		if e != nil {
@@ -391,7 +369,7 @@ func (a *App) createTicket(w http.ResponseWriter, r *http.Request, actor Record)
 	if actor.Role != "owner" && (open >= 5 || today >= 10) {
 		return commerceFail(429, "工单数量已达上限，请先处理已有工单")
 	}
-	t := Ticket{ID: serial("GYT"), UserID: actor.ID, Title: in.Title, Category: in.Category, State: "open", Priority: "normal", OrderID: in.OrderID, SiteID: in.SiteID, NodeID: in.NodeID, Resource: resource, Created: now, Updated: now, Revision: serial("GYV")}
+	t := Ticket{ID: serial("GYT"), UserID: actor.ID, Title: in.Title, Category: in.Category, State: ticketCreateState(actor.Role), Priority: "normal", OrderID: in.OrderID, SiteID: in.SiteID, NodeID: in.NodeID, Resource: resource, Created: now, Updated: now, Revision: serial("GYV")}
 	reply := TicketReply{ID: serial("GYM"), TicketID: t.ID, UserID: actor.ID, Sender: actor.Username, Body: in.Body, Attachments: in.Attachments, Created: now}
 	tx, e := a.store.db.Begin()
 	if e != nil {
@@ -457,6 +435,7 @@ func (a *App) ticketNotify(tx *persistence.Tx, actor Record, t Ticket, key, body
 func (a *App) replyTicket(w http.ResponseWriter, r *http.Request, actor Record) error {
 	var in struct {
 		ID          string   `json:"id"`
+		Revision    string   `json:"revision"`
 		Body        string   `json:"body"`
 		Internal    bool     `json:"internal"`
 		Attachments []string `json:"attachments"`
@@ -481,7 +460,10 @@ func (a *App) replyTicket(w http.ResponseWriter, r *http.Request, actor Record) 
 	if e != nil {
 		return e
 	}
-	if t.State == "closed" || t.State == "resolved" {
+	if in.Revision == "" || in.Revision != t.Revision {
+		return errCommerceConflict
+	}
+	if ticketStateIsClosed(t.State) {
 		return commerceFail(409, "请先重新打开工单")
 	}
 	now := time.Now().Unix()
@@ -496,13 +478,7 @@ func (a *App) replyTicket(w http.ResponseWriter, r *http.Request, actor Record) 
 	previous := t.Revision
 	t.Updated = now
 	t.Revision = serial("GYV")
-	if !in.Internal {
-		if actor.Role == "owner" {
-			t.State = "waiting_user"
-		} else {
-			t.State = "open"
-		}
-	}
+	t.State = ticketReplyState(actor.Role, t.State, in.Internal)
 	tx, e := a.store.db.Begin()
 	if e != nil {
 		return e
@@ -572,7 +548,7 @@ func (a *App) changeTicket(w http.ResponseWriter, r *http.Request, actor Record)
 		jsonResponse(w, 200, t)
 		return nil
 	}
-	if actor.Role != "owner" && in.State == "open" && t.Closed > 0 {
+	if actor.Role != "owner" && (in.State == ticketStateOpen || in.State == ticketStateProcessing) && t.Closed > 0 {
 		var n int
 		if e = a.store.db.QueryRow("SELECT COUNT(*) FROM support_tickets WHERE user_id=? AND state NOT IN ('closed','resolved')", actor.ID).Scan(&n); e != nil {
 			return e
@@ -583,13 +559,13 @@ func (a *App) changeTicket(w http.ResponseWriter, r *http.Request, actor Record)
 	}
 	previousClosed := t.Closed
 	if actor.Role != "owner" {
-		if in.State != "closed" && in.State != "open" || in.Priority != "" && in.Priority != t.Priority {
+		if in.State != ticketStateClosed && in.State != ticketStateOpen && in.State != ticketStateProcessing || in.Priority != "" && in.Priority != t.Priority {
 			return commerceFail(403, "无权修改此状态")
 		}
-		if in.State == "open" && (t.Closed == 0 || now-t.Closed > 7*86400) {
+		if (in.State == ticketStateOpen || in.State == ticketStateProcessing) && (t.Closed == 0 || now-t.Closed > 7*86400) {
 			return commerceFail(409, "请新建工单并关联原工单号")
 		}
-	} else if !map[string]bool{"open": true, "processing": true, "waiting_user": true, "resolved": true, "closed": true}[in.State] {
+	} else if _, ok := ticketStates[in.State]; !ok {
 		return commerceFail(400, "工单状态无效")
 	}
 	if in.Priority != "" {
@@ -600,7 +576,7 @@ func (a *App) changeTicket(w http.ResponseWriter, r *http.Request, actor Record)
 	}
 	t.State = in.State
 	t.Closed = 0
-	if t.State == "closed" || t.State == "resolved" {
+	if ticketStateIsClosed(t.State) {
 		t.Closed = previousClosed
 		if t.Closed == 0 {
 			t.Closed = now

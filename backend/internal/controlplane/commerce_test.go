@@ -204,7 +204,14 @@ func TestCommerceOrderListFirstPageReturnsNewOrder(t *testing.T) {
 
 func orderDo(t *testing.T, a *App, actor Record, o Order, action string) Order {
 	t.Helper()
-	return decoded[Order](t, req(t, a, actor, "POST", "/api/commerce/orders/action", object{"id": o.ID, "action": action, "operation_id": randomToken(24), "password": commerceTestPassword}), 200)
+	in := object{"id": o.ID, "action": action, "operation_id": randomToken(24), "password": commerceTestPassword}
+	if action == "cancel_refund" || action == "reject_refund" || action == "refund" {
+		if request, err := a.store.refundRequest(o.ID); err == nil && request != nil {
+			in["refund_request_id"] = request.ID
+			in["refund_request_revision"] = request.Revision
+		}
+	}
+	return decoded[Order](t, req(t, a, actor, "POST", "/api/commerce/orders/action", in), 200)
 }
 func TestCommerceOrderCaptureResetAndRefund(t *testing.T) {
 	a := testApp(t)
@@ -290,8 +297,8 @@ func TestCommerceRefundRequiresMemberRequestAndOwnerApproval(t *testing.T) {
 		t.Fatalf("refund request failed: %d %s", requestedResponse.Code, requestedResponse.Body.String())
 	}
 	requested := decoded[Order](t, requestedResponse, 200)
-	if requested.State != "refund_requested" {
-		t.Fatalf("refund request was not queued: %s", requested.State)
+	if requested.State != "completed" || requested.RefundStatus != "requested" || requested.RefundRequest == nil || requested.RefundRequest.Revision != 1 {
+		t.Fatalf("refund request was not separated from fulfillment: %+v", requested)
 	}
 	wallet, _ := a.store.wallet(user.ID)
 	if wallet.Available != 2000 || wallet.Held != 0 {
@@ -300,15 +307,22 @@ func TestCommerceRefundRequiresMemberRequestAndOwnerApproval(t *testing.T) {
 	if req(t, a, user, "POST", "/api/commerce/orders/action", object{"id": order.ID, "action": "request_refund", "operation_id": randomToken(24)}).Code != 409 {
 		t.Fatal("duplicate refund request was accepted")
 	}
-	cancelled := decoded[Order](t, req(t, a, user, "POST", "/api/commerce/orders/action", object{"id": order.ID, "action": "cancel_refund", "operation_id": randomToken(24)}), 200)
-	if cancelled.State != "completed" || cancelled.Message != "退款申请已取消" {
+	reqID, reqRev := requested.RefundRequest.ID, requested.RefundRequest.Revision
+	cancelled := decoded[Order](t, req(t, a, user, "POST", "/api/commerce/orders/action", object{"id": order.ID, "action": "cancel_refund", "refund_request_id": reqID, "refund_request_revision": reqRev, "operation_id": randomToken(24)}), 200)
+	if cancelled.State != "completed" || cancelled.RefundStatus != "cancelled" || cancelled.Message != "退款申请已取消" {
 		t.Fatalf("refund request was not cancelled: %+v", cancelled)
 	}
 	requested = decoded[Order](t, req(t, a, user, "POST", "/api/commerce/orders/action", object{"id": order.ID, "action": "request_refund", "operation_id": randomToken(24)}), 200)
-	if w := req(t, a, user, "POST", "/api/commerce/orders/action", object{"id": order.ID, "action": "reject_refund", "password": commerceTestPassword, "operation_id": randomToken(24)}); w.Code != 403 {
+	if requested.RefundRequest == nil {
+		t.Fatal("second refund request missing aggregate")
+	}
+	if w := req(t, a, user, "POST", "/api/commerce/orders/action", object{"id": order.ID, "action": "cancel_refund", "refund_request_id": reqID, "refund_request_revision": reqRev, "operation_id": randomToken(24)}); w.Code != 409 {
+		t.Fatalf("stale request identity changed the newer refund: %d %s", w.Code, w.Body.String())
+	}
+	if w := req(t, a, user, "POST", "/api/commerce/orders/action", object{"id": order.ID, "action": "reject_refund", "refund_request_id": requested.RefundRequest.ID, "refund_request_revision": requested.RefundRequest.Revision, "password": commerceTestPassword, "operation_id": randomToken(24)}); w.Code != 403 {
 		t.Fatalf("member rejected own refund request: %d %s", w.Code, w.Body.String())
 	}
-	rejected := decoded[Order](t, req(t, a, owner, "POST", "/api/commerce/orders/action", object{"id": order.ID, "action": "reject_refund", "reason": "权益已开始使用", "password": commerceTestPassword, "operation_id": randomToken(24)}), 200)
+	rejected := decoded[Order](t, req(t, a, owner, "POST", "/api/commerce/orders/action", object{"id": order.ID, "action": "reject_refund", "refund_request_id": requested.RefundRequest.ID, "refund_request_revision": requested.RefundRequest.Revision, "reason": "权益已开始使用", "password": commerceTestPassword, "operation_id": randomToken(24)}), 200)
 	if rejected.State != "completed" || rejected.Message != "退款申请已拒绝：权益已开始使用" {
 		t.Fatalf("refund request was not rejected: %+v", rejected)
 	}
@@ -320,7 +334,7 @@ func TestCommerceRefundRequiresMemberRequestAndOwnerApproval(t *testing.T) {
 		t.Fatalf("owner cannot see rejected refund order: %d %s", w.Code, w.Body.String())
 	}
 	requested = decoded[Order](t, req(t, a, user, "POST", "/api/commerce/orders/action", object{"id": order.ID, "action": "request_refund", "operation_id": randomToken(24)}), 200)
-	approved := orderDo(t, a, owner, requested, "refund")
+	approved := decoded[Order](t, req(t, a, owner, "POST", "/api/commerce/orders/action", object{"id": order.ID, "action": "refund", "refund_request_id": requested.RefundRequest.ID, "refund_request_revision": requested.RefundRequest.Revision, "password": commerceTestPassword, "operation_id": randomToken(24)}), 200)
 	if approved.State != "refunding" {
 		t.Fatalf("approval did not start refund: %s", approved.State)
 	}
@@ -338,6 +352,28 @@ func TestCommerceRefundRequiresMemberRequestAndOwnerApproval(t *testing.T) {
 	assertLedger(t, a)
 }
 
+func TestCommerceRefundRequestDoesNotBlockNewOrder(t *testing.T) {
+	a := testApp(t)
+	owner := testUser(t, a, "owner", "owner")
+	user := testUser(t, a, "member", "user")
+	offer := commerceOffer(t, a, owner)
+	fundWallet(t, a, owner, user, "6000")
+	order := newOrder(t, a, user, offer)
+	orderDo(t, a, user, order, "confirm")
+	if e := a.commerceWork(time.Now().Unix()); e != nil {
+		t.Fatal(e)
+	}
+	order, _ = a.store.order(order.ID)
+	requested := decoded[Order](t, req(t, a, user, "POST", "/api/commerce/orders/action", object{"id": order.ID, "action": "request_refund", "operation_id": randomToken(24)}), 200)
+	if requested.RefundRequest == nil {
+		t.Fatal("refund request missing")
+	}
+	second := decoded[Order](t, req(t, a, user, "POST", "/api/commerce/orders", object{"offer_id": offer.ID, "offer_version": offer.Version, "operation_id": randomToken(24)}), 201)
+	if second.State != "pending" {
+		t.Fatalf("requested refund blocked new order: %+v", second)
+	}
+}
+
 func TestCommerceRefundDecisionActionsAreIdempotentAndNotify(t *testing.T) {
 	a := testApp(t)
 	owner := testUser(t, a, "owner", "owner")
@@ -352,14 +388,15 @@ func TestCommerceRefundDecisionActionsAreIdempotentAndNotify(t *testing.T) {
 	}
 	order, _ = a.store.order(order.ID)
 
-	if w := req(t, a, user, "POST", "/api/commerce/orders/action", object{"id": order.ID, "action": "request_refund", "operation_id": randomToken(24)}); w.Code != 200 {
-		t.Fatalf("refund request failed: %d %s", w.Code, w.Body.String())
+	requested := decoded[Order](t, req(t, a, user, "POST", "/api/commerce/orders/action", object{"id": order.ID, "action": "request_refund", "operation_id": randomToken(24)}), 200)
+	if requested.RefundRequest == nil {
+		t.Fatal("refund request failed")
 	}
 	if w := req(t, a, other, "POST", "/api/commerce/orders/action", object{"id": order.ID, "action": "cancel_refund", "operation_id": randomToken(24)}); w.Code != 403 {
 		t.Fatalf("another member cancelled the refund request: %d %s", w.Code, w.Body.String())
 	}
 	cancelID := randomToken(24)
-	cancelInput := object{"id": order.ID, "action": "cancel_refund", "operation_id": cancelID}
+	cancelInput := object{"id": order.ID, "action": "cancel_refund", "refund_request_id": requested.RefundRequest.ID, "refund_request_revision": requested.RefundRequest.Revision, "operation_id": cancelID}
 	firstCancel := req(t, a, user, "POST", "/api/commerce/orders/action", cancelInput)
 	if firstCancel.Code != 200 {
 		t.Fatalf("cancel refund failed: %d %s", firstCancel.Code, firstCancel.Body.String())
@@ -386,16 +423,17 @@ func TestCommerceRefundDecisionActionsAreIdempotentAndNotify(t *testing.T) {
 	// A new request can be made after cancellation.  The rejection reason is
 	// normalized before the idempotency fingerprint, so whitespace-only changes
 	// on a retry still replay the first decision.
-	if w := req(t, a, user, "POST", "/api/commerce/orders/action", object{"id": order.ID, "action": "request_refund", "operation_id": randomToken(24)}); w.Code != 200 {
-		t.Fatalf("second refund request failed: %d %s", w.Code, w.Body.String())
+	requested = decoded[Order](t, req(t, a, user, "POST", "/api/commerce/orders/action", object{"id": order.ID, "action": "request_refund", "operation_id": randomToken(24)}), 200)
+	if requested.RefundRequest == nil {
+		t.Fatal("second refund request failed")
 	}
 	rejectID := randomToken(24)
-	rejectInput := object{"id": order.ID, "action": "reject_refund", "reason": "权益已开始使用", "password": commerceTestPassword, "operation_id": rejectID}
+	rejectInput := object{"id": order.ID, "action": "reject_refund", "refund_request_id": requested.RefundRequest.ID, "refund_request_revision": requested.RefundRequest.Revision, "reason": "权益已开始使用", "password": commerceTestPassword, "operation_id": rejectID}
 	firstReject := req(t, a, owner, "POST", "/api/commerce/orders/action", rejectInput)
 	if firstReject.Code != 200 {
 		t.Fatalf("reject refund failed: %d %s", firstReject.Code, firstReject.Body.String())
 	}
-	retryReject := req(t, a, owner, "POST", "/api/commerce/orders/action", object{"id": order.ID, "action": "reject_refund", "reason": "  权益已开始使用  ", "password": commerceTestPassword, "operation_id": rejectID})
+	retryReject := req(t, a, owner, "POST", "/api/commerce/orders/action", object{"id": order.ID, "action": "reject_refund", "refund_request_id": requested.RefundRequest.ID, "refund_request_revision": requested.RefundRequest.Revision, "reason": "  权益已开始使用  ", "password": commerceTestPassword, "operation_id": rejectID})
 	if retryReject.Code != 200 || retryReject.Body.String() != firstReject.Body.String() {
 		t.Fatalf("reject refund was not idempotent: first=%d second=%d", firstReject.Code, retryReject.Code)
 	}
@@ -523,7 +561,7 @@ func TestSupportTicketImagesAndOwnership(t *testing.T) {
 	if w := req(t, a, bob, "POST", "/api/support/tickets", object{"title": "Other", "category": "other", "body": "x", "attachments": []string{imageResult.ID}, "operation_id": randomToken(24)}); w.Code != 400 {
 		t.Fatal(w.Code)
 	}
-	decoded[Ticket](t, req(t, a, owner, "POST", "/api/support/reply", object{"id": ticket.ID, "body": "private note", "internal": true, "operation_id": randomToken(24)}), 200)
+	decoded[Ticket](t, req(t, a, owner, "POST", "/api/support/reply", object{"id": ticket.ID, "revision": ticket.Revision, "body": "private note", "internal": true, "operation_id": randomToken(24)}), 200)
 	response := req(t, a, alice, "GET", "/api/support/ticket?id="+ticket.ID, nil)
 	if bytes.Contains(response.Body.Bytes(), []byte("private note")) {
 		t.Fatal("internal note leaked")

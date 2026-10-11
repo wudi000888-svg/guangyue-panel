@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { ArrowLeft, ArrowRight, CircleCheck, LifeBuoy, LoaderCircle, LockKeyhole, MessageSquare, Paperclip, Plus, RefreshCw, Search, Send, X } from 'lucide-vue-next';
 import PageHeading from '../components/PageHeading.vue';
@@ -9,6 +9,7 @@ import { useCommerce, stamp, stateText, type Ticket, type TicketReply } from '..
 import { mergeHistory } from '../components/member/flow';
 import { serialPoll } from '../lib/requests';
 import { t } from '../i18n';
+import { ticketListHasMore, ticketListPath, type TicketListFilter } from './ticketList';
 import '../commerce.css';
 import '../styles/member-ui.css';
 const route=useRoute(),{owner,state}=usePanelContext(),{read,run,api,busy,error,notice}=useCommerce('/support');
@@ -28,20 +29,22 @@ type Draft={title:string;body:string;category:string;orderID:string;resource:str
 const drafts=new Map<string,Draft>();
 function stash(){const key=creating.value?'create':activeID.value;if(!key)return;drafts.set(key,{title:title.value,body:body.value,category:category.value,orderID:orderID.value,resource:resource.value,internal:internal.value,attachments:[...attachments.value],saved:Date.now()})}
 function restore(key:string){const draft=drafts.get(key);title.value=draft?.title||'';body.value=draft?.body||'';category.value=draft?.category||'node';orderID.value=draft?.orderID||'';resource.value=draft?.resource||'';internal.value=draft?.internal||false;attachments.value=draft&&Date.now()-draft.saved<15*60000?[...draft.attachments]:[];}
-let listSequence=0,detailSequence=0,conversationEpoch=0,expandedList=false,expandedReplies=false,disposed=false;
-async function load(manual=false){const sequence=++listSequence;if(manual){loading.value=true;error.value=''}try{const value=await read<{items:Ticket[]}>('/tickets');if(sequence===listSequence&&value&&!disposed){items.value=mergeHistory(items.value,value.items);if(!expandedList)hasMore.value=value.items.length>=50}}finally{if(sequence===listSequence)loading.value=false}}
+let listSequence=0,detailSequence=0,conversationEpoch=0,expandedList=false,expandedReplies=false,disposed=false,loadedListKey='';
+const listKey=()=>filter.value+'\u0000'+query.value.trim();
+const nextBefore=ref('');
+async function load(manual=false){const sequence=++listSequence,key=listKey(),fresh=key!==loadedListKey;if(manual){loading.value=true;error.value=''}try{const value=await read<{items:Ticket[];next_before?:string;has_more?:boolean}>(ticketListPath(filter.value as TicketListFilter,query.value));if(sequence===listSequence&&value&&!disposed){items.value=fresh?value.items:mergeHistory(items.value,value.items);loadedListKey=key;if(fresh||!expandedList){nextBefore.value=value.next_before||'';hasMore.value=ticketListHasMore(value)}}}finally{if(sequence===listSequence)loading.value=false}}
 async function detail(id:string,foreground=false){
   const sequence=++detailSequence,epoch=conversationEpoch;if(foreground)detailLoading.value=true;
   try{const value=await read<{ticket:Ticket;replies:TicketReply[]}>('/ticket?id='+encodeURIComponent(id));if(!value||disposed||sequence!==detailSequence||epoch!==conversationEpoch||activeID.value!==id)return;const same=ticket.value?.id===id,keepStatus=same&&detailReady.value&&statusDirty.value;ticket.value=value.ticket;replies.value=same?mergeHistory(replies.value,value.replies):value.replies;if(!expandedReplies)hasOlder.value=value.replies.length>=50;if(!keepStatus){nextState.value=value.ticket.state;priority.value=value.ticket.priority}detailReady.value=true;items.value=mergeHistory(items.value,[value.ticket]);}
   finally{if(sequence===detailSequence&&epoch===conversationEpoch)detailLoading.value=false}
 }
 async function open(value:Ticket){if(busy.value||uploading.value)return;stash();conversationEpoch++;detailSequence++;activeID.value=value.id;ticket.value=value;creating.value=false;replies.value=[];detailReady.value=false;expandedReplies=false;hasOlder.value=false;loadingOlder.value=false;nextState.value=value.state;priority.value=value.priority;restore(value.id);error.value='';notice.value='';await detail(value.id,true)}
-async function more(){const last=items.value.at(-1);if(!last||loadingMore.value)return;loadingMore.value=true;try{const value=await read<{items:Ticket[]}>('/tickets?before='+encodeURIComponent(last.id));if(value&&!disposed){items.value=mergeHistory(items.value,value.items);hasMore.value=value.items.length>=50;expandedList=true}}finally{loadingMore.value=false}}
+async function more(){const last=items.value.at(-1),before=nextBefore.value||last?.id;if(!before||loadingMore.value)return;loadingMore.value=true;try{const value=await read<{items:Ticket[];next_before?:string;has_more?:boolean}>(ticketListPath(filter.value as TicketListFilter,query.value,before));if(value&&!disposed){items.value=mergeHistory(items.value,value.items);nextBefore.value=value.next_before||'';hasMore.value=ticketListHasMore(value);expandedList=true}}finally{loadingMore.value=false}}
 async function older(){const last=replies.value.at(-1),id=activeID.value,epoch=conversationEpoch;if(!last||!id||loadingOlder.value)return;loadingOlder.value=true;try{const value=await read<{replies:TicketReply[]}>('/ticket?id='+encodeURIComponent(id)+'&before='+encodeURIComponent(last.id));if(value&&!disposed&&epoch===conversationEpoch&&activeID.value===id){replies.value=mergeHistory(replies.value,value.replies);hasOlder.value=value.replies.length>=50;expandedReplies=true}}finally{if(epoch===conversationEpoch)loadingOlder.value=false}}
 async function submit(){
   if(busy.value||uploading.value||!body.value.trim()||(!creating.value&&!detailReady.value))return;
   const [site_id='',node_id='']=resource.value.split('/'),wasCreating=creating.value,previousKey=wasCreating?'create':activeID.value;
-  const value=wasCreating?await run<Ticket>('/tickets',{title:title.value,body:body.value,category:category.value,order_id:orderID.value,site_id,node_id,attachments:attachments.value}):await run<Ticket>('/reply',{id:activeID.value,body:body.value,internal:internal.value,attachments:attachments.value});
+  const value=wasCreating?await run<Ticket>('/tickets',{title:title.value,body:body.value,category:category.value,order_id:orderID.value,site_id,node_id,attachments:attachments.value}):await run<Ticket>('/reply',{id:activeID.value,revision:ticket.value?.revision||'',body:body.value,internal:internal.value,attachments:attachments.value});
   if(!value||disposed)return;
   // A successful write remains visible even if the following read fails.
   drafts.delete(previousKey);notice.value=wasCreating?t('问题已提交，我们会在这里回复。'):t('回复已发送');creating.value=false;activeID.value=value.id;ticket.value=value;if(wasCreating){replies.value=[];expandedReplies=false}nextState.value=value.state;priority.value=value.priority;body.value='';title.value='';attachments.value=[];internal.value=false;resource.value='';detailReady.value=true;items.value=mergeHistory(items.value,[value]);await detail(value.id,true);await load();
@@ -57,6 +60,7 @@ async function upload(event:Event){const input=event.target as HTMLInputElement,
 function back(){if(busy.value||uploading.value)return;stash();conversationEpoch++;detailSequence++;activeID.value='';ticket.value=null;creating.value=false;detailReady.value=false;detailLoading.value=false;loadingOlder.value=false;body.value='';attachments.value=[];}
 function create(){if(busy.value||uploading.value||creating.value)return;stash();conversationEpoch++;detailSequence++;ticket.value=null;activeID.value='';creating.value=true;detailReady.value=false;detailLoading.value=false;loadingOlder.value=false;restore('create');error.value='';notice.value='';}
 const poll=serialPoll(async()=>{if(document.hidden||busy.value||uploading.value||loading.value||loadingMore.value||loadingOlder.value||detailLoading.value)return;if(activeID.value)await detail(activeID.value);await load()},()=>15000);
+watch([filter,query],()=>{expandedList=false;nextBefore.value='';hasMore.value=false;void load(true)});
 onMounted(async()=>{const draft=!route.query.order?takeSupportDraft(state.value?.me.id||0):null;if(draft){creating.value=draft.creating;title.value=draft.title;body.value=draft.body;category.value=draft.category;orderID.value=draft.orderID;resource.value=draft.resource;internal.value=draft.internal;attachments.value=draft.attachments;if(draft.ticketID){activeID.value=draft.ticketID;await detail(draft.ticketID,true)}}await load();const value=await read<{items:typeof resources.value}>('/resources');if(value)resources.value=value.items;if(!disposed)poll.start()});
 onUnmounted(()=>{disposed=true;poll.stop();listSequence++;detailSequence++;conversationEpoch++;saveSupportDraft(state.value?.me.id||0,{ticketID:activeID.value,creating:creating.value,title:title.value,body:body.value,category:category.value,orderID:orderID.value,resource:resource.value,internal:internal.value,attachments:attachments.value,saved:Date.now()})});
 </script>
