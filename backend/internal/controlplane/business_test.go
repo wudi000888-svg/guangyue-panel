@@ -367,12 +367,34 @@ func TestBusinessOverallocatedGrantsUseGlobalRemainingAtRuntime(t *testing.T) {
 	first.Applied = first.Desired
 	first.LeaseUntil = time.Now().Add(time.Hour).Unix()
 	first.SentGrants = []BusinessGrant{{UserID: u.ID, Quota: 200}}
-	first.Usage[u.ID] = BusinessUsage{Upload: 200, VLESS: 200}
+	first.Usage[u.ID] = BusinessUsage{Upload: 100, VLESS: 100}
 	if err := a.store.saveBusinessSite(first); err != nil {
 		t.Fatal(err)
 	}
 	current, _ := a.store.record(u.ID)
+	groups := []string{defaultSubsiteGroup}
+	current.NodeGroupIDs = &groups
+	if err := a.store.save(&current); err != nil {
+		t.Fatal(err)
+	}
 	entries, err := a.subscriptionCatalogSource(current, "mixed", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	visible := false
+	for _, entry := range entries {
+		if entry.siteID == first.ID {
+			visible = true
+		}
+	}
+	if !visible {
+		t.Fatal("subscription did not expose an active pull site before its issued grant was exhausted")
+	}
+	first.Usage[u.ID] = BusinessUsage{Upload: 200, VLESS: 200}
+	if err := a.store.saveBusinessSite(first); err != nil {
+		t.Fatal(err)
+	}
+	entries, err = a.subscriptionCatalogSource(current, "mixed", "")
 	if err != nil {
 		t.Fatal(err)
 	}
