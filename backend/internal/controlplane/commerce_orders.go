@@ -337,11 +337,12 @@ func (a *App) orderAction(w http.ResponseWriter, r *http.Request, actor Record) 
 		OperationID      string `json:"operation_id"`
 		Password         string `json:"password"`
 		PaymentAttemptID string `json:"payment_attempt_id"`
+		Reason           string `json:"reason"`
 	}
 	if !decode(w, r, &in) {
 		return nil
 	}
-	if in.Action == "refund" {
+	if in.Action == "refund" || in.Action == "reject_refund" {
 		if _, e := a.commerceActor(actor, true, in.Password); e != nil {
 			return e
 		}
@@ -467,6 +468,31 @@ func (a *App) orderAction(w http.ResponseWriter, r *http.Request, actor Record) 
 		}
 		o.State = "refund_requested"
 		o.Message = "退款申请已提交，等待管理员审核"
+	case "cancel_refund":
+		if actor.ID != o.UserID {
+			return commerceFail(403, "退款申请需由所属用户取消")
+		}
+		if old != "refund_requested" {
+			return commerceFail(409, "当前没有待处理的退款申请")
+		}
+		o.State = "completed"
+		o.Message = "退款申请已取消"
+	case "reject_refund":
+		if actor.Role != "owner" {
+			return commerceFail(403, "需要管理员权限")
+		}
+		if old != "refund_requested" {
+			return commerceFail(409, "当前没有待处理的退款申请")
+		}
+		reason := strings.TrimSpace(in.Reason)
+		if len(reason) > 500 {
+			return commerceFail(400, "退款拒绝理由不能超过 500 个字符")
+		}
+		o.State = "completed"
+		o.Message = "退款申请已拒绝"
+		if reason != "" {
+			o.Message += "：" + reason
+		}
 	case "refund":
 		if old != "completed" && old != "refund_requested" || u.Entitlement == nil || u.Entitlement.Revision != o.AppliedRevision {
 			return commerceFail(409, "订单存在后续权益变化，不能自动退款")

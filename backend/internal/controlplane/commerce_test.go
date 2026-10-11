@@ -300,13 +300,26 @@ func TestCommerceRefundRequiresMemberRequestAndOwnerApproval(t *testing.T) {
 	if req(t, a, user, "POST", "/api/commerce/orders/action", object{"id": order.ID, "action": "request_refund", "operation_id": randomToken(24)}).Code != 409 {
 		t.Fatal("duplicate refund request was accepted")
 	}
+	cancelled := decoded[Order](t, req(t, a, user, "POST", "/api/commerce/orders/action", object{"id": order.ID, "action": "cancel_refund", "operation_id": randomToken(24)}), 200)
+	if cancelled.State != "completed" || cancelled.Message != "退款申请已取消" {
+		t.Fatalf("refund request was not cancelled: %+v", cancelled)
+	}
+	requested = decoded[Order](t, req(t, a, user, "POST", "/api/commerce/orders/action", object{"id": order.ID, "action": "request_refund", "operation_id": randomToken(24)}), 200)
+	if w := req(t, a, user, "POST", "/api/commerce/orders/action", object{"id": order.ID, "action": "reject_refund", "password": commerceTestPassword, "operation_id": randomToken(24)}); w.Code != 403 {
+		t.Fatalf("member rejected own refund request: %d %s", w.Code, w.Body.String())
+	}
+	rejected := decoded[Order](t, req(t, a, owner, "POST", "/api/commerce/orders/action", object{"id": order.ID, "action": "reject_refund", "reason": "权益已开始使用", "password": commerceTestPassword, "operation_id": randomToken(24)}), 200)
+	if rejected.State != "completed" || rejected.Message != "退款申请已拒绝：权益已开始使用" {
+		t.Fatalf("refund request was not rejected: %+v", rejected)
+	}
 
 	var listed struct {
 		Items []Order `json:"items"`
 	}
-	if w := req(t, a, owner, "GET", "/api/commerce/orders?all=1", nil); w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &listed) != nil || len(listed.Items) != 1 || listed.Items[0].State != "refund_requested" {
-		t.Fatalf("owner cannot see refund request: %d %s", w.Code, w.Body.String())
+	if w := req(t, a, owner, "GET", "/api/commerce/orders?all=1", nil); w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &listed) != nil || len(listed.Items) != 1 || listed.Items[0].State != "completed" {
+		t.Fatalf("owner cannot see rejected refund order: %d %s", w.Code, w.Body.String())
 	}
+	requested = decoded[Order](t, req(t, a, user, "POST", "/api/commerce/orders/action", object{"id": order.ID, "action": "request_refund", "operation_id": randomToken(24)}), 200)
 	approved := orderDo(t, a, owner, requested, "refund")
 	if approved.State != "refunding" {
 		t.Fatalf("approval did not start refund: %s", approved.State)
