@@ -165,7 +165,7 @@ func (a *App) mountedSubscriptionEntries(record Record, site BusinessSite, proto
 		return nil
 	}
 	granted := false
-	for _, g := range site.Grants {
+	for _, g := range site.SentGrants {
 		if g.UserID == record.ID && (g.Quota == 0 || site.Usage[record.ID].total() < g.Quota) {
 			granted = true
 		}

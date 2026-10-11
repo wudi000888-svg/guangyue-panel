@@ -18,77 +18,135 @@ func siteReservation(v BusinessSite, user int64) int64 {
 	}
 	return max(int64(0), limit-v.Usage[user].total())
 }
-func (a *App) validateBusinessAllocations(candidate BusinessSite) error {
-	sites, err := a.store.businessSites()
-	if err != nil {
+
+// validateBusinessAllocations and validateBusinessUserQuota intentionally do
+// not reject a configured site grant just because the sum of configured grants
+// is larger than a member's remaining plan quota. Site grants are policy
+// ceilings; the effective authorization is calculated when a site snapshot is
+// issued. This lets administrators configure sites ahead of time while the
+// runtime still stops issuing credentials as soon as the global plan quota is
+// exhausted.
+func (a *App) validateBusinessAllocations(_ BusinessSite) error {
+	if _, err := a.store.businessSites(); err != nil {
 		return err
 	}
-	found := false
-	for i := range sites {
-		if sites[i].ID == candidate.ID {
-			sites[i] = candidate
-			found = true
-		}
-	}
-	if !found {
-		sites = append(sites, candidate)
-	}
-	users, err := a.store.records()
-	if err != nil {
-		return err
-	}
-	for _, u := range users {
-		if u.Quota == 0 {
-			continue
-		}
-		remaining := max(int64(0), u.Quota-u.QuotaUsed())
-		for _, s := range sites {
-			if s.IssuedUnlimited[u.ID] {
-				return errBusinessQuota
-			}
-			for _, g := range s.Grants {
-				if g.UserID == u.ID && g.Quota == 0 {
-					return errBusinessQuota
-				}
-			}
-			reserved := siteReservation(s, u.ID)
-			if reserved > remaining {
-				return errBusinessQuota
-			}
-			remaining -= reserved
-		}
-	}
-	return nil
+	_, err := a.store.records()
+	return err
 }
-func (a *App) validateBusinessUserQuota(u Record) error {
-	if !a.cfg.controller() || u.Quota == 0 {
+
+func (a *App) validateBusinessUserQuota(_ Record) error {
+	if !a.cfg.controller() {
 		return nil
 	}
+	_, err := a.store.businessSites()
+	return err
+}
+
+// businessRuntimeReservation returns only quota that has actually been issued
+// to a site and has not been acknowledged as settled. Configured grants are
+// deliberately excluded: they may exceed a user's remaining plan quota and
+// are capped when the next snapshot is generated.
+func siteRuntimeReservation(v BusinessSite, user int64) int64 {
+	if v.IssuedUnlimited[user] {
+		return 0
+	}
+	return max(int64(0), v.Issued[user]-v.Usage[user].total())
+}
+
+func (a *App) businessRemainingQuota(user Record, siteID string) (int64, error) {
+	if user.Quota == 0 {
+		return 0, nil
+	}
+	remaining := max(int64(0), user.Quota-user.QuotaUsed())
 	sites, err := a.store.businessSites()
 	if err != nil {
-		return err
+		return 0, err
 	}
-	remaining := max(int64(0), u.Quota-u.QuotaUsed())
-	for _, s := range sites {
-		if s.IssuedUnlimited[u.ID] {
-			return errBusinessQuota
+	for _, site := range sites {
+		if site.ID == siteID {
+			continue
 		}
-		for _, g := range s.Grants {
-			if g.UserID == u.ID && g.Quota == 0 {
-				return errBusinessQuota
-			}
+		if site.IssuedUnlimited[user.ID] {
+			return 0, nil
 		}
-		reserved := siteReservation(s, u.ID)
-		if reserved > remaining {
-			return errBusinessQuota
+		reserved := siteRuntimeReservation(site, user.ID)
+		if reserved >= remaining {
+			return 0, nil
 		}
 		remaining -= reserved
 	}
-	return nil
+	return remaining, nil
 }
 
-// Core authorization accounts for unconsumed allocations elsewhere. Subscription
-// authorization still uses the user's global record and the target site's grant.
+// effectiveBusinessGrant returns the quota that can be sent to a child for
+// this sync. The configured grant remains unchanged; only the issued ceiling
+// is reduced to the user's remaining global quota and any already issued
+// reservations on other sites.
+func (a *App) effectiveBusinessGrant(user Record, site BusinessSite, grant BusinessGrant) (BusinessGrant, bool, error) {
+	if grant.UserID != user.ID {
+		return grant, false, nil
+	}
+	used := site.Usage[user.ID].total()
+	if grant.Quota > 0 && used >= grant.Quota {
+		return grant, false, nil
+	}
+	if user.Quota == 0 {
+		return grant, true, nil
+	}
+	remaining, err := a.businessRemainingQuota(user, site.ID)
+	if err != nil {
+		return grant, false, err
+	}
+	if remaining <= 0 {
+		return grant, false, nil
+	}
+	maxQuota, err := domain.AddCounter(used, remaining)
+	if err != nil {
+		return grant, false, err
+	}
+	if grant.Quota == 0 || grant.Quota > maxQuota {
+		grant.Quota = maxQuota
+	}
+	if grant.Quota <= used {
+		return grant, false, nil
+	}
+	return grant, true, nil
+}
+
+// effectiveBusinessSnapshotGrant is used by pull-based business sites. Their
+// delegated meter is rebased to zero on every snapshot, so the issued quota is
+// an incremental allowance for the new lease rather than the site's cumulative
+// watermark used by mounted sites.
+func (a *App) effectiveBusinessSnapshotGrant(user Record, site BusinessSite, grant BusinessGrant) (BusinessGrant, bool, error) {
+	if grant.UserID != user.ID {
+		return grant, false, nil
+	}
+	used := site.Usage[user.ID].total()
+	if grant.Quota > 0 && used >= grant.Quota {
+		return grant, false, nil
+	}
+	if user.Quota == 0 {
+		return grant, true, nil
+	}
+	remaining, err := a.businessRemainingQuota(user, site.ID)
+	if err != nil {
+		return grant, false, err
+	}
+	if remaining <= 0 {
+		return grant, false, nil
+	}
+	if grant.Quota == 0 || grant.Quota > remaining {
+		grant.Quota = remaining
+	}
+	if grant.Quota <= 0 {
+		return grant, false, nil
+	}
+	return grant, true, nil
+}
+
+// Core authorization accounts for quota already issued to other sites.
+// Configured site grants are policy ceilings and do not reduce local access
+// until a child actually receives an authorization.
 func (a *App) coreRecords() ([]Record, error) {
 	records, err := a.store.records()
 	if err != nil {
@@ -139,7 +197,12 @@ func (a *App) coreRecords() ([]Record, error) {
 		}
 		reserved := int64(0)
 		for _, s := range sites {
-			reserved += siteReservation(s, records[i].ID)
+			if s.IssuedUnlimited[records[i].ID] {
+				records[i].Enabled = false
+				reserved = records[i].Quota
+				break
+			}
+			reserved += siteRuntimeReservation(s, records[i].ID)
 		}
 		if reserved >= records[i].Quota {
 			records[i].Enabled = false

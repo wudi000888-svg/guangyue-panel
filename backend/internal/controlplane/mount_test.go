@@ -188,6 +188,36 @@ func TestMountedNodeIsolationAndSubscriptions(t *testing.T) {
 	}
 }
 
+func TestMountedOverallocatedGrantStopsAtGlobalQuota(t *testing.T) {
+	f := newMountFixture(t)
+	f.policy(t, []MountedNode{{NodeID: "vless-main", Enabled: true, GroupIDs: []string{defaultSubsiteGroup}}}, []BusinessGrant{{UserID: f.user.ID, Budget: 1500}})
+	shadow := f.delegated(t)
+	if shadow.Quota != f.user.Quota || len(shadow.Mount.NodeIDs) != 1 {
+		t.Fatalf("mounted grant was not capped by global quota: quota=%d nodes=%d", shadow.Quota, len(shadow.Mount.NodeIDs))
+	}
+
+	user, err := f.master.store.record(f.user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	user.Meter.Upload = user.Meter.BaseUpload + user.Quota
+	if err = f.master.store.save(&user); err != nil {
+		t.Fatal(err)
+	}
+	f.sync(t)
+	shadow = f.delegated(t)
+	if len(shadow.Mount.NodeIDs) != 0 || shadow.Mount.LeaseUntil != 0 {
+		t.Fatal("global quota exhaustion did not revoke mounted authorization")
+	}
+	site, err := f.master.store.businessSite(f.site.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(site.Grants) != 1 || site.Grants[0].Budget != 1500 {
+		t.Fatal("global quota exhaustion rewrote the configured mount grant")
+	}
+}
+
 func TestSubsiteEgressPoolUsesDedicatedRelayPath(t *testing.T) {
 	f := newMountFixture(t)
 	w := req(t, f.master, f.owner, "POST", "/api/business-sites/"+f.site.ID+"/egress-pool", object{"node_id": "vless-main"})
