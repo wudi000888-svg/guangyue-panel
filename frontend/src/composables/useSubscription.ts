@@ -44,7 +44,7 @@ function scheduleSubscriptionPoll(delay = subscriptionPollInterval) {
 
 async function pollSubscription() {
   subscriptionPollTimer = undefined;
-  if (!["subscription", "public-subscription"].includes(page.value)) return;
+  if (!state.value || !["subscription", "public-subscription"].includes(page.value)) return;
   if (document.hidden || subLoading.value) {
     scheduleSubscriptionPoll();
     return;
@@ -66,6 +66,7 @@ function mergeLoadedUser(user: User | undefined) {
   if (index >= 0) state.value.users[index] = user;
 }
 function clearSubscription() {
+  clearSubscriptionPoll();
   subscriptionSequence++;
   subscriptionRequest?.abort();
   subscriptionRequest = null;

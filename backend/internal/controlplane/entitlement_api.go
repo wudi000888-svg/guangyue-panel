@@ -184,6 +184,7 @@ func (a *App) entitlementAPI(w http.ResponseWriter, r *http.Request, actor Recor
 			return
 		}
 		a.store.audit(actor.Username, "save_plan", p.ID)
+		a.status = "pending"
 		a.wakeMountSync()
 		jsonResponse(w, 200, p)
 		return
