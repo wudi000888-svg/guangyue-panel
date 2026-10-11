@@ -90,17 +90,11 @@ func (a *App) register(w http.ResponseWriter, r *http.Request) {
 	record := Record{User: User{Username: input.Username, Role: "user", Enabled: true, Created: now}, Credentials: Credentials{HY2: randomToken(24), Token: randomToken(32), VLESS: map[string]string{}}, Password: hash}
 	record.InitMeter("period-"+randomToken(12), now)
 	plan, err := a.store.plan(defaultDemoPlan)
-	if err != nil && a.store.meta(planDeletedMetaPrefix+defaultDemoPlan) != "1" {
+	if err != nil || plan.Archived {
 		failure(w, 409, "默认演示套餐不可用，请联系管理员")
 		return
 	}
-	if err == nil {
-		if plan.Archived {
-			failure(w, 409, "默认演示套餐不可用，请联系管理员")
-			return
-		}
-		assignPlan(&record, plan, now)
-	}
+	assignPlan(&record, plan, now)
 	for _, n := range nodes {
 		if n.Protocol == "vless" {
 			record.Credentials.VLESS[n.ID] = uuid()
