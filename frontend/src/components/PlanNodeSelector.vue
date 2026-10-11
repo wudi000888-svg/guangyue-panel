@@ -11,16 +11,17 @@ const props=defineProps<{
   nodes:Node[];
   groupIds:string[];
   nodeIds:string[];
+  nodeRates?:Record<string,number>;
   hidePublic?:boolean;
 }>();
 const emit=defineEmits<{
   (event:'update:groupIds',value:string[]):void;
   (event:'update:nodeIds',value:string[]):void;
+  (event:'update:nodeRates',value:Record<string,number>):void;
 }>();
 
 const search=ref<Record<string,string>>({});
 const filteredRows=(id:string)=>rowsFor(id).filter(n=>[n.name,n.protocol,n.site_name,n.entry_host,n.exit_ip].join(' ').toLowerCase().includes((search.value[id]||'').toLowerCase()));
-function useWholeGroup(id:string){emit('update:nodeIds',removePlanGroupNodes(id,rowsFor(id),props.nodeIds));}
 const memberSelected=(member:GroupMember)=>planMemberSelected(member,props.nodeIds);
 const visibleGroups=computed(()=>props.groups.filter(group=>!props.hidePublic||group.scope!=='public'));
 // /api/node-groups returns the complete effective membership, including
@@ -32,17 +33,35 @@ const groupSelected=(groupID:string)=>props.groupIds.includes(groupID);
 const restricted=(groupID:string)=>selectedPlanGroupKeys(groupID,rowsFor(groupID),props.nodeIds).length>0;
 const unavailable=(groupID:string)=>unavailablePlanGroupKeys(groupID,rowsFor(groupID),props.nodeIds).length;
 const selectedCount=(groupID:string)=>rowsFor(groupID).filter(member=>memberSelected(member)).length;
+const rateValue=(member:GroupMember)=>((props.nodeRates?.[memberKey(member)]??props.nodeRates?.[member.node_id]??member.rate_milli??1000)/1000).toString();
+const withoutRate=(rates:Record<string,number>,member:GroupMember)=>{const next={...rates};delete next[memberKey(member)];delete next[member.node_id];return next;};
+const withoutGroupRates=(rates:Record<string,number>,groupID:string)=>rowsFor(groupID).reduce(withoutRate,rates);
+function useWholeGroup(id:string){emit('update:nodeIds',removePlanGroupNodes(id,rowsFor(id),props.nodeIds));emit('update:nodeRates',withoutGroupRates(props.nodeRates||{},id));}
 
 function updateGroups(groupID:string,checked:boolean){
   const next=checked?[...props.groupIds,groupID]:props.groupIds.filter(id=>id!==groupID);
   emit('update:groupIds',[...new Set(next)]);
-  if(!checked)emit('update:nodeIds',removePlanGroupNodes(groupID,rowsFor(groupID),props.nodeIds));
+  if(!checked){
+    emit('update:nodeIds',removePlanGroupNodes(groupID,rowsFor(groupID),props.nodeIds));
+    emit('update:nodeRates',withoutGroupRates(props.nodeRates||{},groupID));
+  }
 }
 function updateNode(member:GroupMember,checked:boolean){
   const nodeID=memberKey(member);
   const current=props.nodeIds.filter(id=>id!==nodeID&&(['mounted','business'].includes(member.source||'')||id!==member.node_id));
   const next=checked?[...current,nodeID]:current;
   emit('update:nodeIds',[...new Set(next)]);
+  if(!checked)emit('update:nodeRates',withoutRate(props.nodeRates||{},member));
+}
+function updateRate(member:GroupMember,value:string){
+  if(!memberSelected(member))return;
+  const milli=Math.round(Number(value)*1000);
+  if(!Number.isFinite(milli)||milli<0||milli>100000)return;
+  const key=memberKey(member), next={...(props.nodeRates||{})};
+  if(milli===(member.rate_milli??1000))delete next[key];
+  else next[key]=milli;
+  if(key!==member.node_id)delete next[member.node_id];
+  emit('update:nodeRates',next);
 }
 </script>
 
@@ -62,10 +81,10 @@ function updateNode(member:GroupMember,checked:boolean){
         <div v-if="groupSelected(group.id)" class="group-authorization"><strong>{{restricted(group.id)?t('仅授权本组所选节点'):t('整组授权，包含后续新增节点')}}</strong><span>{{restricted(group.id)?selectedCount(group.id):rowsFor(group.id).length}} {{t('个节点')}}</span></div><details v-if="groupSelected(group.id)" :open="restricted(group.id)" class="group-customize"><summary>{{t('按需选择组内节点')}}</summary><div class="group-node-list"><div class="node-selection-tools"><input v-model="search[group.id]" type="search" :placeholder="t('搜索组内节点')" :aria-label="t('搜索组内节点')"/><button v-if="restricted(group.id)" type="button" @click="useWholeGroup(group.id)">{{t('恢复整组授权')}}</button></div>
           <p v-if="unavailable(group.id)" class="group-selection-note">{{unavailable(group.id)}} {{t('个已选节点暂不在目录中，原有选择仍保留。')}}</p>
           <template v-if="groupHasNodes(group.id)">
-            <label v-for="member in filteredRows(group.id)" :key="memberKey(member)" class="node-option">
+            <div v-for="member in filteredRows(group.id)" :key="memberKey(member)" class="node-option">
               <input type="checkbox" :checked="memberSelected(member)" @change="updateNode(member,($event.target as HTMLInputElement).checked)"/>
-              <span><strong>{{member.name||member.node_id}}</strong><small>{{(member.protocol||'').toUpperCase()}} · {{member.entry_host||member.exit_ip||member.node_id}}<template v-if="member.source&&member.source!=='local'"> · {{member.site_name||member.source}}</template></small></span>
-            </label>
+              <span class="node-option-copy"><strong>{{member.name||member.node_id}}</strong><small>{{(member.protocol||'').toUpperCase()}} · {{member.entry_host||member.exit_ip||member.node_id}}<template v-if="member.source&&member.source!=='local'"> · {{member.site_name||member.source}}</template></small></span><span class="node-rate-field"><span>{{t('节点倍率')}}</span><input :value="rateValue(member)" :disabled="!memberSelected(member)" type="number" min="0" max="100" step="0.01" :aria-label="t('节点倍率')+' · '+(member.name||member.node_id)" @input="updateRate(member,($event.target as HTMLInputElement).value)"/></span>
+            </div>
           </template>
           <p v-else class="field-help">{{t('此组暂无可单独选择的可用节点。')}}</p>
           <p v-if="groupHasNodes(group.id)&&!filteredRows(group.id).length" class="field-help">{{t('没有匹配的节点，请调整搜索。')}}</p>
@@ -80,4 +99,5 @@ function updateNode(member:GroupMember,checked:boolean){
 <style scoped>
 .plan-node-selector{display:flex;flex-direction:column;gap:12px}.selector-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}.selector-heading strong,.selector-heading small{display:block}.selector-heading strong{font-size:13px}.selector-heading small,.selection-count,.group-option small,.node-option small,.group-selection-summary{font-size:12px;color:var(--muted)}.selector-heading small{margin-top:5px;line-height:1.5}.selection-count{white-space:nowrap}.group-list{border-radius:10px;display:flex;flex-direction:column;max-height:540px;overflow:auto;min-width:0}.group-list legend{color:var(--muted)}.group-block{border-bottom:1px solid var(--border);padding-bottom:12px}.group-block:last-child{border-bottom:0;padding-bottom:0}.group-option,.node-option{display:flex;flex-direction:row;gap:9px;margin:0;font-size:13px;overflow-wrap:anywhere}.group-option input,.node-option input{width:16px;height:16px;margin:2px 0 0;flex-shrink:0}.group-option strong,.node-option strong{font-weight:550}.group-option small,.node-option small{display:block;margin-top:4px}.group-node-list{border-radius:8px;background:var(--surface-hover);display:flex;flex-direction:column;gap:10px}.group-selection-summary{display:block;margin-left:25px;margin-top:2px}@media(max-width:600px){.selector-heading{display:block}.selection-count{display:block;margin-top:6px}.group-node-list{margin-left:12px}}
 .group-block{padding:14px;border:1px solid var(--border);border-radius:10px;background:var(--surface)}.group-block:last-child{border:1px solid var(--border);padding:14px}.group-list{padding:0;border:0;gap:10px}.group-list legend{padding:0 0 12px;font-size:13px}.group-option{min-height:44px;align-items:center}.group-authorization{display:flex;gap:10px;justify-content:space-between;margin:12px 0 0;padding:10px 12px;background:var(--accent-soft);border-radius:8px;color:var(--accent);font-size:12px}.group-authorization strong{font-weight:500}.group-customize summary{padding:12px 0;min-height:44px;align-content:center;font-size:13px;color:var(--secondary)}.group-node-list{margin:0;padding:12px}.node-selection-tools{display:flex;gap:8px;flex-wrap:wrap}.node-selection-tools input{min-width:0;flex:1;min-height:44px}.node-selection-tools button{min-height:44px;font-size:12px}.node-option{align-items:center;min-height:44px}.group-selection-note{margin:0;color:var(--secondary);font-size:12px;line-height:1.7}
+.node-option-copy{display:flex;min-width:0;flex:1;flex-direction:column}.node-rate-field{display:flex;flex:0 0 108px;align-items:center;gap:5px;margin:0;color:var(--muted);font-size:11px}.node-rate-field input{width:76px;min-height:36px;padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums}.node-rate-field input:focus{outline:2px solid var(--accent);outline-offset:1px}@media(max-width:600px){.node-rate-field{flex-basis:100%;margin-left:25px}.node-rate-field input{flex:1}}
 </style>
