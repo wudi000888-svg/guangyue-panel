@@ -48,6 +48,8 @@ After restart, verified receipts resume without another provider callback. A pay
 
 Approve a completed plan's refund in **Orders** first. After entitlement revocation and settlement, an external-payment order becomes `refund_pending` (**awaiting original-method refund**). This does **not** mean funds have been returned. Open **Online payments → Receipts and refunds** and select the actual receipt ID:
 
+Refund requests are stored separately from fulfillment. A member request leaves the order `completed` and exposes `refund_status=requested`; the member can cancel before review, while an administrator can reject with a reason. Approval requires the request ID and revision. A unique pending constraint and database CAS prevent an old page from cancelling or rejecting a later request for the same order. Migration 017 backfills legacy `refund_requested` rows into this aggregate.
+
 - **Stripe:** Request an original-method refund. The worker uses a stable idempotency key; only a successful API response, signed webhook or subsequent retrieval with `succeeded` completes it. Pending and failed responses remain visible and never count as refunded.
 - **EPay:** Complete the real refund in the merchant console first. Enter the actual refund reference and reason, and explicitly confirm that funds were returned. The panel records the verified administrator confirmation; it does not send an EPay refund or credit the internal wallet.
 - **Unknown-order receipts:** Reconcile the merchant statement and complete any actual refund before recording manual confirmation. Such receipts cannot automatically fund a user or plan.
@@ -85,6 +87,8 @@ Active orders exclude conflicting manual entitlement and business-site membershi
 ## Support tickets
 
 Enabled signed-in members can create, reply to and close tickets. Expired or quota-exhausted accounts retain portal access. Members can reopen a closed/resolved ticket within seven days, subject to the open-ticket limit. Categories cover account/balance, orders/plans, nodes/connectivity, usage and other issues. Members can link their own orders and authorized nodes. Resource labels survive node deletion.
+
+The server owns the ticket workflow: new tickets and member replies enter `processing`, public administrator replies enter `waiting_user`, and internal notes leave the public state unchanged. `resolved` and `closed` are terminal states. Ticket lists provide server-side search, state filters and `next_before` cursor pagination; replies and state changes carry a revision and reject stale writes with 409.
 
 Administrators can set status/priority and add private internal notes and images. Members cannot access other tickets or internal attachments. Notifications use the existing inbox, independently of the original ticket record.
 

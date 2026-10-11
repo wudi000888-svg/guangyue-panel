@@ -200,7 +200,8 @@ func sameNodeRates(a, b map[string]int64) bool {
 		return false
 	}
 	for key, rate := range a {
-		if b[key] != rate {
+		newRate, ok := b[key]
+		if !ok || newRate != rate {
 			return false
 		}
 	}

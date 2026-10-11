@@ -1,6 +1,7 @@
 package controlplane
 
 import (
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"github.com/wudi000888-svg/guangyue-panel/backend/internal/domain"
@@ -20,25 +21,56 @@ type Offer struct {
 	Plan          Plan   `json:"plan"`
 }
 type Order struct {
-	ID                string `json:"id"`
-	UserID            int64  `json:"user_id"`
-	State             string `json:"state"`
-	Created           int64  `json:"created"`
-	Updated           int64  `json:"updated"`
-	Expires           int64  `json:"expires"`
-	Offer             Offer  `json:"offer"`
-	Action            string `json:"action"`
-	BeforeExpiry      int64  `json:"before_expiry"`
-	BeforeRevision    string `json:"before_revision"`
-	AppliedRevision   string `json:"applied_revision"`
-	Expected          string `json:"expected"`
-	PreviousEnd       int64  `json:"previous_end"`
-	Started           int64  `json:"started"`
-	NextAttempt       int64  `json:"next_attempt"`
-	Attempts          int    `json:"attempts"`
-	Message           string `json:"message"`
-	PaymentAttemptID  string `json:"payment_attempt_id,omitempty"`
-	PaymentProviderID string `json:"payment_provider_id,omitempty"`
+	ID                string         `json:"id"`
+	UserID            int64          `json:"user_id"`
+	State             string         `json:"state"`
+	Created           int64          `json:"created"`
+	Updated           int64          `json:"updated"`
+	Expires           int64          `json:"expires"`
+	Offer             Offer          `json:"offer"`
+	Action            string         `json:"action"`
+	BeforeExpiry      int64          `json:"before_expiry"`
+	BeforeRevision    string         `json:"before_revision"`
+	AppliedRevision   string         `json:"applied_revision"`
+	Expected          string         `json:"expected"`
+	PreviousEnd       int64          `json:"previous_end"`
+	Started           int64          `json:"started"`
+	NextAttempt       int64          `json:"next_attempt"`
+	Attempts          int            `json:"attempts"`
+	Message           string         `json:"message"`
+	RefundStatus      string         `json:"refund_status,omitempty"`
+	RefundRequestID   string         `json:"refund_request_id,omitempty"`
+	RefundRequest     *RefundRequest `json:"refund_request,omitempty"`
+	PaymentAttemptID  string         `json:"payment_attempt_id,omitempty"`
+	PaymentProviderID string         `json:"payment_provider_id,omitempty"`
+}
+
+func (s *Store) refundRequest(orderID string) (*RefundRequest, error) {
+	var v RefundRequest
+	err := s.db.QueryRow("SELECT id,order_id,user_id,state,revision,reason,actor_id,created,updated,decided_by,decided_at FROM commerce_refund_requests WHERE order_id=? ORDER BY created DESC,id DESC LIMIT 1", orderID).Scan(&v.ID, &v.OrderID, &v.UserID, &v.State, &v.Revision, &v.Reason, &v.ActorID, &v.Created, &v.Updated, &v.DecidedBy, &v.DecidedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &v, nil
+}
+
+func (a *App) enrichOrder(o *Order) error {
+	r, err := a.store.refundRequest(o.ID)
+	if err != nil {
+		return err
+	}
+	o.RefundRequest = r
+	if r != nil {
+		o.RefundStatus = r.State
+		o.RefundRequestID = r.ID
+	}
+	if o.State == "refund_requested" {
+		o.State = "completed"
+	}
+	return nil
 }
 
 func (s *Store) offer(id string) (Offer, error) {
@@ -56,6 +88,11 @@ func (s *Store) order(id string) (Order, error) {
 	e := s.db.QueryRow("SELECT doc FROM commerce_orders WHERE id=?", id).Scan(&b)
 	if e == nil {
 		e = json.Unmarshal(b, &v)
+	}
+	if e == nil && v.State == "refund_requested" {
+		// Migration 017 keeps the historical JSON document intact while moving
+		// fulfillment back to completed. Normalize snapshots read by workers too.
+		v.State = "completed"
 	}
 	return v, e
 }
@@ -181,7 +218,7 @@ func (a *App) countOfferPurchases(user int64, offerID, exclude string) (int, err
 		if err = rows.Scan(&id, &state, &b); err != nil {
 			return 0, err
 		}
-		if id == exclude || state != "pending" && state != "provisioning" && state != "completed" && state != "refund_requested" && state != "refunding" {
+		if id == exclude || state != "pending" && state != "provisioning" && state != "completed" && state != "refunding" {
 			continue
 		}
 		var order Order
@@ -234,21 +271,37 @@ func (a *App) listOrders(w http.ResponseWriter, r *http.Request, actor Record) e
 	if e != nil {
 		return e
 	}
-	defer rows.Close()
-	out := []Order{}
+	orders := []Order{}
 	for rows.Next() {
 		var b []byte
 		var o Order
 		if e = rows.Scan(&b); e != nil {
+			rows.Close()
 			return e
 		}
 		if e = json.Unmarshal(b, &o); e != nil {
+			rows.Close()
 			return e
 		}
-		out = append(out, o)
+		orders = append(orders, o)
 	}
 	if e = rows.Err(); e != nil {
+		rows.Close()
 		return e
+	}
+	// SQLite deliberately uses one connection. Close the order cursor before
+	// loading each refund aggregate, otherwise the enrichment query waits for
+	// the cursor forever. PostgreSQL also benefits from releasing the page
+	// snapshot before the per-order lookups.
+	if e = rows.Close(); e != nil {
+		return e
+	}
+	out := make([]Order, 0, len(orders))
+	for i := range orders {
+		if e = a.enrichOrder(&orders[i]); e != nil {
+			return e
+		}
+		out = append(out, orders[i])
 	}
 	jsonResponse(w, 200, object{"items": out})
 	return nil
@@ -338,6 +391,8 @@ func (a *App) orderAction(w http.ResponseWriter, r *http.Request, actor Record) 
 		Password         string `json:"password"`
 		PaymentAttemptID string `json:"payment_attempt_id"`
 		Reason           string `json:"reason"`
+		RefundRequestID  string `json:"refund_request_id"`
+		RefundRevision   int64  `json:"refund_request_revision"`
 	}
 	if !decode(w, r, &in) {
 		return nil
@@ -363,6 +418,9 @@ func (a *App) orderAction(w http.ResponseWriter, r *http.Request, actor Record) 
 	if e != nil {
 		return commerceFail(404, "订单不存在")
 	}
+	if e = a.enrichOrder(&o); e != nil {
+		return e
+	}
 	if actor.Role != "owner" && actor.ID != o.UserID {
 		// Keep ordinary checkout actions opaque to other members, while refund
 		// review actions explicitly report the permission failure so the member
@@ -377,6 +435,18 @@ func (a *App) orderAction(w http.ResponseWriter, r *http.Request, actor Record) 
 		return e
 	}
 	old := o.State
+	request, requestErr := a.store.refundRequest(o.ID)
+	if requestErr != nil {
+		return requestErr
+	}
+	if in.RefundRequestID != "" {
+		if request == nil || request.ID != in.RefundRequestID || in.RefundRevision < 1 || request.Revision != in.RefundRevision {
+			return commerceFail(409, "退款申请已变化，请刷新后重试")
+		}
+	}
+	if request != nil && request.State == "requested" && (in.Action == "cancel_refund" || in.Action == "reject_refund" || in.Action == "refund") && (in.RefundRequestID == "" || in.RefundRevision < 1) {
+		return commerceFail(409, "请提供当前退款申请编号和版本")
+	}
 	now := time.Now().Unix()
 	deltaAvailable, deltaHeld := int64(0), int64(0)
 	kind := ""
@@ -469,30 +539,42 @@ func (a *App) orderAction(w http.ResponseWriter, r *http.Request, actor Record) 
 		if actor.ID != o.UserID {
 			return commerceFail(403, "退款申请需由所属用户提交")
 		}
+		if len([]rune(in.Reason)) > 500 {
+			return commerceFail(400, "退款申请理由不能超过 500 个字符")
+		}
 		if old != "completed" || u.Entitlement == nil || u.Entitlement.Revision != o.AppliedRevision {
 			return commerceFail(409, "订单存在后续权益变化，暂时不能申请退款")
 		}
-		if pending, e := a.store.commercePending(u.ID); e != nil {
-			return e
-		} else if pending {
-			return commerceFail(409, "请先处理用户的未完成订单")
+		if request != nil && request.State == "requested" {
+			return commerceFail(409, "该订单已有待处理退款申请")
 		}
-		o.State = "refund_requested"
+		o.State = "completed"
 		o.Message = "退款申请已提交，等待管理员审核"
+		o.RefundStatus = "requested"
+		o.RefundRequestID = serial("GYRR")
+		o.RefundRequest = &RefundRequest{ID: o.RefundRequestID, OrderID: o.ID, UserID: o.UserID, State: "requested", Revision: 1, Reason: in.Reason, ActorID: actor.ID, Created: now, Updated: now}
 	case "cancel_refund":
 		if actor.ID != o.UserID {
 			return commerceFail(403, "退款申请需由所属用户取消")
 		}
-		if old != "refund_requested" {
+		if len([]rune(in.Reason)) > 500 {
+			return commerceFail(400, "退款取消理由不能超过 500 个字符")
+		}
+		if old != "completed" || request == nil || request.State != "requested" {
 			return commerceFail(409, "当前没有待处理的退款申请")
 		}
 		o.State = "completed"
 		o.Message = "退款申请已取消"
+		o.RefundStatus = "cancelled"
+		updatedRequest := *request
+		o.RefundRequest = &updatedRequest
+		o.RefundRequest.State = "cancelled"
+		o.RefundRequest.Revision++
 	case "reject_refund":
 		if actor.Role != "owner" {
 			return commerceFail(403, "需要管理员权限")
 		}
-		if old != "refund_requested" {
+		if old != "completed" || request == nil || request.State != "requested" {
 			return commerceFail(409, "当前没有待处理的退款申请")
 		}
 		if len([]rune(in.Reason)) > 500 {
@@ -503,6 +585,12 @@ func (a *App) orderAction(w http.ResponseWriter, r *http.Request, actor Record) 
 		if in.Reason != "" {
 			o.Message += "：" + in.Reason
 		}
+		o.RefundStatus = "rejected"
+		updatedRequest := *request
+		o.RefundRequest = &updatedRequest
+		o.RefundRequest.State = "rejected"
+		o.RefundRequest.Reason = in.Reason
+		o.RefundRequest.Revision++
 	case "refund":
 		if old != "completed" && old != "refund_requested" || u.Entitlement == nil || u.Entitlement.Revision != o.AppliedRevision {
 			return commerceFail(409, "订单存在后续权益变化，不能自动退款")
@@ -520,6 +608,13 @@ func (a *App) orderAction(w http.ResponseWriter, r *http.Request, actor Record) 
 		o.Message = "等待订单权益撤回后退回余额"
 		if o.PaymentAttemptID != "" {
 			o.Message = "等待订单权益撤回后原路退款"
+		}
+		if request != nil && request.State == "requested" {
+			o.RefundStatus = "approved"
+			updatedRequest := *request
+			o.RefundRequest = &updatedRequest
+			o.RefundRequest.State = "approved"
+			o.RefundRequest.Revision++
 		}
 	default:
 		return commerceFail(400, "订单操作无效")
@@ -544,6 +639,9 @@ func (a *App) orderAction(w http.ResponseWriter, r *http.Request, actor Record) 
 	}
 	if e = json.Unmarshal(lockedDoc, &lockedOrder); e != nil {
 		return e
+	}
+	if lockedOrder.State == "refund_requested" {
+		lockedOrder.State = "completed"
 	}
 	if lockedOrder.State != old || lockedOrder.PaymentAttemptID != o.PaymentAttemptID || lockedOrder.PaymentProviderID != o.PaymentProviderID {
 		return errCommerceConflict
@@ -571,6 +669,27 @@ func (a *App) orderAction(w http.ResponseWriter, r *http.Request, actor Record) 
 		if old == "provisioning" {
 			o.Message = "订单已取消；在线支付待人工退款"
 		}
+	}
+	if in.Action == "request_refund" {
+		_, e = tx.Exec("INSERT INTO commerce_refund_requests(id,order_id,user_id,state,revision,reason,actor_id,created,updated) VALUES(?,?,?,?,?,?,?,?,?)", o.RefundRequestID, o.ID, o.UserID, "requested", 1, in.Reason, actor.ID, now, now)
+	} else if (in.Action == "cancel_refund" || in.Action == "reject_refund" || in.Action == "refund") && request != nil && request.State == "requested" {
+		newState := "approved"
+		if in.Action == "cancel_refund" {
+			newState = "cancelled"
+		} else if in.Action == "reject_refund" {
+			newState = "rejected"
+		}
+		result, updateErr := tx.Exec("UPDATE commerce_refund_requests SET state=?,reason=?,revision=revision+1,updated=?,decided_by=?,decided_at=? WHERE id=? AND state='requested' AND revision=?", newState, in.Reason, now, actor.ID, now, request.ID, request.Revision)
+		e = updateErr
+		if e == nil {
+			n, _ := result.RowsAffected()
+			if n != 1 {
+				e = commerceFail(409, "退款申请已变化，请刷新后重试")
+			}
+		}
+	}
+	if e != nil {
+		return e
 	}
 	if kind != "" && o.Offer.Price > 0 {
 		if _, e = a.store.postMoney(tx, u.ID, actor.ID, kind+":"+o.ID, kind, o.ID, o.Message, deltaAvailable, deltaHeld); e != nil {
