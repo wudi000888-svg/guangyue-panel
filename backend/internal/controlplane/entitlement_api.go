@@ -237,6 +237,12 @@ func (a *App) deletePlan(w http.ResponseWriter, _ *http.Request, actor Record, i
 	if err == nil {
 		_, err = tx.Exec("DELETE FROM plans WHERE id=?", id)
 	}
+	if err == nil && id == defaultDemoPlan {
+		// Keep the destructive choice across restarts. The bootstrap seed is
+		// allowed to create the demo plan on first install, but must not silently
+		// restore an administrator-deleted catalog item.
+		_, err = tx.Exec("INSERT INTO meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", planDeletedMetaPrefix+defaultDemoPlan, "1")
+	}
 	if err == nil {
 		err = tx.Commit()
 	}
