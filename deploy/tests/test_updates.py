@@ -150,6 +150,14 @@ class UpdateTests(unittest.TestCase):
     def cache(self):
         state.write('catalog.json', {'checked_at': int(time.time()), 'releases': [{'version': '0.19.0', 'editions': ['lite']}]})
 
+    def test_status_excludes_the_installed_release_from_available_updates(self):
+        state.write('catalog.json', {'checked_at': int(time.time()), 'releases': [
+            {'version': '0.19.0', 'editions': ['lite']},
+            {'version': '0.18.0', 'editions': ['lite']},
+        ]})
+        result = agent.status()
+        self.assertEqual([release['version'] for release in result['releases']], ['0.19.0'])
+
     def test_numeric_floor_is_persistent_and_checked_on_both_paths(self):
         self.assertGreater(state.version('0.10.0'), state.version('0.9.99'))
         self.assertEqual(state.baseline('0.99.0')['version'], '0.17.0')

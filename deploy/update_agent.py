@@ -155,7 +155,7 @@ def fetch_bundle(target, edition, temp):
 def status():
     config = json.loads(state.CONFIG.read_text()); current = state.current()
     cached = state.read('catalog.json', {'checked_at': 0, 'releases': []})
-    releases = [r for r in cached['releases'] if config.get('edition', 'lite') in r['editions'] and state.version(r['version']) >= state.version(current)]
+    releases = [r for r in cached['releases'] if config.get('edition', 'lite') in r['editions'] and state.version(r['version']) > state.version(current)]
     op = state.read('operation.json')
     # Polling must not open the database while its files are being backed up or
     # restored (nor recreate SQLite WAL sidecars under the updater's identity).
