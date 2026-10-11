@@ -55,7 +55,9 @@ async function pollSubscription() {
     // subscription appear empty to the member.
     await loadSub(false, true);
   } finally {
-    scheduleSubscriptionPoll();
+    if (state.value && ["subscription", "public-subscription"].includes(page.value)) {
+      scheduleSubscriptionPoll();
+    }
   }
 }
 
