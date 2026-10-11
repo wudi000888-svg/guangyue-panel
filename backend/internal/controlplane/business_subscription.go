@@ -93,17 +93,20 @@ func (a *App) subscriptionCatalogSource(record Record, source, protocol string) 
 		if grant == nil {
 			continue
 		}
-		sent := false
-		for _, g := range site.SentGrants {
-			if g.UserID == record.ID {
-				sent = true
+		var sentGrant *BusinessGrant
+		for i := range site.SentGrants {
+			if site.SentGrants[i].UserID == record.ID {
+				sentGrant = &site.SentGrants[i]
 				break
 			}
 		}
-		if !sent {
+		if sentGrant == nil {
 			continue
 		}
-		if grant.Quota > 0 && site.Usage[record.ID].total() >= grant.Quota {
+		used := site.Usage[record.ID].total()
+		// Keep the configured ceiling as an immediate policy boundary while
+		// also honoring a lower effective ceiling issued for this snapshot.
+		if grant.Quota > 0 && used >= grant.Quota || sentGrant.Quota > 0 && used >= sentGrant.Quota {
 			continue
 		}
 		remote := businessRecord(record, site.ID, site.SentNodes)

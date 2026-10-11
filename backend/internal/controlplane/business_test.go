@@ -359,6 +359,26 @@ func TestBusinessOverallocatedGrantsUseGlobalRemainingAtRuntime(t *testing.T) {
 			return snapshot.Users[0].User.Quota
 		}(), err)
 	}
+	// Subscription visibility follows the effective grant sent in the last
+	// snapshot. A stale configured ceiling must not keep nodes visible after
+	// the issued allowance has been consumed.
+	first, _ = a.store.businessSite(first.ID)
+	first.Applied = first.Desired
+	first.SentGrants = []BusinessGrant{{UserID: u.ID, Quota: 200}}
+	first.Usage[u.ID] = BusinessUsage{Upload: 200, VLESS: 200}
+	if err := a.store.saveBusinessSite(first); err != nil {
+		t.Fatal(err)
+	}
+	current, _ := a.store.record(u.ID)
+	entries, err := a.subscriptionCatalogSource(current, "mixed", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if entry.siteID == first.ID {
+			t.Fatal("subscription exposed a site after its issued grant was exhausted")
+		}
+	}
 
 	u, _ = a.store.record(u.ID)
 	u.Meter.Upload = u.Meter.BaseUpload + 1000
