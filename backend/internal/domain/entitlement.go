@@ -27,11 +27,19 @@ type QuotaMeter struct {
 }
 
 type Entitlement struct {
-	PlanID   string   `json:"plan_id"`
-	Version  int      `json:"version"`
-	Name     string   `json:"name"`
-	GroupIDs []string `json:"group_ids"`
-	NodeIDs  []string `json:"node_ids"`
+	PlanID string `json:"plan_id"`
+	// OrderID identifies the purchase that currently owns this entitlement.
+	// It is intentionally immutable across live policy edits so refund and
+	// queue operations can locate the right purchase without relying on the
+	// mutable authorization revision.
+	OrderID string `json:"order_id,omitempty"`
+	// RenewalOrderID identifies the most recent order that extended this
+	// entitlement without replacing its plan.
+	RenewalOrderID string   `json:"renewal_order_id,omitempty"`
+	Version        int      `json:"version"`
+	Name           string   `json:"name"`
+	GroupIDs       []string `json:"group_ids"`
+	NodeIDs        []string `json:"node_ids"`
 	// NodeRates contains package-scoped billing multipliers keyed by the
 	// canonical plan node selection key. An absent entry falls back to the
 	// node's default policy multiplier.
@@ -47,14 +55,18 @@ type Entitlement struct {
 // protocol permissions and node selection of the previous package.  Slots are
 // restored in LIFO order, so A -> B -> C returns to B and then A.
 type PlanSlot struct {
-	Entitlement *Entitlement     `json:"entitlement"`
-	NodeRates   map[string]int64 `json:"node_rates,omitempty"`
-	Quota       int64            `json:"quota"`
-	Expires     int64            `json:"expires"`
-	PausedAt    int64            `json:"paused_at"`
-	VLESS       bool             `json:"vless"`
-	HY2         bool             `json:"hy2"`
-	Meter       *QuotaMeter      `json:"meter,omitempty"`
+	Entitlement *Entitlement `json:"entitlement"`
+	// OrderID mirrors Entitlement.OrderID for queue operations and lets a
+	// refund remove one middle slot without changing the remaining LIFO order.
+	OrderID        string           `json:"order_id,omitempty"`
+	RenewalOrderID string           `json:"renewal_order_id,omitempty"`
+	NodeRates      map[string]int64 `json:"node_rates,omitempty"`
+	Quota          int64            `json:"quota"`
+	Expires        int64            `json:"expires"`
+	PausedAt       int64            `json:"paused_at"`
+	VLESS          bool             `json:"vless"`
+	HY2            bool             `json:"hy2"`
+	Meter          *QuotaMeter      `json:"meter,omitempty"`
 }
 
 func (u User) QuotaUpload() int64 {

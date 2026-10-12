@@ -16,6 +16,7 @@ export const router = createRouter({
     { path: '/clients', component: () => import('./pages/ClientsPage.vue') },
     { path: '/monitor', component: () => import('./pages/MonitorPage.vue'), meta: { owner: true } },
     { path: '/plans', component: () => import('./pages/PlansPage.vue'), meta: { owner: true } },
+    { path: '/crypto-payments', component: () => import('./pages/CryptoPaymentsPage.vue'), meta: { owner: true } },
     { path: '/node-groups', component: () => import('./pages/NodeGroupsPage.vue'), meta: { owner: true } },
     { path: '/users', component: () => import('./pages/UsersPage.vue'), meta: { owner: true } },
     { path: '/ips/:tab?', component: () => import('./pages/PrivatePoolPage.vue'), meta: { owner: true } },

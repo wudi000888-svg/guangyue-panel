@@ -41,6 +41,8 @@ type Order struct {
 	RefundStatus      string         `json:"refund_status,omitempty"`
 	RefundRequestID   string         `json:"refund_request_id,omitempty"`
 	RefundRequest     *RefundRequest `json:"refund_request,omitempty"`
+	RefundAmount      int64          `json:"refund_amount,string,omitempty"`
+	RefundAmountSet   bool           `json:"refund_amount_set,omitempty"`
 	PaymentAttemptID  string         `json:"payment_attempt_id,omitempty"`
 	PaymentProviderID string         `json:"payment_provider_id,omitempty"`
 }
@@ -120,6 +122,70 @@ func userCommerceVersion(u Record) string {
 		v["node_group_ids"] = u.NodeGroupIDs
 	}
 	return digest(string(jsonBytes(v)))
+}
+
+// orderEntitlementPosition locates a purchase in the user's current
+// entitlement chain. Authorization revisions are deliberately excluded from
+// this lookup because administrators may change a live package's node policy
+// after it was purchased. The purchase identity remains stable across those
+// policy revisions.
+func orderEntitlementPosition(u Record, orderID string) (active bool, queuedIndex int, found bool) {
+	if orderID == "" {
+		return false, -1, false
+	}
+	if u.Entitlement != nil && (u.Entitlement.OrderID == orderID || u.Entitlement.RenewalOrderID == orderID) {
+		return true, -1, true
+	}
+	for i := range u.PlanQueue {
+		id := u.PlanQueue[i].OrderID
+		if id == "" && u.PlanQueue[i].Entitlement != nil {
+			id = u.PlanQueue[i].Entitlement.OrderID
+			if id == "" {
+				id = u.PlanQueue[i].Entitlement.RenewalOrderID
+			}
+		}
+		if id == orderID || u.PlanQueue[i].RenewalOrderID == orderID {
+			return false, i, true
+		}
+	}
+	return false, -1, false
+}
+
+func removeQueuedEntitlement(u *Record, index int) bool {
+	if index < 0 || index >= len(u.PlanQueue) {
+		return false
+	}
+	copy(u.PlanQueue[index:], u.PlanQueue[index+1:])
+	u.PlanQueue[len(u.PlanQueue)-1] = domain.PlanSlot{}
+	u.PlanQueue = u.PlanQueue[:len(u.PlanQueue)-1]
+	return true
+}
+
+// refundableOrderAmount returns the portion of an order's price backed by
+// unused active entitlement. Queued purchases have not been consumed yet and
+// therefore remain fully refundable. A missing meter falls back to the full
+// amount so an old record is never under-refunded silently.
+func refundableOrderAmount(o Order, u Record, now int64) int64 {
+	amount := o.Offer.Price
+	if amount <= 0 {
+		return 0
+	}
+	active, _, found := orderEntitlementPosition(u, o.ID)
+	if !found || !active {
+		return amount
+	}
+	if o.Offer.Plan.Quota > 0 && u.QuotaUsed() > 0 {
+		used := min(o.Offer.Plan.Quota, max(int64(0), u.QuotaUsed()))
+		return amount * (o.Offer.Plan.Quota - used) / o.Offer.Plan.Quota
+	}
+	if o.Offer.Plan.Quota == 0 && o.Offer.Plan.ValidDays > 0 && u.Entitlement != nil && u.Entitlement.AssignedAt > 0 {
+		total := int64(o.Offer.Plan.ValidDays) * 86400
+		left := max(int64(0), u.Expires-now)
+		if total > 0 && left < total {
+			return amount * left / total
+		}
+	}
+	return amount
 }
 func (a *App) listOffers(w http.ResponseWriter, actor Record) error {
 	offers, e := readDocuments[Offer](a.store, "commerce_offers")
@@ -450,6 +516,9 @@ func (a *App) orderAction(w http.ResponseWriter, r *http.Request, actor Record) 
 	now := time.Now().Unix()
 	deltaAvailable, deltaHeld := int64(0), int64(0)
 	kind := ""
+	queuedRefund := false
+	queuedRefundIndex := -1
+	queuedRenewalRefund := false
 	switch in.Action {
 	case "confirm":
 		if o.PaymentAttemptID == "" {
@@ -500,7 +569,7 @@ func (a *App) orderAction(w http.ResponseWriter, r *http.Request, actor Record) 
 			return commerceFail(409, "订单支付方式无效")
 		}
 		future := cloneCommerceUser(u)
-		assignPlan(&future, o.Offer.Plan, now)
+		assignPlan(&future, o.Offer.Plan, now, o.ID)
 		if o.Action == "renew" {
 			future = u
 			future.Expires += int64(o.Offer.Plan.ValidDays) * 86400
@@ -542,8 +611,11 @@ func (a *App) orderAction(w http.ResponseWriter, r *http.Request, actor Record) 
 		if len([]rune(in.Reason)) > 500 {
 			return commerceFail(400, "退款申请理由不能超过 500 个字符")
 		}
-		if old != "completed" || u.Entitlement == nil || u.Entitlement.Revision != o.AppliedRevision {
-			return commerceFail(409, "订单存在后续权益变化，暂时不能申请退款")
+		if old != "completed" {
+			return commerceFail(409, "当前订单状态不可申请退款")
+		}
+		if _, _, found := orderEntitlementPosition(u, o.ID); !found {
+			return commerceFail(409, "订单权益已被替换，请联系管理员核对后退款")
 		}
 		if request != nil && request.State == "requested" {
 			return commerceFail(409, "该订单已有待处理退款申请")
@@ -592,22 +664,40 @@ func (a *App) orderAction(w http.ResponseWriter, r *http.Request, actor Record) 
 		o.RefundRequest.Reason = in.Reason
 		o.RefundRequest.Revision++
 	case "refund":
-		if old != "completed" && old != "refund_requested" || u.Entitlement == nil || u.Entitlement.Revision != o.AppliedRevision {
-			return commerceFail(409, "订单存在后续权益变化，不能自动退款")
+		if old != "completed" && old != "refund_requested" {
+			return commerceFail(409, "当前订单状态不可退款")
+		}
+		activeEntitlement, queuedIndex, found := orderEntitlementPosition(u, o.ID)
+		if !found {
+			return commerceFail(409, "订单权益已被替换，请联系管理员核对后退款")
 		}
 		if pending, e := a.store.commercePendingExcept(u.ID, o.ID); e != nil {
 			return e
 		} else if pending {
 			return commerceFail(409, "请先处理用户的未完成订单")
 		}
-		u.InitMeter("legacy-"+businessUsageKey(u.ID), now)
-		u.Meter.PendingReset = true
-		o.Started = now
-		o.NextAttempt = 0
-		o.State = "refunding"
-		o.Message = "等待订单权益撤回后退回余额"
-		if o.PaymentAttemptID != "" {
-			o.Message = "等待订单权益撤回后原路退款"
+		o.RefundAmount = refundableOrderAmount(o, u, now)
+		o.RefundAmountSet = true
+		if !activeEntitlement {
+			queuedRefund = true
+			queuedRefundIndex = queuedIndex
+			queuedRenewalRefund = o.Action == "renew" && queuedIndex >= 0 && queuedIndex < len(u.PlanQueue) && u.PlanQueue[queuedIndex].RenewalOrderID == o.ID
+			o.State = "refunded"
+			o.Message = "已移除排队权益并退回站内余额"
+			if o.PaymentAttemptID != "" {
+				o.State = "refund_pending"
+				o.Message = "已移除排队权益，等待管理员执行原路退款"
+			}
+		} else {
+			u.InitMeter("legacy-"+businessUsageKey(u.ID), now)
+			u.Meter.PendingReset = true
+			o.Started = now
+			o.NextAttempt = 0
+			o.State = "refunding"
+			o.Message = "等待订单权益撤回后退回余额"
+			if o.PaymentAttemptID != "" {
+				o.Message = "等待订单权益撤回后原路退款"
+			}
 		}
 		if request != nil && request.State == "requested" {
 			o.RefundStatus = "approved"
@@ -668,6 +758,30 @@ func (a *App) orderAction(w http.ResponseWriter, r *http.Request, actor Record) 
 		}
 		if old == "provisioning" {
 			o.Message = "订单已取消；在线支付待人工退款"
+		}
+	}
+	if queuedRefund {
+		if queuedRenewalRefund {
+			slot := &u.PlanQueue[queuedRefundIndex]
+			slot.Expires = o.BeforeExpiry
+			slot.RenewalOrderID = ""
+			if slot.Entitlement != nil {
+				slot.Entitlement.RenewalOrderID = ""
+			}
+		} else if !removeQueuedEntitlement(&u, queuedRefundIndex) {
+			return commerceFail(409, "排队权益已变化，请刷新后重试")
+		}
+		if o.PaymentAttemptID != "" {
+			if _, e = tx.Exec("UPDATE payment_attempts SET state='refund_required',updated=?,message=? WHERE id=? AND state IN ('completed','paid')", now, o.Message, o.PaymentAttemptID); e != nil {
+				return e
+			}
+			if e = paymentMarkReceiptRefund(tx, o.PaymentAttemptID, o.Message); e != nil {
+				return e
+			}
+		} else if o.Offer.Price > 0 {
+			if _, e = a.store.postMoney(tx, u.ID, actor.ID, "refund:"+o.ID, "refund", o.ID, o.Message, o.RefundAmount, 0); e != nil {
+				return e
+			}
 		}
 	}
 	if in.Action == "request_refund" {
@@ -1039,12 +1153,13 @@ func (a *App) fulfilOrder(o Order, now int64) error {
 			_, e = a.store.postMoney(tx, u.ID, 0, "release:"+o.ID, "release", o.ID, o.Message, o.Offer.Price, -o.Offer.Price)
 		}
 	} else if oldState == "refunding" {
-		if u.Entitlement == nil || u.Entitlement.Revision != o.AppliedRevision {
-			return commerceFail(409, "退款权益版本不匹配")
+		if u.Entitlement == nil || (u.Entitlement.OrderID != o.ID && u.Entitlement.RenewalOrderID != o.ID) {
+			return commerceFail(409, "退款权益来源不匹配")
 		}
 		u.Meter.PendingReset = false
 		if o.Action == "renew" {
 			u.Expires = o.BeforeExpiry
+			u.Entitlement.RenewalOrderID = ""
 			u.Entitlement.Revision = serial("GYV")
 		} else {
 			u.Expires = now
@@ -1058,18 +1173,20 @@ func (a *App) fulfilOrder(o Order, now int64) error {
 				return e
 			}
 			e = paymentMarkReceiptRefund(tx, o.PaymentAttemptID, o.Message)
-		} else if o.Offer.Price > 0 {
-			_, e = a.store.postMoney(tx, u.ID, 0, "refund:"+o.ID, "refund", o.ID, o.Message, o.Offer.Price, 0)
+		} else if o.RefundAmount > 0 {
+			_, e = a.store.postMoney(tx, u.ID, 0, "refund:"+o.ID, "refund", o.ID, o.Message, o.RefundAmount, 0)
 		}
 	} else {
 		if o.Action == "renew" {
 			u.Expires = max(now, u.Expires) + int64(o.Offer.Plan.ValidDays)*86400
+			u.Entitlement.RenewalOrderID = o.ID
 			u.Entitlement.Revision = serial("GYV")
 		} else {
 			oldDoc := jsonBytes(u.User)
 			oldPeriod := u.Meter.PeriodID
 			pauseCurrentPlan(&u, now)
-			assignPlan(&u, o.Offer.Plan, now)
+			assignPlan(&u, o.Offer.Plan, now, o.ID)
+			u.Entitlement.OrderID = o.ID
 			m := u.Meter
 			m.PeriodID = serial("GYCYCLE")
 			m.Start = now
