@@ -10,6 +10,11 @@ describe('shell navigation', () => {
     expect(groupNavigation(permitted, false).flatMap(group => group.items)).toHaveLength(6);
     expect(searchNavigation(permitted.map(item => ({...item,group:'',description:''})), 'clients')[0]?.id).toBe('clients');
   });
+  it('keeps the node square visible for members even when an older sidebar setting omits it', () => {
+    const permitted = ['subscription', 'node-square', 'shop', 'orders', 'settings'].map(id => ({id, label:id}));
+    expect(sidebarNavigation(permitted, ['subscription', 'shop', 'orders', 'settings'], false).map(item => item.id)).toEqual(['subscription', 'node-square', 'shop', 'orders', 'settings']);
+    expect(sidebarNavigation(permitted, [], false).map(item => item.id)).toEqual(['settings']);
+  });
   it('keeps every permitted route once, including future routes, without adding permissions', () => {
     const items = ['subscription', 'shop', 'nodes', 'fleet', 'future-feature'].map(id => ({ id, label: id }));
     for (const administrator of [true, false]) {

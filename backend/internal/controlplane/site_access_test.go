@@ -81,7 +81,7 @@ func TestSiteAccessSettingsPersistenceDefaultsAndValidation(t *testing.T) {
 	owner := testUser(t, a, "owner", "owner")
 	member := testUser(t, a, "member", "user")
 	v := a.store.siteSettings()
-	if len(v.SidebarAdmin) > 6 || len(v.SidebarMember) > 4 || v.ClientDownloadRelay || v.CountryAccessEnabled {
+	if len(v.SidebarAdmin) > 6 || len(v.SidebarMember) > 5 || v.ClientDownloadRelay || v.CountryAccessEnabled {
 		t.Fatal("default navigation and feature switches")
 	}
 	v.SidebarAdmin = []string{}
