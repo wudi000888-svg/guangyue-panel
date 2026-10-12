@@ -45,6 +45,9 @@ const selectedNodeRates=(plan:Plan)=>{
   const key=member.selection_key||member.node_id;
   if(selected.has(key)||selected.has(member.node_id)){selected.add(key);selected.add(member.node_id);}
  }
+ // Keep an unchanged legacy value attached to the selected node. The server
+ // accepts that exact value only when it already belongs to the stored plan;
+ // changing the multiplier requires one of the new half-step choices.
  return Object.fromEntries(Object.entries(plan.node_rates||{}).filter(([key])=>selected.has(key)));
 };
 const cycleLabel=(cycle:string)=>cycle==='30d'?t('每 30 天'):cycle==='month'?t('每自然月'):t('不自动重置');

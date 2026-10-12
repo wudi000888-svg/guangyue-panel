@@ -126,7 +126,24 @@ func (a *App) entitlementAPI(w http.ResponseWriter, r *http.Request, actor Recor
 		if !decode(w, r, &p) {
 			return
 		}
-		if err = a.validatePlan(&p); err != nil {
+		var old *Plan
+		if p.ID != "" {
+			stored, e := a.store.plan(p.ID)
+			if e != nil {
+				failure(w, 404, "套餐不存在")
+				return
+			}
+			old = &stored
+			if old.Version != p.Version {
+				failure(w, 409, "套餐已变化，请刷新后重试")
+				return
+			}
+		}
+		legacyRates := map[string]int64(nil)
+		if old != nil {
+			legacyRates = old.NodeRates
+		}
+		if err = a.validatePlanWithLegacy(&p, legacyRates); err != nil {
 			failure(w, 400, err.Error())
 			return
 		}
@@ -143,15 +160,6 @@ func (a *App) entitlementAPI(w http.ResponseWriter, r *http.Request, actor Recor
 			p.ID = "plan-" + randomToken(9)
 			p.Version = 1
 		} else {
-			old, e := a.store.plan(p.ID)
-			if e != nil {
-				failure(w, 404, "套餐不存在")
-				return
-			}
-			if old.Version != p.Version {
-				failure(w, 409, "套餐已变化，请刷新后重试")
-				return
-			}
 			if old.System {
 				// System plans may be renamed or documented, but their identity and
 				// lifecycle cannot be removed from the catalog.
@@ -270,6 +278,14 @@ func (a *App) deleteNodeGroup(w http.ResponseWriter, _ *http.Request, actor Reco
 }
 
 func (a *App) validatePlan(p *Plan) error {
+	return a.validatePlanWithLegacy(p, nil)
+}
+
+// validatePlanWithLegacy applies the new half-step choices to newly-created
+// overrides while allowing an existing plan to keep an older exact value until
+// an administrator changes that node's multiplier. This prevents an unrelated
+// package edit from silently changing active entitlements during the migration.
+func (a *App) validatePlanWithLegacy(p *Plan, legacyRates map[string]int64) error {
 	p.Name = strings.TrimSpace(p.Name)
 	if p.Timezone == "" {
 		p.Timezone = "Asia/Shanghai"
@@ -375,7 +391,11 @@ func (a *App) validatePlan(p *Plan) error {
 	}
 	seenRateNodes := map[string]bool{}
 	for id, rate := range p.NodeRates {
-		if id == "" || rate < 0 || rate > 100000 || rate%10 != 0 {
+		legacy := false
+		if previous, ok := legacyRates[id]; ok && previous == rate {
+			legacy = true
+		}
+		if id == "" || (!legacy && (rate < minPlanNodeRateMilli || rate > maxPlanNodeRateMilli || rate%planNodeRateStepMilli != 0)) {
 			return errors.New("套餐节点倍率无效")
 		}
 		node, ok := nodesByID[id]

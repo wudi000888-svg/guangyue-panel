@@ -17,8 +17,8 @@ type navigationSettings struct {
 func sidebarDefinition(role string) (defaults, permitted []string, ok bool) {
 	switch role {
 	case "admin":
-		return []string{"overview", "users", "plans", "nodes", "fleet", "settings"},
-			[]string{"overview", "monitor", "users", "plans", "shop", "subscription", "wallet", "orders", "redeem-codes", "nodes", "subsite-nodes", "node-groups", "ips", "public", "public-nodes", "public-subscription", "fleet", "pairing", "tickets", "messages", "clients", "tasks", "system", "settings"}, true
+		return []string{"overview", "users", "plans", "nodes", "node-square", "fleet", "settings"},
+			[]string{"overview", "monitor", "users", "plans", "shop", "subscription", "wallet", "orders", "redeem-codes", "nodes", "node-square", "subsite-nodes", "node-groups", "ips", "public", "public-nodes", "public-subscription", "fleet", "pairing", "tickets", "messages", "clients", "tasks", "system", "settings"}, true
 	case "member":
 		return []string{"subscription", "node-square", "shop", "orders", "settings"},
 			[]string{"overview", "subscription", "node-square", "shop", "wallet", "orders", "tickets", "messages", "clients", "settings"}, true

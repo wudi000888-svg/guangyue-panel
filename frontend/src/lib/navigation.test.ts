@@ -15,6 +15,11 @@ describe('shell navigation', () => {
     expect(sidebarNavigation(permitted, ['subscription', 'shop', 'orders', 'settings'], false).map(item => item.id)).toEqual(['subscription', 'node-square', 'shop', 'orders', 'settings']);
     expect(sidebarNavigation(permitted, [], false).map(item => item.id)).toEqual(['settings']);
   });
+  it('adds the node square to the legacy administrator default', () => {
+    const permitted = ['overview', 'users', 'plans', 'nodes', 'node-square', 'fleet', 'settings'].map(id => ({id, label:id}));
+    expect(sidebarNavigation(permitted, ['overview', 'users', 'plans', 'nodes', 'fleet', 'settings'], true).map(item => item.id)).toEqual(['overview', 'users', 'plans', 'nodes', 'node-square', 'fleet', 'settings']);
+    expect(sidebarNavigation(permitted, [], true).map(item => item.id)).toEqual(['settings']);
+  });
   it('keeps every permitted route once, including future routes, without adding permissions', () => {
     const items = ['subscription', 'shop', 'nodes', 'fleet', 'future-feature'].map(id => ({ id, label: id }));
     for (const administrator of [true, false]) {
