@@ -74,6 +74,9 @@ func (a *App) childMountCatalog(tokenID string) (MountCatalog, error) {
 			continue
 		}
 		v := memberNodeState(n)
+		// The controller may use this safe directory flag when presenting
+		// mounted nodes. It carries no credentials or entitlement state.
+		v.SquareVisible = n.SquareVisible
 		v.GroupIDs = n.GroupIDs
 		v.RateRevision = n.RateRevision
 		v.RealitySNI = n.RealitySNI

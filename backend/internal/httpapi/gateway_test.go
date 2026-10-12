@@ -17,6 +17,9 @@ func TestGatewayScopeAndForbiddenSurfaces(t *testing.T) {
 	if !AllowedGateway("POST", "/api/nodes", "manage") || !AllowedGateway("GET", "/api/operations", "read") {
 		t.Fatal("valid route denied")
 	}
+	if !AllowedGateway("GET", "/api/node-square", "manage") || !AllowedGateway("PUT", "/api/node-square", "manage") || AllowedGateway("PUT", "/api/node-square", "read") {
+		t.Fatal("node-square gateway scope incorrect")
+	}
 	for _, address := range []string{"http://site.test", "https://user:secret@site.test", "https://site.test/path", "https://site.test?token=x"} {
 		if ValidateEndpoint(address, false) == nil {
 			t.Error("accepted invalid endpoint")

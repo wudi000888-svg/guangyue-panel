@@ -9,10 +9,11 @@ import (
 const mountLeaseSeconds = 300
 
 type MountedNode struct {
-	NodeID   string   `json:"node_id"`
-	Name     string   `json:"name"`
-	Enabled  bool     `json:"enabled"`
-	GroupIDs []string `json:"group_ids"`
+	NodeID       string   `json:"node_id"`
+	Name         string   `json:"name"`
+	Enabled      bool     `json:"enabled"`
+	GroupIDs     []string `json:"group_ids"`
+	SquareVisible bool    `json:"square_visible,omitempty"`
 }
 type MountCatalog struct {
 	Info     BusinessInfo `json:"info"`
@@ -35,6 +36,10 @@ type SiteMount struct {
 	Sequence   int64          `json:"sequence"`
 	LeaseUntil int64          `json:"lease_until"`
 	LastSync   int64          `json:"last_sync"`
+	// SquareRevision changes only when mounted node directory visibility changes.
+	// It is separate from the entitlement/policy revision so publication never
+	// triggers proxy resynchronization or traffic settlement.
+	SquareRevision string `json:"square_revision,omitempty"`
 	Error      string         `json:"error"`
 	Accounts   []MountAccount `json:"accounts,omitempty"`
 }
