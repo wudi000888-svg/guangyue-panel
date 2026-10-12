@@ -117,10 +117,24 @@ func (a *App) mountSiteAPI(w http.ResponseWriter, r *http.Request, actor Record,
 			return
 		}
 		previousGrants := append([]BusinessGrant{}, current.Grants...)
+		previousSquareVisibility := map[string]bool{}
+		for _, node := range current.Mount.Nodes {
+			if node.SquareVisible {
+				previousSquareVisibility[node.NodeID] = true
+			}
+		}
 		current.MonthlyBudget = in.MonthlyBudget
 		current.CooldownSeconds = in.CooldownSeconds
 		current.refreshMonthlyBudget(time.Now().Unix())
 		current.Mount.Assignment = in.Assignment
+		// Publication is an administrator-owned catalog setting. Older mount
+		// dialogs do not send it, so preserve an existing public flag while the
+		// mount selection itself is edited.
+		for i := range in.Nodes {
+			if !in.Nodes[i].SquareVisible && previousSquareVisibility[in.Nodes[i].NodeID] {
+				in.Nodes[i].SquareVisible = true
+			}
+		}
 		current.Mount.Nodes = in.Nodes
 		current.Grants = in.Grants
 		if len(in.Nodes) == 0 {

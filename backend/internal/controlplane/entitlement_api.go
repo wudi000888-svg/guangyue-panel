@@ -375,7 +375,7 @@ func (a *App) validatePlan(p *Plan) error {
 	}
 	seenRateNodes := map[string]bool{}
 	for id, rate := range p.NodeRates {
-		if id == "" || rate < 0 || rate > 100000 || rate%10 != 0 {
+		if id == "" || rate < minPlanNodeRateMilli || rate > maxPlanNodeRateMilli || rate%planNodeRateStepMilli != 0 {
 			return errors.New("套餐节点倍率无效")
 		}
 		node, ok := nodesByID[id]

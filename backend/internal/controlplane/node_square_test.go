@@ -152,6 +152,34 @@ func TestNodeSquareOwnerControlsLocalVisibilityAndMemberOnlySeesPublished(t *tes
 			t.Fatal("visibility update rewrote node fields")
 		}
 	}
+	if w := req(t, a, owner, "PUT", "/api/node-square", object{"node_id": "vless-main", "site_id": a.cfg.siteID(), "square_visible": true}); w.Code != 200 {
+		t.Fatalf("owner visibility restore failed: %d %s", w.Code, w.Body.String())
+	}
+	updated, _ = a.store.nodes()
+	current := updated[0]
+	for _, n := range updated {
+		if n.ID == "vless-main" {
+			current = n
+			break
+		}
+	}
+	current.Name = "edited without catalog flag"
+	current.SquareVisible = false
+	if w := req(t, a, owner, "POST", "/api/nodes", current); w.Code != 200 {
+		t.Fatalf("node edit failed: %d %s", w.Code, w.Body.String())
+	}
+	saved, err := a.store.nodes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range saved {
+		if n.ID == "vless-main" && !n.SquareVisible {
+			t.Fatal("node edit cleared node-square publication")
+		}
+	}
+	if w := req(t, a, owner, "PUT", "/api/node-square", object{"node_id": "vless-main", "site_id": a.cfg.siteID(), "square_visible": false}); w.Code != 200 {
+		t.Fatalf("owner visibility hide failed: %d %s", w.Code, w.Body.String())
+	}
 	if w := req(t, a, member, "GET", "/api/node-square", nil); w.Code != 200 || strings.Contains(w.Body.String(), "vless-main") {
 		t.Fatalf("hidden node remained visible: %s", w.Body.String())
 	}

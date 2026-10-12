@@ -14,6 +14,15 @@ const defaultAdminPlan = "plan-admin"
 const defaultDemoPlan = "plan-demo"
 const planDeletedMetaPrefix = "plan_deleted:"
 
+// Plan-scoped overrides intentionally use a small, predictable option set.
+// Node defaults keep their existing finer-grained policy; these bounds only
+// apply to a multiplier selected inside a package editor.
+const (
+	minPlanNodeRateMilli int64 = 500
+	maxPlanNodeRateMilli int64 = 10000
+	planNodeRateStepMilli int64 = 500
+)
+
 type NodeGroup struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`

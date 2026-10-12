@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/mail"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -50,7 +51,11 @@ func (s *Store) parseSiteSettings(raw string) (SiteSettings, error) {
 		v.PanelName = "广月面板 Pro"
 	}
 	if v.SidebarAdmin == nil {
-		v.SidebarAdmin = []string{"overview", "users", "plans", "nodes", "fleet", "settings"}
+		v.SidebarAdmin = []string{"overview", "users", "plans", "nodes", "node-square", "fleet", "settings"}
+	} else if slices.Equal(v.SidebarAdmin, []string{"overview", "users", "plans", "nodes", "fleet", "settings"}) {
+		// Upgrade the pre-node-square default without changing an administrator's
+		// explicit custom ordering or hidden entries.
+		v.SidebarAdmin = []string{"overview", "users", "plans", "nodes", "node-square", "fleet", "settings"}
 	}
 	if v.SidebarMember == nil {
 		v.SidebarMember = []string{"subscription", "node-square", "shop", "orders", "settings"}

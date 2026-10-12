@@ -217,6 +217,10 @@ func (a *App) applyMountSync(tokenID string, in MountSync, catalog MountCatalog)
 			seen[id] = true
 		}
 		for id, rate := range u.NodeRates {
+			// A mounted child may still have an active entitlement created by an
+			// older panel. New package edits use the half-step options, but the
+			// transport must continue accepting a previously issued snapshot until
+			// that entitlement naturally expires or is replaced.
 			if !seen[id] || rate < 0 || rate > 100000 || rate%10 != 0 {
 				return out, errors.New("挂载用户节点倍率无效")
 			}

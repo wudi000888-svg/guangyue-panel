@@ -1,6 +1,6 @@
 export interface NavigationItem { id: string; label: string }
 
-export const DEFAULT_ADMIN_SIDEBAR = ['overview', 'users', 'plans', 'nodes', 'fleet', 'settings'];
+export const DEFAULT_ADMIN_SIDEBAR = ['overview', 'users', 'plans', 'nodes', 'node-square', 'fleet', 'settings'];
 export const DEFAULT_MEMBER_SIDEBAR = ['subscription', 'node-square', 'shop', 'orders', 'settings'];
 export const MEMBER_NAVIGATION: NavigationItem[] = [
   { id: 'subscription', label: '我的服务' }, { id: 'node-square', label: '节点广场' }, { id: 'shop', label: '选购套餐' },
@@ -13,6 +13,8 @@ export const MEMBER_NAVIGATION_LABELS = Object.fromEntries(MEMBER_NAVIGATION.map
 /** Display preferences never determine route access or remove search entries. */
 export function sidebarNavigation<T extends NavigationItem>(items: T[], configured: readonly string[] | undefined, administrator: boolean): T[] {
   const selected = new Set(configured ?? (administrator ? DEFAULT_ADMIN_SIDEBAR : DEFAULT_MEMBER_SIDEBAR));
+  const legacyAdminDefault = ['overview', 'users', 'plans', 'nodes', 'fleet', 'settings'];
+  if (administrator && configured && legacyAdminDefault.length === configured.length && legacyAdminDefault.every((id, index) => configured[index] === id) && items.some(item => item.id === 'node-square')) selected.add('node-square');
   // Sites created before the catalog existed persisted the old four-item
   // member default. Upgrade that exact legacy default in the shell while
   // preserving an administrator's explicit custom choice (including []).
