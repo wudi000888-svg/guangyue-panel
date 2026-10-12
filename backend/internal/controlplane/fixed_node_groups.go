@@ -180,8 +180,25 @@ func planNodeKey(n Node) string {
 	return localNodeGroup(n) + "/" + n.ID
 }
 
+func planGroupHasExplicitNodes(e *domain.Entitlement, group string) bool {
+	if e == nil {
+		return false
+	}
+	for _, id := range e.NodeIDs {
+		if strings.HasPrefix(id, group+"/") {
+			return true
+		}
+		// Before site-qualified keys were introduced, local node selections were
+		// stored as bare IDs. They belong to this site's non-mounted groups.
+		if !strings.Contains(id, "/") && group != defaultSubsiteGroup {
+			return true
+		}
+	}
+	return false
+}
+
 func planSelectsNode(e *domain.Entitlement, n Node, group string) bool {
-	if e == nil || len(e.NodeIDs) == 0 {
+	if e == nil || !planGroupHasExplicitNodes(e, group) {
 		return true
 	}
 	for _, id := range e.NodeIDs {
