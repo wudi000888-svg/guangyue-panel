@@ -86,7 +86,7 @@ func TestPlanNodeSelectionIsScopedToGroupAndSite(t *testing.T) {
 	}{
 		{Node{ID: "vless-main"}, true},
 		{Node{ID: "another-vless"}, false},
-		{Node{ID: "public-node", ManagedBy: publicManager}, false},
+		{Node{ID: "public-node", ManagedBy: publicManager}, true},
 		{mountNodePolicy("child-a", MountedNode{Enabled: true}, Node{ID: "vless-main", PolicyVersion: 1}), true},
 		{mountNodePolicy("child-b", MountedNode{Enabled: true}, Node{ID: "vless-main", PolicyVersion: 1}), false},
 		{mountNodePolicy("child-a", MountedNode{Enabled: true}, Node{ID: "another-vless", PolicyVersion: 1}), false},
@@ -99,12 +99,24 @@ func TestPlanNodeSelectionIsScopedToGroupAndSite(t *testing.T) {
 	if nodeGroupAllowed(u, Node{ID: "vless-main"}) {
 		t.Fatal("individual selection bypassed package groups")
 	}
-	// Selecting only a mounted child node must never widen access to every
-	// local node in the same entitlement.
+	// A node restriction belongs to its own group. Selecting a mounted child
+	// node must leave another selected local group in whole-group mode.
 	u.Entitlement.GroupIDs = []string{legacyPrivateGroup, defaultSubsiteGroup}
 	u.Entitlement.NodeIDs = []string{defaultSubsiteGroup + "/child-a/vless-main"}
-	if nodeGroupAllowed(u, Node{ID: "vless-main"}) {
-		t.Fatal("mounted-only selection widened local access")
+	if !nodeGroupAllowed(u, Node{ID: "another-vless"}) {
+		t.Fatal("mounted-node restriction incorrectly removed whole local-group access")
+	}
+	if nodeGroupAllowed(u, mountNodePolicy("child-a", MountedNode{Enabled: true}, Node{ID: "another-vless", PolicyVersion: 1})) {
+		t.Fatal("mounted group restriction allowed an unselected child node")
+	}
+	// The inverse direction is also group-scoped: an explicit local selection
+	// must leave the selected child group in whole-group mode.
+	u.Entitlement.NodeIDs = []string{legacyPrivateGroup + "/vless-main"}
+	if !nodeGroupAllowed(u, mountNodePolicy("child-a", MountedNode{Enabled: true}, Node{ID: "another-vless", PolicyVersion: 1})) {
+		t.Fatal("local-node restriction incorrectly removed whole child-group access")
+	}
+	if nodeGroupAllowed(u, Node{ID: "another-vless"}) {
+		t.Fatal("local group restriction allowed an unselected local node")
 	}
 }
 
