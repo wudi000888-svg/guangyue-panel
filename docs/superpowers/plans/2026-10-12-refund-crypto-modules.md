@@ -42,7 +42,7 @@ Add tests for: editing a plan after order fulfillment still permits `request_ref
 Run:
 
 ```bash
-/tmp/guangyue-go/go/bin/go test ./internal/controlplane -run 'Test(PlanStrategyChangeStillAllowsRefund|Refund.*PlanQueue)' -count=1
+go test ./internal/controlplane -run 'Test(PlanStrategyChangeStillAllowsRefund|Refund.*PlanQueue)' -count=1
 ```
 
 Expected: the new tests fail because the current revision equality guard rejects the refund and queue slots have no source order ID.
@@ -100,9 +100,9 @@ Reload the order and user inside the transaction, compare order state, refund re
 - [ ] **Step 6: Run focused and full backend tests**
 
 ```bash
-/tmp/guangyue-go/go/bin/go test -race ./internal/controlplane -run 'Test(PlanStrategyChangeStillAllowsRefund|Refund.*PlanQueue|Payment.*Refund)' -count=1
-/tmp/guangyue-go/go/bin/go test -race ./... -count=1
-/tmp/guangyue-go/go/bin/go vet ./...
+go test -race ./internal/controlplane -run 'Test(PlanStrategyChangeStillAllowsRefund|Refund.*PlanQueue|Payment.*Refund)' -count=1
+go test -race ./... -count=1
+go vet ./...
 ```
 
 Expected: all tests pass with no duplicate refund entries and no queue reordering.
@@ -122,7 +122,7 @@ git commit -m "fix: refund order entitlements without disturbing queue"
 - Modify: `frontend/src/composables/usePanel.ts`
 - Modify: `frontend/src/router.ts`
 - Modify: `frontend/src/components/CommerceSettings.vue`
-- Test: `frontend/src/components/CryptoModuleNavigation.test.ts`
+- Test: `frontend/src/lib/cryptoModule.test.ts`
 
 **Interfaces:**
 - The route `/crypto-payments` renders `CryptoPaymentsPage` for owners only.
@@ -136,7 +136,7 @@ Test that an owner sees the crypto sidebar entry and route, that the page render
 - [ ] **Step 2: Run the focused Vitest file and verify failure**
 
 ```bash
-/Users/wan/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node node_modules/vitest/vitest.mjs run src/components/CryptoModuleNavigation.test.ts
+node node_modules/vitest/vitest.mjs run src/lib/cryptoModule.test.ts
 ```
 
 Expected: the route/page and new entry are missing.
@@ -152,14 +152,14 @@ Leave only fiat provider configuration and a clear “打开加密货币模块�
 - [ ] **Step 5: Run focused frontend tests and static checks**
 
 ```bash
-/Users/wan/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node node_modules/vitest/vitest.mjs run src/components/CryptoModuleNavigation.test.ts
-/Users/wan/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node node_modules/vue-tsc/bin/vue-tsc.js --noEmit
+node node_modules/vitest/vitest.mjs run src/lib/cryptoModule.test.ts
+node node_modules/vue-tsc/bin/vue-tsc.js --noEmit
 ```
 
 - [ ] **Step 6: Commit the independent crypto module**
 
 ```bash
-git add frontend/src/pages/CryptoPaymentsPage.vue frontend/src/pages/SettingsPage.vue frontend/src/composables/usePanel.ts frontend/src/router.ts frontend/src/components/CommerceSettings.vue frontend/src/components/CryptoModuleNavigation.test.ts
+git add frontend/src/pages/CryptoPaymentsPage.vue frontend/src/pages/SettingsPage.vue frontend/src/composables/usePanel.ts frontend/src/router.ts frontend/src/components/CommerceSettings.vue frontend/src/lib/cryptoModule.test.ts
 git commit -m "feat: separate cryptocurrency administration module"
 ```
 
@@ -172,10 +172,10 @@ git commit -m "feat: separate cryptocurrency administration module"
 - [ ] **Step 1: Run the complete frontend checks**
 
 ```bash
-/Users/wan/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node check-i18n.mjs
-/Users/wan/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node node_modules/vitest/vitest.mjs run
-/Users/wan/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node node_modules/vue-tsc/bin/vue-tsc.js --noEmit
-/Users/wan/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node node_modules/vite/bin/vite.js build
+node check-i18n.mjs
+node node_modules/vitest/vitest.mjs run
+node node_modules/vue-tsc/bin/vue-tsc.js --noEmit
+node node_modules/vite/bin/vite.js build
 ```
 
 - [ ] **Step 2: Review diff and security boundaries**
