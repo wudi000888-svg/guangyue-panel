@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"github.com/wudi000888-svg/guangyue-panel/backend/internal/persistence"
 	"image"
@@ -16,6 +17,43 @@ import (
 	"testing"
 	"time"
 )
+
+func TestLegacyRefundSnapshotRepairUnblocksNodePolicy(t *testing.T) {
+	a := testApp(t)
+	owner := testUser(t, a, "owner", "owner")
+	legacy := Order{ID: "legacy-refund", UserID: owner.ID, State: "refund_requested", Offer: Offer{Price: 0}}
+	if _, err := a.store.db.Exec("INSERT INTO commerce_orders(id,user_id,state,created,updated,expires,doc) VALUES(?,?,?,?,?,?,?)", legacy.ID, owner.ID, "completed", 1, 1, 0, jsonBytes(legacy)); err != nil {
+		t.Fatal(err)
+	}
+	// Force the next open to execute the repair pass, just as an upgrade from a
+	// database that already ran migration 017 would.
+	if _, err := a.store.db.Exec("DELETE FROM schema_migrations WHERE version='018_fix_refund_order_snapshots.sql'"); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.store.db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := openConfiguredStore(Config{StateDir: a.cfg.StateDir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { reopened.db.Close() })
+	if reopened.commerceErr != nil {
+		t.Fatalf("legacy order snapshot blocked startup: %v", reopened.commerceErr)
+	}
+	var doc []byte
+	if err := reopened.db.QueryRow("SELECT doc FROM commerce_orders WHERE id=?", legacy.ID).Scan(&doc); err != nil {
+		t.Fatal(err)
+	}
+	var repaired Order
+	if err := json.Unmarshal(doc, &repaired); err != nil || repaired.State != "completed" {
+		t.Fatalf("legacy order snapshot was not repaired: %s", doc)
+	}
+	app := &App{store: reopened, cfg: a.cfg, loginSlots: make(chan struct{}, 2), limits: map[string][]time.Time{}, started: time.Now()}
+	if w := req(t, app, owner, "POST", "/api/nodes/policy", object{"ids": []string{"vless-main"}, "rate_milli": 1500}); w.Code != 200 {
+		t.Fatalf("node multiplier remained blocked after repair: %d %s", w.Code, w.Body.String())
+	}
+}
 
 func TestCommerceRecoveryAndRenewal(t *testing.T) {
 	a := testApp(t)
