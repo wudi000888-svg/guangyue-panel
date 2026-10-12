@@ -39,17 +39,16 @@ const filtered=computed(()=>plans.value.filter(p=>(archived.value||!p.archived)&
 const visibleGroups=computed(()=>[...groups.value].sort((a,b)=>a.sort-b.sort||a.name.localeCompare(b.name)));
 const filteredGroups=computed(()=>visibleGroups.value.filter(g=>(!groupSearch.value&&groupSource.value==='all')||groupRows(g.id).length));
 const selectedNodesInGroup=(plan:Plan,groupID:string)=>{const membersInGroup=new Set((members.value[groupID]||[]).flatMap(member=>[member.selection_key,member.source==='mounted'||member.source==='business'?undefined:member.node_id]));return (plan.node_ids||[]).filter(id=>id.startsWith(groupID+'/')||membersInGroup.has(id));};
-const planRateOptions=new Set(Array.from({length:20},(_,index)=>(index+1)*500));
 const selectedNodeRates=(plan:Plan)=>{
  const selected=new Set(plan.node_ids||[]);
  for(const rows of Object.values(members.value))for(const member of rows){
   const key=member.selection_key||member.node_id;
   if(selected.has(key)||selected.has(member.node_id)){selected.add(key);selected.add(member.node_id);}
  }
- // Persist only the new half-step choices. Legacy snapshots remain readable
- // in the editor, but saving the package drops an out-of-range override back
- // to the node default instead of sending a value the server rejects.
- return Object.fromEntries(Object.entries(plan.node_rates||{}).filter(([key,value])=>selected.has(key)&&planRateOptions.has(Number(value))));
+ // Keep an unchanged legacy value attached to the selected node. The server
+ // accepts that exact value only when it already belongs to the stored plan;
+ // changing the multiplier requires one of the new half-step choices.
+ return Object.fromEntries(Object.entries(plan.node_rates||{}).filter(([key])=>selected.has(key)));
 };
 const cycleLabel=(cycle:string)=>cycle==='30d'?t('每 30 天'):cycle==='month'?t('每自然月'):t('不自动重置');
 function goShop(){router.push('/shop');}

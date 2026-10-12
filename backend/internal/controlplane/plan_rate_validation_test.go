@@ -38,17 +38,40 @@ func TestValidatePlanAcceptsCanonicalMountedRateKey(t *testing.T) {
 func TestValidatePlanAcceptsOnlyHalfStepRatesUpToTen(t *testing.T) {
 	a := testApp(t)
 	nodes, err := a.store.nodes()
-	if err != nil { t.Fatal(err) }
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, rate := range []int64{500, 1000, 1500, 10000} {
 		p := validRatePlan()
 		p.NodeIDs = []string{nodes[0].ID}
 		p.NodeRates = map[string]int64{nodes[0].ID: rate}
-		if err := a.validatePlan(&p); err != nil { t.Fatalf("rate %d rejected: %v", rate, err) }
+		if err := a.validatePlan(&p); err != nil {
+			t.Fatalf("rate %d rejected: %v", rate, err)
+		}
 	}
 	for _, rate := range []int64{0, 250, 10500, 1250} {
 		p := validRatePlan()
 		p.NodeIDs = []string{nodes[0].ID}
 		p.NodeRates = map[string]int64{nodes[0].ID: rate}
-		if err := a.validatePlan(&p); err == nil { t.Fatalf("rate %d accepted", rate) }
+		if err := a.validatePlan(&p); err == nil {
+			t.Fatalf("rate %d accepted", rate)
+		}
+	}
+}
+
+func TestValidatePlanPreservesAnUnchangedLegacyOverride(t *testing.T) {
+	a := testApp(t)
+	nodes, err := a.store.nodes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := validRatePlan()
+	p.NodeIDs = []string{nodes[0].ID}
+	p.NodeRates = map[string]int64{nodes[0].ID: 1250}
+	if err := a.validatePlanWithLegacy(&p, map[string]int64{nodes[0].ID: 1250}); err != nil {
+		t.Fatalf("unchanged legacy rate rejected: %v", err)
+	}
+	if err := a.validatePlanWithLegacy(&p, map[string]int64{nodes[0].ID: 1000}); err == nil {
+		t.Fatal("changed legacy rate accepted")
 	}
 }

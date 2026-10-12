@@ -119,7 +119,9 @@ func TestNodeSquareOwnerControlsLocalVisibilityAndMemberOnlySeesPublished(t *tes
 	if _, err := a.store.db.Exec("INSERT INTO commerce_offers(id,version,enabled,doc) VALUES(?,?,?,?)", o.ID, 1, 1, jsonBytes(o)); err != nil {
 		t.Fatal(err)
 	}
-	var admin struct{ Nodes []NodeSquareNode `json:"nodes"` }
+	var admin struct {
+		Nodes []NodeSquareNode `json:"nodes"`
+	}
 	if w := req(t, a, owner, "GET", "/api/node-square", nil); w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &admin) != nil {
 		t.Fatalf("admin listing failed: %d %s", w.Code, w.Body.String())
 	}
@@ -197,7 +199,14 @@ func TestNodeSquareMountedNodesAreSiteScopedAndOwnerControllable(t *testing.T) {
 		}
 	}
 	child := Node{ID: "vless-main", Name: "Child VLESS", Protocol: "vless", Enabled: true, Exit: "direct", SquareVisible: true, GroupIDs: []string{defaultSubsiteGroup}}
-	site := BusinessSite{ID: "child-site", Name: "Tokyo Child", Enabled: true, Revision: "site-rev", Connection: &SiteConnection{SiteID: "child-site", Scope: "manage"}, Mount: &SiteMount{Catalog: MountCatalog{Revision: "catalog-rev", Nodes: []Node{child}}, Nodes: []MountedNode{{NodeID: child.ID, Name: child.Name, Enabled: true, SquareVisible: true}}}
+	site := BusinessSite{
+		ID: "child-site", Name: "Tokyo Child", Enabled: true, Revision: "site-rev",
+		Connection: &SiteConnection{SiteID: "child-site", Scope: "manage"},
+		Mount: &SiteMount{
+			Catalog: MountCatalog{Revision: "catalog-rev", Nodes: []Node{child}},
+			Nodes:   []MountedNode{{NodeID: child.ID, Name: child.Name, Enabled: true, SquareVisible: true}},
+		},
+	}
 	site.defaults()
 	b, err := a.store.vault.seal(site)
 	if err != nil {
@@ -214,7 +223,9 @@ func TestNodeSquareMountedNodesAreSiteScopedAndOwnerControllable(t *testing.T) {
 	if _, err = a.store.db.Exec("INSERT INTO commerce_offers(id,version,enabled,doc) VALUES(?,?,?,?)", o.ID, 1, 1, jsonBytes(o)); err != nil {
 		t.Fatal(err)
 	}
-	var admin struct{ Nodes []NodeSquareNode `json:"nodes"` }
+	var admin struct {
+		Nodes []NodeSquareNode `json:"nodes"`
+	}
 	w := req(t, a, owner, "GET", "/api/node-square", nil)
 	if w.Code != 200 || json.Unmarshal(w.Body.Bytes(), &admin) != nil {
 		t.Fatalf("mounted admin listing failed: %d %s", w.Code, w.Body.String())
@@ -224,8 +235,12 @@ func TestNodeSquareMountedNodesAreSiteScopedAndOwnerControllable(t *testing.T) {
 		if n.ID != "vless-main" {
 			continue
 		}
-		if n.SiteID == a.cfg.siteID() { seenLocal = true }
-		if n.SiteID == site.ID { seenChild = true }
+		if n.SiteID == a.cfg.siteID() {
+			seenLocal = true
+		}
+		if n.SiteID == site.ID {
+			seenChild = true
+		}
 	}
 	if !seenLocal || !seenChild {
 		t.Fatalf("colliding node IDs were not site scoped: %+v", admin.Nodes)
