@@ -53,7 +53,7 @@ func (s *Store) parseSiteSettings(raw string) (SiteSettings, error) {
 		v.SidebarAdmin = []string{"overview", "users", "plans", "nodes", "fleet", "settings"}
 	}
 	if v.SidebarMember == nil {
-		v.SidebarMember = []string{"subscription", "shop", "orders", "settings"}
+		v.SidebarMember = []string{"subscription", "node-square", "shop", "orders", "settings"}
 	}
 	if v.CountryAccessBlocked == nil {
 		v.CountryAccessBlocked = []string{}
