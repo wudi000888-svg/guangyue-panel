@@ -30,6 +30,9 @@ func TestPanelNavigationPartialSaveAndRevisions(t *testing.T) {
 	if admin.Revision == "" || member.Revision == "" || admin.Revision == member.Revision {
 		t.Fatal("missing role-specific revision")
 	}
+	if !slices.Equal(member.Items, []string{"subscription", "node-square", "shop", "orders", "settings"}) {
+		t.Fatalf("member navigation default omitted node square: %v", member.Items)
+	}
 	settings := a.store.siteSettings()
 	settings.PanelName = "Retain latest site settings"
 	settings.LoginNotice = "This must survive navigation autosave"
