@@ -29,7 +29,7 @@ export function sidebarNavigation<T extends NavigationItem>(items: T[], configur
 // Unknown routes remain reachable when future features are added.
 export function groupNavigation<T extends NavigationItem>(items: T[], administrator: boolean) {
   const sections = administrator ? [
-    { id: 'operations', label: '运营管理', routes: ['overview', 'monitor', 'users', 'plans', 'shop', 'subscription', 'wallet', 'orders', 'redeem-codes'] },
+    { id: 'operations', label: '运营管理', routes: ['overview', 'monitor', 'users', 'plans', 'crypto-payments', 'shop', 'subscription', 'wallet', 'orders', 'redeem-codes'] },
     { id: 'resources', label: '节点与站点', routes: ['nodes', 'subsite-nodes', 'node-groups', 'ips', 'public', 'public-nodes', 'public-subscription', 'fleet', 'pairing'] },
     { id: 'support', label: '服务与支持', routes: ['tickets', 'messages', 'clients'] },
     { id: 'system', label: '系统管理', routes: ['tasks', 'system', 'settings'] },

@@ -40,6 +40,14 @@ describe('shell navigation', () => {
     expect(groups[0]?.items.map(item => item.id)).toEqual(['subscription', 'node-square', 'shop']);
   });
 
+  it('places the standalone crypto payment workspace in the administrator operations section', () => {
+    const items = ['overview', 'plans', 'crypto-payments', 'settings'].map(id => ({ id, label: id }));
+    const groups = groupNavigation(items, true);
+    expect(groups.find(group => group.id === 'operations')?.items.map(item => item.id)).toEqual(['overview', 'plans', 'crypto-payments']);
+    const memberItems = ['subscription', 'orders', 'settings'].map(id => ({ id, label: id }));
+    expect(groupNavigation(memberItems, false).flatMap(group => group.items.map(item => item.id))).not.toContain('crypto-payments');
+  });
+
   it('searches translated labels, groups, descriptions and route names without empty-query loss', () => {
     const items = [
       { id: 'nodes', label: '本地节点', group: '节点与站点', description: '管理接入节点' },

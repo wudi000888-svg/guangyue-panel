@@ -35,14 +35,16 @@ func pauseCurrentPlan(r *Record, now int64) {
 		return
 	}
 	slot := domain.PlanSlot{
-		Entitlement: cloneEntitlement(r.Entitlement),
-		NodeRates:   cloneNodeRates(r.Entitlement.NodeRates),
-		Quota:       r.Quota,
-		Expires:     r.Expires,
-		PausedAt:    now,
-		VLESS:       r.VLESS,
-		HY2:         r.HY2,
-		Meter:       cloneMeter(r.Meter),
+		Entitlement:    cloneEntitlement(r.Entitlement),
+		OrderID:        r.Entitlement.OrderID,
+		RenewalOrderID: r.Entitlement.RenewalOrderID,
+		NodeRates:      cloneNodeRates(r.Entitlement.NodeRates),
+		Quota:          r.Quota,
+		Expires:        r.Expires,
+		PausedAt:       now,
+		VLESS:          r.VLESS,
+		HY2:            r.HY2,
+		Meter:          cloneMeter(r.Meter),
 	}
 	r.PlanQueue = append(r.PlanQueue, slot)
 }
@@ -91,10 +93,14 @@ func restorePreviousPlan(r *Record, now int64) bool {
 	return true
 }
 
-func assignPlan(r *Record, p Plan, now int64) {
+func assignPlan(r *Record, p Plan, now int64, sourceOrderID ...string) {
 	r.NodeGroupIDs = nil
 	r.InitMeter("period-"+randomToken(12), now)
-	r.Entitlement = &domain.Entitlement{PlanID: p.ID, Version: p.Version, Name: p.Name, GroupIDs: append([]string{}, p.GroupIDs...), NodeIDs: append([]string{}, p.NodeIDs...), NodeRates: cloneNodeRates(p.NodeRates), Cycle: p.Cycle, Timezone: p.Timezone, AssignedAt: now, Revision: randomToken(12)}
+	orderID := ""
+	if len(sourceOrderID) > 0 {
+		orderID = sourceOrderID[0]
+	}
+	r.Entitlement = &domain.Entitlement{PlanID: p.ID, OrderID: orderID, Version: p.Version, Name: p.Name, GroupIDs: append([]string{}, p.GroupIDs...), NodeIDs: append([]string{}, p.NodeIDs...), NodeRates: cloneNodeRates(p.NodeRates), Cycle: p.Cycle, Timezone: p.Timezone, AssignedAt: now, Revision: randomToken(12)}
 	r.Quota, r.VLESS, r.HY2 = p.Quota, p.VLESS, p.HY2
 	r.Expires = 0
 	if p.ValidDays > 0 {

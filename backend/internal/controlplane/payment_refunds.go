@@ -87,8 +87,18 @@ func (a *App) paymentRefundAction(w http.ResponseWriter, r *http.Request, actor 
 	if in.Action == "confirm_manual" && (p.Code == "stripe" && receipt.State != "review_required" || !validText(in.ExternalRef, 200)) {
 		return commerceFail(400, "请填写易支付后台已完成退款的交易凭据；Stripe 使用原路退款接口")
 	}
+	refundAmount := receipt.Amount
+	if receipt.OrderID != "" {
+		if order, orderErr := a.store.order(receipt.OrderID); orderErr == nil {
+			if order.RefundAmountSet {
+				refundAmount = order.RefundAmount
+			} else if user, userErr := a.store.record(order.UserID); userErr == nil {
+				refundAmount = refundableOrderAmount(order, user, time.Now().Unix())
+			}
+		}
+	}
 	now := time.Now().Unix()
-	refund := PaymentRefund{ID: serial("GYRF"), ReceiptID: receipt.ID, ProviderID: p.ID, State: "queued", Amount: receipt.Amount, Currency: receipt.Currency, ExternalRef: in.ExternalRef, Message: "已进入原路退款队列"}
+	refund := PaymentRefund{ID: serial("GYRF"), ReceiptID: receipt.ID, ProviderID: p.ID, State: "queued", Amount: refundAmount, Currency: receipt.Currency, ExternalRef: in.ExternalRef, Message: "已进入原路退款队列"}
 	if in.Action == "confirm_manual" {
 		refund.State = "succeeded"
 		refund.Message = "管理员已核对并确认商户后台退款"
@@ -243,7 +253,14 @@ func (a *App) recordStripeRefund(p PaymentProvider, event verifiedPaymentEvent) 
 	if state == "succeeded" {
 		return nil
 	}
-	if ref != "" && ref != event.RefundID || event.Amount != receipt.Amount || event.Currency != receipt.Currency {
+	var expectedAmount int64
+	if err = tx.QueryRow("SELECT amount FROM payment_refunds WHERE id=?", refundID).Scan(&expectedAmount); err != nil {
+		return err
+	}
+	if expectedAmount == 0 {
+		expectedAmount = receipt.Amount
+	}
+	if ref != "" && ref != event.RefundID || event.Amount != expectedAmount || event.Currency != receipt.Currency {
 		return errors.New("refund receipt mismatch")
 	}
 	next := "pending"
