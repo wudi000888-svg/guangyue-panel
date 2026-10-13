@@ -88,7 +88,7 @@ type cryptoSignedTransfer struct {
 
 func cryptoSignTransfer(mnemonic, path string, chainID int64, nonce, gas uint64, gasPrice, value *big.Int, to string, data []byte) (cryptoSignedTransfer, error) {
 	var out cryptoSignedTransfer
-	if chainID != 1 && chainID != 56 {
+	if chainID != 1 && chainID != 56 && chainID != 9745 {
 		return out, errors.New("该网络尚不支持经过验证的自动提取")
 	}
 	if gasPrice == nil || value == nil || !common.IsHexAddress(to) || common.HexToAddress(to) == (common.Address{}) || gas == 0 || gas > 1000000 || gasPrice.Sign() <= 0 || value.Sign() < 0 {
@@ -149,6 +149,13 @@ func cryptoSignTransfer(mnemonic, path string, chainID int64, nonce, gas uint64,
 	return out, nil
 }
 func (c *cryptoEVM) gasPrice(ctx context.Context) (*big.Int, error) {
+	p, err := c.rawGasPrice(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return cryptoFeePrice(p, 110), nil
+}
+func (c *cryptoEVM) rawGasPrice(ctx context.Context) (*big.Int, error) {
 	a, b, e := c.pair(ctx, "eth_gasPrice", []any{})
 	if e != nil {
 		return nil, e
@@ -175,9 +182,16 @@ func (c *cryptoEVM) gasPrice(ctx context.Context) (*big.Int, error) {
 	if hi.Cmp(new(big.Int).Mul(lo, big.NewInt(2))) > 0 {
 		return nil, commerceFail(409, "两个 RPC 的 Gas 价格分歧过大")
 	}
-	return new(big.Int).Div(new(big.Int).Add(new(big.Int).Mul(hi, big.NewInt(120)), big.NewInt(99)), big.NewInt(100)), nil
+	return new(big.Int).Set(hi), nil
 }
 func (c *cryptoEVM) estimateGas(ctx context.Context, from, to, data string, value *big.Int) (uint64, error) {
+	n, err := c.rawEstimateGas(ctx, from, to, data, value)
+	if err != nil {
+		return 0, err
+	}
+	return (n*110 + 99) / 100, nil
+}
+func (c *cryptoEVM) rawEstimateGas(ctx context.Context, from, to, data string, value *big.Int) (uint64, error) {
 	call := object{"from": from, "to": to, "value": "0x" + value.Text(16)}
 	if data != "" {
 		call["data"] = data
@@ -210,5 +224,5 @@ func (c *cryptoEVM) estimateGas(ctx context.Context, from, to, data string, valu
 	if n < 21000 || n > 800000 {
 		return 0, commerceFail(409, "Gas 估算超出支持范围")
 	}
-	return (n*120 + 99) / 100, nil
+	return n, nil
 }

@@ -41,6 +41,8 @@ type CryptoWalletBalances struct {
 	WatchOnly           bool                `json:"watch_only"`
 	OperationsSupported bool                `json:"operations_supported"`
 	UnavailableReason   string              `json:"unavailable_reason"`
+	NativeDecimals      int                 `json:"native_decimals,omitempty"`
+	FeeModel            string              `json:"fee_model,omitempty"`
 	FundingAddress      string              `json:"funding_address"`
 	FundingPath         string              `json:"funding_path"`
 	FundingBalanceAtoms string              `json:"funding_balance_atoms"`
@@ -50,39 +52,58 @@ type CryptoWalletBalances struct {
 	NextAfter           *int64              `json:"next_after"`
 }
 type CryptoSweepPlanItem struct {
-	AddressID       string `json:"address_id"`
-	Address         string `json:"address"`
-	Path            string `json:"path"`
-	AmountAtoms     string `json:"amount_atoms"`
-	GasLimit        uint64 `json:"gas_limit,string"`
-	GasPriceAtoms   string `json:"gas_price_atoms"`
-	GasFeeAtoms     string `json:"gas_fee_atoms"`
-	TopupAtoms      string `json:"topup_atoms"`
-	FundingGasAtoms string `json:"funding_gas_atoms"`
-	FundingGasLimit uint64 `json:"funding_gas_limit,string"`
+	AddressID          string                     `json:"address_id"`
+	Address            string                     `json:"address"`
+	Path               string                     `json:"path"`
+	AmountAtoms        string                     `json:"amount_atoms"`
+	GasLimit           uint64                     `json:"gas_limit,string"`
+	GasPriceAtoms      string                     `json:"gas_price_atoms"`
+	GasFeeAtoms        string                     `json:"gas_fee_atoms"`
+	TopupAtoms         string                     `json:"topup_atoms"`
+	FundingGasAtoms    string                     `json:"funding_gas_atoms"`
+	FundingGasLimit    uint64                     `json:"funding_gas_limit,string"`
+	RentAtoms          string                     `json:"rent_atoms,omitempty"`
+	SolanaSourceTokens []cryptoSolanaTokenAccount `json:"solana_source_tokens,omitempty"`
 }
 type CryptoSweepPreview struct {
-	WalletID              string                `json:"wallet_id"`
-	ChainID               string                `json:"chain_id"`
-	AssetID               string                `json:"asset_id"`
-	Destination           string                `json:"destination"`
-	MinAtoms              string                `json:"min_atoms"`
-	MaxGasAtoms           string                `json:"max_gas_atoms"`
-	CheckedAt             int64                 `json:"checked_at"`
-	ExpiresAt             int64                 `json:"expires_at"`
-	BlockNumber           uint64                `json:"block_number"`
-	NativeSymbol          string                `json:"native_symbol"`
-	FundingAddress        string                `json:"funding_address"`
-	FundingBalanceAtoms   string                `json:"funding_balance_atoms"`
-	TotalAtoms            string                `json:"total_atoms"`
-	TotalTopupAtoms       string                `json:"total_topup_atoms"`
-	TotalGasAtoms         string                `json:"total_gas_atoms"`
-	Items                 []CryptoSweepPlanItem `json:"items"`
-	Quote                 string                `json:"quote,omitempty"`
-	CanSubmit             bool                  `json:"can_submit"`
-	UnavailableReason     string                `json:"unavailable_reason"`
-	RequiredFundingAtoms  string                `json:"required_funding_atoms"`
-	FundingShortfallAtoms string                `json:"funding_shortfall_atoms"`
+	WalletID              string                 `json:"wallet_id"`
+	ChainID               string                 `json:"chain_id"`
+	AssetID               string                 `json:"asset_id"`
+	Destination           string                 `json:"destination"`
+	MinAtoms              string                 `json:"min_atoms"`
+	MaxGasAtoms           string                 `json:"max_gas_atoms"`
+	CheckedAt             int64                  `json:"checked_at"`
+	ExpiresAt             int64                  `json:"expires_at"`
+	BlockNumber           uint64                 `json:"block_number"`
+	NativeSymbol          string                 `json:"native_symbol"`
+	FundingAddress        string                 `json:"funding_address"`
+	FundingBalanceAtoms   string                 `json:"funding_balance_atoms"`
+	TotalAtoms            string                 `json:"total_atoms"`
+	TotalTopupAtoms       string                 `json:"total_topup_atoms"`
+	TotalGasAtoms         string                 `json:"total_gas_atoms"`
+	Items                 []CryptoSweepPlanItem  `json:"items"`
+	Quote                 string                 `json:"quote,omitempty"`
+	CanSubmit             bool                   `json:"can_submit"`
+	UnavailableReason     string                 `json:"unavailable_reason"`
+	RequiredFundingAtoms  string                 `json:"required_funding_atoms"`
+	FundingShortfallAtoms string                 `json:"funding_shortfall_atoms"`
+	NativeDecimals        int                    `json:"native_decimals,omitempty"`
+	FeeModel              string                 `json:"fee_model,omitempty"`
+	TotalRentAtoms        string                 `json:"total_rent_atoms,omitempty"`
+	NativePriceUSD        string                 `json:"native_price_usd,omitempty"`
+	NativePriceCNY        string                 `json:"native_price_cny,omitempty"`
+	PriceCheckedAt        int64                  `json:"price_checked_at,omitempty"`
+	PriceExpiresAt        int64                  `json:"price_expires_at,omitempty"`
+	FiatSource            string                 `json:"fiat_source,omitempty"`
+	FiatError             string                 `json:"fiat_error,omitempty"`
+	FeeMode               string                 `json:"fee_mode,omitempty"`
+	GasPriceAtoms         string                 `json:"gas_price_atoms,omitempty"`
+	FeeOptions            []CryptoSweepFeeOption `json:"fee_options,omitempty"`
+}
+type CryptoSweepFeeOption struct {
+	ID            string `json:"id"`
+	GasPriceAtoms string `json:"gas_price_atoms"`
+	TotalGasAtoms string `json:"total_gas_atoms"`
 }
 type cryptoSweepQuote struct {
 	ActorID int64              `json:"actor_id"`
@@ -91,15 +112,17 @@ type cryptoSweepQuote struct {
 	Asset   CryptoAsset        `json:"asset"`
 }
 type cryptoSweepInput struct {
-	ChainID     string   `json:"chain_id"`
-	AssetID     string   `json:"asset_id"`
-	Destination string   `json:"destination"`
-	MinAtoms    string   `json:"min_atoms"`
-	MaxGasAtoms string   `json:"max_gas_atoms"`
-	AddressIDs  []string `json:"address_ids"`
-	Quote       string   `json:"quote"`
-	Password    string   `json:"password"`
-	OperationID string   `json:"operation_id"`
+	ChainID       string   `json:"chain_id"`
+	AssetID       string   `json:"asset_id"`
+	Destination   string   `json:"destination"`
+	MinAtoms      string   `json:"min_atoms"`
+	MaxGasAtoms   string   `json:"max_gas_atoms"`
+	AddressIDs    []string `json:"address_ids"`
+	Quote         string   `json:"quote"`
+	Password      string   `json:"password"`
+	OperationID   string   `json:"operation_id"`
+	FeeMode       string   `json:"fee_mode,omitempty"`
+	GasPriceAtoms string   `json:"gas_price_atoms,omitempty"`
 }
 type CryptoSweepItem struct {
 	ID          string `json:"id"`
@@ -122,10 +145,11 @@ type CryptoSweepJob struct {
 	Updated     int64             `json:"updated"`
 	Items       []CryptoSweepItem `json:"items"`
 	CanCancel   bool              `json:"can_cancel"`
+	CanRetry    bool              `json:"can_retry,omitempty"`
 }
 
 func cryptoSweepAllowed(c CryptoChain) error {
-	if c.ChainID != 1 && c.ChainID != 56 {
+	if c.ChainID != 1 && c.ChainID != 56 && c.ChainID != 9745 && c.ChainID != cryptoSolanaChainID {
 		return commerceFail(409, "L1 最终性证据尚未验证，该网络暂不可自动提取")
 	}
 	if !c.FinalityVerified {
@@ -193,7 +217,7 @@ func (a *App) cryptoWalletBalance(ctx context.Context, id, chainID string, after
 	if !cryptoWalletSupports(v, chain.ChainID) {
 		return out, commerceFail(409, "此钱包未选择该网络")
 	}
-	c, e := newCryptoEVM(chain, a.cfg.Dev)
+	c, e := newCryptoBalanceClient(chain, a.cfg.Dev)
 	if e != nil {
 		return out, e
 	}
@@ -215,7 +239,14 @@ func (a *App) cryptoWalletBalance(ctx context.Context, id, chainID string, after
 		out.OperationsSupported = false
 		out.UnavailableReason = e.Error()
 	}
-	f, e := a.store.cryptoFundingAddress(ctx, v)
+	var f cryptoFundingAddress
+	if chain.ChainID == cryptoSolanaChainID {
+		f, e = a.store.cryptoSolanaFundingAddress(ctx, v)
+		out.NativeDecimals = 9
+		out.FeeModel = "solana"
+	} else {
+		f, e = a.store.cryptoFundingAddress(ctx, v)
+	}
 	if e != nil {
 		return out, e
 	}
@@ -227,7 +258,7 @@ func (a *App) cryptoWalletBalance(ctx context.Context, id, chainID string, after
 		}
 		out.FundingBalanceAtoms = balance.String()
 	}
-	rows, e := a.store.db.Query("SELECT a.id,a.address_index,a.address,a.path,COALESCE(i.order_id,''),COALESCE(i.id,''),COALESCE(i.user_id,0) FROM crypto_wallet_addresses a LEFT JOIN crypto_invoices i ON i.address_id=a.id WHERE a.wallet_id IN ("+cryptoWalletOwnerScope+") AND a.address_index>? ORDER BY a.address_index LIMIT 11", id, after)
+	rows, e := a.store.db.Query("SELECT a.id,a.address_index,a.address,a.path,COALESCE(i.order_id,''),COALESCE(i.id,''),COALESCE(i.user_id,0) FROM crypto_wallet_addresses a LEFT JOIN crypto_invoices i ON i.address_id=a.id WHERE a.wallet_id IN ("+cryptoWalletOwnerScope+") AND "+cryptoWalletPathSQL("a", chain.ChainID == cryptoSolanaChainID)+" AND a.address_index>? ORDER BY a.address_index LIMIT 11", id, after)
 	if e != nil {
 		return out, e
 	}
@@ -293,6 +324,9 @@ func (a *App) cryptoPreviewSweep(ctx context.Context, actor Record, id string, i
 	if e = cryptoSweepAllowed(chain); e != nil {
 		return out, e
 	}
+	if chain.ChainID == cryptoSolanaChainID {
+		return a.cryptoPreviewSolanaSweep(ctx, actor, v, s, chain, in)
+	}
 	asset, ok := s.asset(in.AssetID)
 	if in.AssetID == "native" {
 		asset = CryptoAsset{ID: "native", ChainID: chain.ChainID, Symbol: chain.NativeSymbol, Decimals: 18}
@@ -354,7 +388,7 @@ func (a *App) cryptoPreviewSweep(ctx context.Context, actor Record, id string, i
 	}
 	var addresses []CryptoWalletAddress
 	if len(selected) == 0 {
-		addresses, e = cryptoWalletReceiveAddresses(a.store.db, id, 1001)
+		addresses, e = cryptoWalletNetworkAddresses(a.store.db, id, false, 1001)
 	} else {
 		args := []any{id}
 		marks := []string{}
@@ -362,7 +396,7 @@ func (a *App) cryptoPreviewSweep(ctx context.Context, actor Record, id string, i
 			args = append(args, x)
 			marks = append(marks, "?")
 		}
-		rows, err := a.store.db.Query("SELECT id,wallet_id,address_index,path,address,label,created FROM crypto_wallet_addresses WHERE wallet_id IN ("+cryptoWalletOwnerScope+") AND id IN ("+strings.Join(marks, ",")+") ORDER BY address_index", args...)
+		rows, err := a.store.db.Query("SELECT id,wallet_id,address_index,path,address,label,created FROM crypto_wallet_addresses WHERE wallet_id IN ("+cryptoWalletOwnerScope+") AND "+cryptoWalletPathSQL("", false)+" AND id IN ("+strings.Join(marks, ",")+") ORDER BY address_index", args...)
 		if err != nil {
 			return out, err
 		}
@@ -394,7 +428,11 @@ func (a *App) cryptoPreviewSweep(ctx context.Context, actor Record, id string, i
 			return out, commerceFail(400, "提取目标不能是本次来源地址")
 		}
 	}
-	price, e := c.gasPrice(ctx)
+	rawPrice, e := c.rawGasPrice(ctx)
+	if e != nil {
+		return out, e
+	}
+	mode, price, e := cryptoSweepSelectFee(in, rawPrice)
 	if e != nil {
 		return out, e
 	}
@@ -403,12 +441,15 @@ func (a *App) cryptoPreviewSweep(ctx context.Context, actor Record, id string, i
 		return out, e
 	}
 	plans := make([]CryptoSweepPlanItem, len(addresses))
+	nativeBalances := make([]*big.Int, len(addresses))
+	possibleFundingGas := make([]uint64, len(addresses))
 	e = cryptoParallel(len(addresses), func(i int) error {
 		x := addresses[i]
 		native, e := c.NativeBalance(ctx, x.Address, block.Number)
 		if e != nil {
 			return e
 		}
+		nativeBalances[i] = new(big.Int).Set(native)
 		amount := new(big.Int).Set(native)
 		to, data := dest, ""
 		if asset.Contract != "" {
@@ -434,17 +475,31 @@ func (a *App) cryptoPreviewSweep(ctx context.Context, actor Record, id string, i
 		topup := new(big.Int)
 		fundFee := new(big.Int)
 		fundGas := uint64(0)
+		eligible := false
+		if asset.Contract != "" && cryptoAutoGasEligible(asset, amount) {
+			eligible, e = cryptoAutoGasOrder(a.store.db, id, chain.ChainID, x.ID, asset)
+			if e != nil {
+				return e
+			}
+			maximumFee := new(big.Int).Mul(new(big.Int).SetUint64(gas), cryptoFeePrice(rawPrice, 125))
+			if eligible && native.Cmp(maximumFee) < 0 {
+				possibleFundingGas[i], e = c.estimateGas(ctx, f.Address, x.Address, "", new(big.Int).Sub(maximumFee, native))
+				if e != nil {
+					return e
+				}
+			}
+		}
 		if asset.Contract == "" {
 			amount.Sub(amount, fee)
 			if amount.Sign() <= 0 || amount.Cmp(minimum) < 0 {
 				return nil
 			}
 		} else if native.Cmp(fee) < 0 {
-			topup.Sub(fee, native)
-			fundGas, e = c.estimateGas(ctx, f.Address, x.Address, "", topup)
-			if e != nil {
-				return e
+			if !eligible || !cryptoAutoGasEligible(asset, amount) {
+				return nil
 			}
+			topup.Sub(fee, native)
+			fundGas = possibleFundingGas[i]
 			fundFee.Mul(new(big.Int).SetUint64(fundGas), price)
 		}
 		plans[i] = CryptoSweepPlanItem{AddressID: x.ID, Address: x.Address, Path: x.Path, AmountAtoms: amount.String(), GasLimit: gas, GasPriceAtoms: price.String(), GasFeeAtoms: fee.String(), TopupAtoms: topup.String(), FundingGasAtoms: fundFee.String(), FundingGasLimit: fundGas}
@@ -454,7 +509,7 @@ func (a *App) cryptoPreviewSweep(ctx context.Context, actor Record, id string, i
 		return out, e
 	}
 	now := time.Now().Unix()
-	out = CryptoSweepPreview{WalletID: id, ChainID: chain.ID, AssetID: asset.ID, Destination: dest, MinAtoms: minimum.String(), MaxGasAtoms: budget.String(), CheckedAt: now, ExpiresAt: now + 120, BlockNumber: block.Number, NativeSymbol: chain.NativeSymbol, FundingAddress: f.Address, FundingBalanceAtoms: fundBalance.String(), Items: []CryptoSweepPlanItem{}}
+	out = CryptoSweepPreview{WalletID: id, ChainID: chain.ID, AssetID: asset.ID, Destination: dest, MinAtoms: minimum.String(), MaxGasAtoms: budget.String(), CheckedAt: now, ExpiresAt: now + 120, BlockNumber: block.Number, NativeSymbol: chain.NativeSymbol, FundingAddress: f.Address, FundingBalanceAtoms: fundBalance.String(), Items: []CryptoSweepPlanItem{}, FeeMode: mode, GasPriceAtoms: price.String()}
 	total, topups, fees, fundFees := new(big.Int), new(big.Int), new(big.Int), new(big.Int)
 	for _, x := range plans {
 		if x.AddressID == "" {
@@ -472,6 +527,24 @@ func (a *App) cryptoPreviewSweep(ctx context.Context, actor Record, id string, i
 		fundFees.Add(fundFees, fundFee)
 	}
 	out.TotalAtoms, out.TotalTopupAtoms, out.TotalGasAtoms = total.String(), topups.String(), fees.String()
+	for _, option := range []struct {
+		id      string
+		percent int64
+	}{{"economy", 100}, {"standard", 110}, {"priority", 120}} {
+		optionPrice := cryptoFeePrice(rawPrice, option.percent)
+		optionFee := new(big.Int)
+		for i, item := range plans {
+			if item.AddressID == "" {
+				continue
+			}
+			gas := item.GasLimit
+			if asset.Contract != "" && nativeBalances[i].Cmp(new(big.Int).Mul(new(big.Int).SetUint64(gas), optionPrice)) < 0 {
+				gas += possibleFundingGas[i]
+			}
+			optionFee.Add(optionFee, new(big.Int).Mul(new(big.Int).SetUint64(gas), optionPrice))
+		}
+		out.FeeOptions = append(out.FeeOptions, CryptoSweepFeeOption{ID: option.id, GasPriceAtoms: optionPrice.String(), TotalGasAtoms: optionFee.String()})
+	}
 	if automaticBudget {
 		// The estimate already includes bounded price and gas-limit buffers. Freeze
 		// that exact upper limit in the same approved quote; never use infinity.
@@ -614,12 +687,13 @@ func (s *Store) cryptoSweepJob(id string) (CryptoSweepJob, error) {
 	}
 	var pending int
 	var lease int64
-	if e = s.db.QueryRow("SELECT lease_until,(SELECT COUNT(*) FROM crypto_chain_transactions WHERE job_id=? AND state NOT IN ('confirmed','reverted')) FROM crypto_sweep_jobs WHERE id=?", id, id).Scan(&lease, &pending); e != nil {
+	if e = s.db.QueryRow("SELECT lease_until,(SELECT COUNT(*) FROM crypto_chain_transactions WHERE job_id=? AND state NOT IN ('confirmed','reverted'))+(SELECT COUNT(*) FROM crypto_solana_transactions WHERE job_id=? AND state NOT IN ('confirmed','reverted')) FROM crypto_sweep_jobs WHERE id=?", id, id, id).Scan(&lease, &pending); e != nil {
 		return v, e
 	}
+	v.CanRetry = (v.State == "waiting" || v.State == "fee_review_required") && lease <= time.Now().Unix()
 	v.CanCancel = v.State != "complete" && v.State != "cancelled" && lease <= time.Now().Unix() && pending == 0
 	v.Items = []CryptoSweepItem{}
-	rows, e := s.db.Query("SELECT i.id,i.address,i.amount_atoms,i.state,i.error,COALESCE((SELECT tx_hash FROM crypto_chain_transactions t WHERE t.item_id=i.id AND t.kind='gas'),''),COALESCE((SELECT tx_hash FROM crypto_chain_transactions t WHERE t.item_id=i.id AND t.kind='sweep'),'') FROM crypto_sweep_items i WHERE i.job_id=? ORDER BY i.id", id)
+	rows, e := s.db.Query("SELECT i.id,i.address,i.amount_atoms,i.state,i.error,COALESCE((SELECT tx_hash FROM crypto_chain_transactions t WHERE t.item_id=i.id AND t.kind='gas'),''),COALESCE((SELECT tx_hash FROM crypto_chain_transactions t WHERE t.item_id=i.id AND t.kind='sweep'),(SELECT signature FROM crypto_solana_transactions t WHERE t.item_id=i.id),'') FROM crypto_sweep_items i WHERE i.job_id=? ORDER BY i.id", id)
 	if e != nil {
 		return v, e
 	}
@@ -748,6 +822,7 @@ func (a *App) cryptoSweepAPIRoute(w http.ResponseWriter, r *http.Request, actor 
 			var v CryptoSweepPreview
 			v, e = a.cryptoPreviewSweep(ctx, current, p[1], in)
 			if e == nil {
+				a.cryptoDecorateSweepFiat(&v)
 				jsonResponse(w, 200, v)
 			}
 		} else if _, e = a.commerceActor(current, true, in.Password); e == nil {
@@ -788,6 +863,33 @@ func (a *App) cryptoRetrySweep(ctx context.Context, actor Record, id string, in 
 	if !operationPattern.MatchString(in.OperationID) {
 		return commerceFail(400, "缺少有效操作标识")
 	}
+	var observedState string
+	if e := a.store.db.QueryRow("SELECT state FROM crypto_sweep_jobs WHERE id=?", id).Scan(&observedState); e != nil {
+		return e
+	}
+	if observedState == "fee_review_required" {
+		if _, e := a.commerceActor(actor, true, in.Password); e != nil {
+			return e
+		}
+		if e := a.store.validateCryptoSweeps(true); e != nil {
+			return commerceFail(422, "资金完整性校验失败，已阻止恢复费用暂停任务")
+		}
+		var sealed []byte
+		if e := a.store.db.QueryRow("SELECT config FROM crypto_sweep_jobs WHERE id=?", id).Scan(&sealed); e != nil {
+			return e
+		}
+		var quote cryptoSweepQuote
+		if e := a.store.vault.open(sealed, &quote); e != nil {
+			return e
+		}
+		if quote.Chain.ChainID == cryptoSolanaChainID {
+			if e := a.cryptoCheckSolanaRetryFee(ctx, id, quote); e != nil {
+				return e
+			}
+		} else if e := a.cryptoCheckEVMRetryFee(ctx, id, quote); e != nil {
+			return e
+		}
+	}
 	tx, e := a.store.cryptoWalletTx(ctx)
 	if e != nil {
 		return e
@@ -797,6 +899,9 @@ func (a *App) cryptoRetrySweep(ctx context.Context, actor Record, id string, in 
 	var lease int64
 	if e = tx.QueryRow("SELECT state,lease_until FROM crypto_sweep_jobs WHERE id=?", id).Scan(&state, &lease); e != nil {
 		return e
+	}
+	if state != observedState {
+		return commerceFail(409, "任务状态已变化，请重新核对")
 	}
 	if lease > time.Now().Unix() {
 		return commerceFail(409, "任务正在执行，请等待本次处理结束")
@@ -841,7 +946,7 @@ func (a *App) cryptoCancelSweep(ctx context.Context, actor Record, id string, in
 		return commerceFail(409, "任务正在执行，请稍后结束")
 	}
 	var pending int
-	if e = tx.QueryRow("SELECT COUNT(*) FROM crypto_chain_transactions WHERE job_id=? AND state NOT IN ('confirmed','reverted')", id).Scan(&pending); e != nil {
+	if e = tx.QueryRow("SELECT (SELECT COUNT(*) FROM crypto_chain_transactions WHERE job_id=? AND state NOT IN ('confirmed','reverted'))+(SELECT COUNT(*) FROM crypto_solana_transactions WHERE job_id=? AND state NOT IN ('confirmed','reverted'))", id, id).Scan(&pending); e != nil {
 		return e
 	}
 	if pending > 0 {

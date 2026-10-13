@@ -1,5 +1,6 @@
 import { t } from '../i18n';
 import { canAllocate, walletSupportsChain, type CryptoWallet, type WalletAPI } from './cryptoWallet';
+import {cryptoAddress,SOLANA_CHAIN_ID,supportedCryptoChain} from './cryptoNetworks';
 export interface CryptoAssetOption { id:string; chain_id:number; chain_name:string; name:string; symbol:string; contract:string; decimals:number; payment_decimals:number; cny_per_token:string; rate_updated_at:number; rate_expires_at:number; available:boolean; unavailable_reason:string }
 export interface CryptoOptions { enabled:boolean; assets:CryptoAssetOption[] }
 export interface CryptoTransfer {chain_id:number;tx_hash:string;log_index:number;contract:string;atoms:string;block_number:number;block_time:number;state:string;reason:string}
@@ -23,17 +24,18 @@ export function invoiceStateText(invoice:CryptoInvoice):string {
 }
 export function invoiceCanPay(invoice:CryptoInvoice,now=Date.now()/1000):boolean{return ['waiting','partial'].includes(invoice.state)&&invoice.expires>now&&invoice.order_state==='pending';}
 export function invoiceQR(invoice:CryptoInvoice,mode:'wallet'|'exchange'):string {
- if(mode==='exchange')return /^0x[0-9a-fA-F]{40}$/.test(invoice.address)?invoice.address:'';
+ if(mode==='exchange')return cryptoAddress(invoice.chain_id,invoice.address)?invoice.address:'';
  // Only frozen server invoice data can become a wallet request. No client quote arithmetic.
+ if(invoice.chain_id===SOLANA_CHAIN_ID)return /^solana:[1-9A-HJ-NP-Za-km-z]{32,44}(?:\?[^\s]*)?$/.test(invoice.qr_uri)?invoice.qr_uri:'';
  return /^ethereum:[^\s]+$/i.test(invoice.qr_uri)?invoice.qr_uri:'';
 }
 export const CRYPTO_PROVIDER='crypto';
 export function supportsPaymentPurpose(method:{code:string;purposes?:string[]},purpose:'order'|'topup'):boolean{return method.purposes?method.purposes.includes(purpose):purpose==='order'||!['crypto','evm_crypto'].includes(method.code);}
-export interface CryptoChain {id:string;name:string;chain_id:number;rpc_url:string;rpc_backup_url:string;has_rpc:boolean;has_rpc_backup:boolean;native_symbol:string;enabled:boolean;finality_verified:boolean;rpc_source?:'built_in'|'custom'}
+export interface CryptoChain {id:string;name:string;chain_id:number;rpc_url:string;rpc_backup_url:string;has_rpc:boolean;has_rpc_backup:boolean;native_symbol:string;native_decimals?:number;family?:'evm'|'solana';enabled:boolean;finality_verified:boolean;rpc_source?:'built_in'|'custom'}
 export interface CryptoConfiguredAsset extends CryptoAssetOption {enabled:boolean;rate_source?:string}
 export interface CryptoSetupReadiness {ready:boolean;checked_at:number;message:string}
 export interface CryptoSettings {revision:number;enabled:boolean;wallet_id:string;invoice_minutes:number;chains:CryptoChain[];assets:CryptoConfiguredAsset[];rate_mode?:'automatic'|'manual';rate_source?:string;rate_checked_at?:number;rate_error?:string;setup_checked_at?:number;readiness?:CryptoSetupReadiness}
-export const cryptoOperationsSupported=(chain:number)=>chain===1||chain===56;
+export const cryptoOperationsSupported=supportedCryptoChain;
 
 export function cryptoSetupDefaults(wallet:CryptoWallet|undefined,settings:CryptoSettings){
  const available=settings.chains.filter(chain=>cryptoOperationsSupported(chain.chain_id)&&walletSupportsChain(wallet,chain.chain_id));
@@ -41,7 +43,7 @@ export function cryptoSetupDefaults(wallet:CryptoWallet|undefined,settings:Crypt
  const chain_ids=configured.length?configured.map(chain=>chain.chain_id):available.some(chain=>chain.chain_id===56)?[56]:available.slice(0,1).map(chain=>chain.chain_id);
  const candidates=settings.assets.filter(asset=>chain_ids.includes(asset.chain_id));
  const enabled=configured.length?candidates.filter(asset=>asset.enabled):[];
- return {chain_ids,asset_ids:(enabled.length?enabled:candidates.filter(asset=>['USDT','USDC'].includes(asset.symbol))).map(asset=>asset.id)};
+ return {chain_ids,asset_ids:(enabled.length?enabled:candidates.filter(asset=>['USDT','USDT0','USDC'].includes(asset.symbol))).map(asset=>asset.id)};
 }
 /** Quick setup never carries manual RPC credentials or client-created exchange rates. */
 export function cryptoSetupSelection(wallet:CryptoWallet|undefined,settings:CryptoSettings,chainIDs:number[],assetIDs:string[]){

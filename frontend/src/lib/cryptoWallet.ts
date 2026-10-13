@@ -1,4 +1,5 @@
 import { clearHotWallet, createHotWallet, importHotWallet, type HotWalletMaterial } from './walletCore';
+import {SOLANA_CHAIN_ID,PLASMA_CHAIN_ID} from './cryptoNetworks';
 
 export interface CryptoWallet {
   id: string;
@@ -18,8 +19,11 @@ export interface CryptoWallet {
   supported_chain_ids: number[];
   funding_address: string;
   funding_path: string;
+  solana_first_address?: string;
+  solana_funding_address?: string;
+  solana_funding_path?: string;
 }
-export interface CryptoAddress { id: string; wallet_id: string; index: number; path: string; address: string; label: string; created: number }
+export interface CryptoAddress { id: string; wallet_id: string; index: number; path: string; address: string; label: string; created: number;chain_id?:number }
 export interface CryptoAddressPage { wallet: CryptoWallet; items: CryptoAddress[]; next_after: number | null }
 export interface CryptoBackup { format: 'guangyue-crypto-wallet-v1'; data: string }
 export type WalletAPI = <T>(path: string, method?: string, body?: unknown) => Promise<T>;
@@ -27,19 +31,34 @@ export type WalletAPI = <T>(path: string, method?: string, body?: unknown) => Pr
 export const CRYPTO_BACKUP_FILE_LIMIT = 16 * 1024 * 1024;
 export const MAX_WALLET_NEXT_INDEX = 2 ** 31;
 export const CRYPTO_WALLET_CHAINS = [
-  { chain_id: 56, name: 'BNB Smart Chain', native_symbol: 'BNB' },
-  { chain_id: 1, name: 'Ethereum', native_symbol: 'ETH' },
+  { id:'bsc', chain_id: 56, name: 'BNB Smart Chain', native_symbol: 'BNB' },
+  { id:'ethereum', chain_id: 1, name: 'Ethereum', native_symbol: 'ETH' },
+  { id:'plasma', chain_id: PLASMA_CHAIN_ID, name: 'Plasma', native_symbol: 'XPL' },
+  { id:'solana', chain_id: SOLANA_CHAIN_ID, name: 'Solana', native_symbol: 'SOL' },
 ] as const;
 export function walletSupportsChain(wallet: CryptoWallet | undefined, chainID: number): boolean {
-  return !!wallet?.supported_chain_ids?.includes(chainID);
+  return !!wallet?.supported_chain_ids?.includes(chainID)&&(chainID!==SOLANA_CHAIN_ID||wallet.mode==='hot');
 }
 export function walletChains(wallet: CryptoWallet) {
-  return CRYPTO_WALLET_CHAINS.filter(chain => walletSupportsChain(wallet, chain.chain_id));
+  return CRYPTO_WALLET_CHAINS.filter(chain => walletSupportsChain(wallet, chain.chain_id)&&(wallet.mode==='hot'||chain.chain_id!==SOLANA_CHAIN_ID));
 }
+export function walletFundingAddress(wallet:CryptoWallet|undefined,chainID:number):string{return chainID===SOLANA_CHAIN_ID?wallet?.solana_funding_address||'':wallet?.funding_address||''}
+export function walletFundingPath(wallet:CryptoWallet|undefined,chainID:number):string{return chainID===SOLANA_CHAIN_ID?wallet?.solana_funding_path||'':wallet?.funding_path||''}
 export function validateWalletChains(ids: number[]): number[] {
   const unique = [...new Set(ids)];
   if (!unique.length || unique.some(id => !CRYPTO_WALLET_CHAINS.some(chain => chain.chain_id === id))) throw new Error('请选择钱包支持的网络');
   return unique;
+}
+/** Add networks without hiding historical funds or changing the wallet's enabled state. */
+export async function saveWalletNetworks(api:WalletAPI,input:{wallet:Pick<CryptoWallet,'id'|'mode'|'enabled'|'revision'|'supported_chain_ids'>;supported_chain_ids:number[];password:string;operation_id:string}):Promise<CryptoWallet>{
+ let payload:Record<string,unknown>|undefined;
+ try{
+  const supported_chain_ids=validateWalletChains(input.supported_chain_ids);
+  if(input.wallet.supported_chain_ids.some(id=>!supported_chain_ids.includes(id)))throw new Error('已支持的网络不能取消，历史地址与资产需继续保留');
+  if(input.wallet.mode==='watch_only'&&supported_chain_ids.includes(SOLANA_CHAIN_ID))throw new Error('外部 xpub 仅支持 EVM 网络，Solana 需要新建热钱包或导入助记词。');
+  payload={enabled:input.wallet.enabled,supported_chain_ids,revision:input.wallet.revision,password:input.password,operation_id:input.operation_id};
+  return await api<CryptoWallet>('/wallets/'+encodeURIComponent(input.wallet.id)+'/status','POST',payload);
+ }finally{input.password='';if(payload)payload.password=''}
 }
 
 export function mergeCryptoWallets(current: CryptoWallet[], incoming: CryptoWallet[]): CryptoWallet[] {

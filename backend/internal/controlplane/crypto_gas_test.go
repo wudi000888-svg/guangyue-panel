@@ -18,7 +18,7 @@ func cryptoGasRead(t *testing.T, a *App, owner Record, wallet CryptoWallet) Cryp
 func TestCryptoGasRefreshIsLightweightAndCannotMoveFunds(t *testing.T) {
 	a, owner, wallet, f := cryptoPortfolioFixture(t, 25)
 	v := cryptoGasRead(t, a, owner, wallet)
-	if v.WalletID != wallet.ID || v.ChainID != "ethereum" || v.GasPriceAtoms != "120" || v.ReferenceNativeTransferFeeAtoms != "2520000" || v.FundingBalanceAtoms != "1000000000000" || v.ExpiresAt-v.GasCheckedAt > 10 || v.ExpiresAt <= v.GasCheckedAt {
+	if v.WalletID != wallet.ID || v.ChainID != "ethereum" || v.GasPriceAtoms != "110" || v.ReferenceNativeTransferFeeAtoms != "2310000" || v.FundingBalanceAtoms != "1000000000000" || v.ExpiresAt-v.GasCheckedAt > 10 || v.ExpiresAt <= v.GasCheckedAt {
 		t.Fatalf("bad gas snapshot: %+v", v)
 	}
 	f.mu.Lock()
@@ -44,7 +44,7 @@ func TestCryptoGasRefreshIsLightweightAndCannotMoveFunds(t *testing.T) {
 	f.base.price = 200
 	f.base.mu.Unlock()
 	next := cryptoGasRead(t, a, owner, wallet)
-	if next.GasPriceAtoms != "240" {
+	if next.GasPriceAtoms != "220" {
 		t.Fatalf("gas reused 30 second portfolio cache: %+v", next)
 	}
 	for _, table := range []string{"crypto_sweep_jobs", "crypto_chain_transactions"} {
@@ -175,7 +175,7 @@ func TestCryptoGasCoalescesInFlightAndCancelsWaitingReader(t *testing.T) {
 	released = true
 	select {
 	case value := <-done:
-		if value.GasError != "" || value.GasPriceAtoms != "120" {
+		if value.GasError != "" || value.GasPriceAtoms != "110" {
 			t.Fatalf("first reader lost successful result: %+v", value)
 		}
 	case <-time.After(3 * time.Second):

@@ -37,6 +37,8 @@ type CryptoWalletPortfolio struct {
 	WatchOnly                       bool                     `json:"watch_only"`
 	OperationsSupported             bool                     `json:"operations_supported"`
 	UnavailableReason               string                   `json:"unavailable_reason"`
+	NativeDecimals                  int                      `json:"native_decimals,omitempty"`
+	FeeModel                        string                   `json:"fee_model,omitempty"`
 	FundingAddress                  string                   `json:"funding_address"`
 	FundingPath                     string                   `json:"funding_path"`
 	FundingBalanceAtoms             string                   `json:"funding_balance_atoms"`
@@ -111,8 +113,8 @@ func cryptoPortfolioPage(v CryptoWalletPortfolio, after int64, filter string) Cr
 	return v
 }
 
-func (a *App) cryptoPortfolioAddressChunk(ctx context.Context, wallet string, after, high int64) ([]CryptoPortfolioAddress, error) {
-	rows, e := a.store.db.QueryContext(ctx, "SELECT a.id,a.address_index,a.address,a.path,a.label,COALESCE(i.order_id,''),COALESCE(i.id,''),COALESCE(i.user_id,0) FROM crypto_wallet_addresses a LEFT JOIN crypto_invoices i ON i.address_id=a.id WHERE a.wallet_id IN ("+cryptoWalletOwnerScope+") AND a.address_index>? AND a.address_index<=? ORDER BY a.address_index LIMIT ?", wallet, after, high, cryptoPortfolioChunkSize)
+func (a *App) cryptoPortfolioAddressChunk(ctx context.Context, wallet string, after, high int64, sol bool) ([]CryptoPortfolioAddress, error) {
+	rows, e := a.store.db.QueryContext(ctx, "SELECT a.id,a.address_index,a.address,a.path,a.label,COALESCE(i.order_id,''),COALESCE(i.id,''),COALESCE(i.user_id,0) FROM crypto_wallet_addresses a LEFT JOIN crypto_invoices i ON i.address_id=a.id WHERE a.wallet_id IN ("+cryptoWalletOwnerScope+") AND "+cryptoWalletPathSQL("a", sol)+" AND a.address_index>? AND a.address_index<=? ORDER BY a.address_index LIMIT ?", wallet, after, high, cryptoPortfolioChunkSize)
 	if e != nil {
 		return nil, e
 	}
@@ -162,7 +164,7 @@ func (a *App) cryptoWalletPortfolio(ctx context.Context, id, chainID string, aft
 	}
 	var count int
 	var high int64
-	if e = a.store.db.QueryRowContext(ctx, "SELECT COUNT(*),COALESCE(MAX(address_index),-1) FROM crypto_wallet_addresses WHERE wallet_id IN ("+cryptoWalletOwnerScope+")", id).Scan(&count, &high); e != nil {
+	if e = a.store.db.QueryRowContext(ctx, "SELECT COUNT(*),COALESCE(MAX(address_index),-1) FROM crypto_wallet_addresses WHERE wallet_id IN ("+cryptoWalletOwnerScope+") AND "+cryptoWalletPathSQL("", chain.ChainID == cryptoSolanaChainID), id).Scan(&count, &high); e != nil {
 		return CryptoWalletPortfolio{}, e
 	}
 	assets := []CryptoAsset{}
@@ -296,6 +298,11 @@ func (a *App) cryptoRefreshPortfolio(ctx context.Context, wallet CryptoWallet, c
 		out.UnavailableReason = e.Error()
 	}
 	funding, fundingErr := cryptoFunding(wallet)
+	if chain.ChainID == cryptoSolanaChainID {
+		funding, fundingErr = a.store.cryptoSolanaFundingAddress(ctx, wallet)
+		out.NativeDecimals = 9
+		out.FeeModel = "solana"
+	}
 	out.FundingAddress, out.FundingPath = funding.Address, funding.Path
 	failedBoundary := func(e error) CryptoWalletPortfolio {
 		out.Stale = true
@@ -323,7 +330,7 @@ func (a *App) cryptoRefreshPortfolio(ctx context.Context, wallet CryptoWallet, c
 			known[x.AddressID] = true
 		}
 		for cursor := int64(-1); cursor < high && ctx.Err() == nil; {
-			chunk, readErr := a.cryptoPortfolioAddressChunk(ctx, wallet.ID, cursor, high)
+			chunk, readErr := a.cryptoPortfolioAddressChunk(ctx, wallet.ID, cursor, high, chain.ChainID == cryptoSolanaChainID)
 			if readErr != nil || len(chunk) == 0 {
 				break
 			}
@@ -339,7 +346,7 @@ func (a *App) cryptoRefreshPortfolio(ctx context.Context, wallet CryptoWallet, c
 		sort.Slice(out.Items, func(i, j int) bool { return out.Items[i].Index < out.Items[j].Index })
 		return out
 	}
-	c, e := newCryptoEVM(chain, a.cfg.Dev)
+	c, e := newCryptoBalanceClient(chain, a.cfg.Dev)
 	if e != nil {
 		return failedBoundary(e)
 	}
@@ -358,7 +365,7 @@ func (a *App) cryptoRefreshPortfolio(ctx context.Context, wallet CryptoWallet, c
 		return failedBoundary(e)
 	}
 	continuing := prior.resumable && prior.BlockHash != ""
-	resuming := continuing && time.Since(time.Unix(prior.CheckedAt, 0)) <= cryptoPortfolioMaxFrozenAge
+	resuming := chain.ChainID != cryptoSolanaChainID && continuing && time.Since(time.Unix(prior.CheckedAt, 0)) <= cryptoPortfolioMaxFrozenAge
 	if resuming {
 		// Frozen snapshots are resumed only after both RPCs independently
 		// confirm the same canonical hash and a boundary at or beyond it. This
@@ -417,8 +424,14 @@ func (a *App) cryptoRefreshPortfolio(ctx context.Context, wallet CryptoWallet, c
 		out.Errors = append(out.Errors, e.Error())
 	} else {
 		out.GasPriceAtoms = price.String()
-		out.ReferenceNativeTransferFeeAtoms = new(big.Int).Mul(price, big.NewInt(21000)).String()
-		out.GasCheckedAt = checkedNow
+		fee, feeErr := c.referenceFee(ctx, funding.Address, price)
+		if feeErr != nil {
+			out.GasError = feeErr.Error()
+			out.Errors = append(out.Errors, feeErr.Error())
+		} else {
+			out.ReferenceNativeTransferFeeAtoms = fee.String()
+			out.GasCheckedAt = checkedNow
+		}
 	}
 	old := map[string]CryptoPortfolioAddress{}
 	verified := map[string]bool{}
@@ -441,7 +454,7 @@ func (a *App) cryptoRefreshPortfolio(ctx context.Context, wallet CryptoWallet, c
 			out.Errors = append(out.Errors, "余额刷新已取消或超时")
 			break
 		}
-		chunk, e := a.cryptoPortfolioAddressChunk(ctx, wallet.ID, cursor, high)
+		chunk, e := a.cryptoPortfolioAddressChunk(ctx, wallet.ID, cursor, high, chain.ChainID == cryptoSolanaChainID)
 		if e != nil {
 			out.Errors = append(out.Errors, "地址读取未完成")
 			break

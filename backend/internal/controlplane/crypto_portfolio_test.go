@@ -157,7 +157,7 @@ func TestCryptoPortfolioAggregatesAllAddressesExactly(t *testing.T) {
 	if len(v.Tokens) != 2 || v.Tokens[0].BalanceAtoms != total.String() || v.Tokens[1].BalanceAtoms != total.String() || v.NativeBalanceAtoms != native.String() || v.FundingBalanceAtoms != "1000000000000" {
 		t.Fatalf("exact totals or funding isolation failed: %+v", v)
 	}
-	if v.Finality != "finalized" || v.BlockNumber != 100 || v.GasPriceAtoms != "120" || v.ReferenceNativeTransferFeeAtoms != "2520000" {
+	if v.Finality != "finalized" || v.BlockNumber != 100 || v.GasPriceAtoms != "110" || v.ReferenceNativeTransferFeeAtoms != "2310000" {
 		t.Fatalf("invalid finality/gas: %+v", v)
 	}
 	fixture.mu.Lock()
@@ -309,11 +309,26 @@ func TestCryptoPortfolioChunkCursorFiltersAndConfigInvalidation(t *testing.T) {
 	calls := fixture.calls
 	fixture.failGas = true
 	fixture.mu.Unlock()
+	fixture.base.mu.Lock()
+	fixture.base.tokens[strings.ToLower(fixture.base.receive)] = big.NewInt(7)
+	fixture.base.mu.Unlock()
 	s, e := a.store.cryptoPaymentSettings()
 	if e != nil {
 		t.Fatal(e)
 	}
-	s.Assets = s.Assets[1:]
+	// Missing catalog entries are restored by the defaults merge. Change an
+	// existing asset's denomination metadata instead, so this regression still
+	// proves that the asset fingerprint invalidates an otherwise fresh snapshot.
+	changedDecimals := 0
+	for i := range s.Assets {
+		if s.Assets[i].ID == "ethereum-usdc" {
+			s.Assets[i].Decimals++
+			changedDecimals = s.Assets[i].Decimals
+		}
+	}
+	if changedDecimals == 0 {
+		t.Fatal("fixture is missing the configured USDC asset")
+	}
 	raw, e := a.store.vault.seal(s)
 	if e != nil {
 		t.Fatal(e)
@@ -322,8 +337,17 @@ func TestCryptoPortfolioChunkCursorFiltersAndConfigInvalidation(t *testing.T) {
 		t.Fatal(e)
 	}
 	changed := cryptoPortfolioRead(t, a, owner, wallet, "")
-	if len(changed.Tokens) != 1 || changed.Tokens[0].AssetID != "ethereum-usdc" || changed.GasError == "" || changed.GasPriceAtoms != "" || changed.Complete {
+	if len(changed.Tokens) != len(v.Tokens) || changed.GasError == "" || changed.GasPriceAtoms != "" || changed.Complete {
 		t.Fatalf("changed config reused old assets/Gas: %+v", changed)
+	}
+	usdcUpdated := false
+	for _, token := range changed.Tokens {
+		if token.AssetID == "ethereum-usdc" {
+			usdcUpdated = token.Decimals == changedDecimals && token.BalanceAtoms == "7"
+		}
+	}
+	if !usdcUpdated {
+		t.Fatalf("asset metadata or newly observed funds were cached: %+v", changed.Tokens)
 	}
 	fixture.mu.Lock()
 	defer fixture.mu.Unlock()

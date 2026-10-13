@@ -24,6 +24,11 @@ type cryptoEVM struct {
 	chain  CryptoChain
 	client *http.Client
 }
+type cryptoRPCMethodError struct{ Code int }
+
+func (e cryptoRPCMethodError) Error() string { return "RPC 方法不可用或返回无效数据" }
+func (e cryptoRPCMethodError) Unwrap() error { return commerceFail(409, e.Error()) }
+
 type cryptoEVMBlock struct {
 	Number    uint64 `json:"number"`
 	Hash      string `json:"hash"`
@@ -63,6 +68,15 @@ var cryptoProductionRPCTransport = &http.Transport{DialContext: publicSourceDial
 var cryptoDevelopmentRPCTransport = &http.Transport{TLSHandshakeTimeout: 5 * time.Second, ResponseHeaderTimeout: 8 * time.Second, MaxIdleConns: 32, MaxIdleConnsPerHost: 4, MaxConnsPerHost: 8, IdleConnTimeout: 30 * time.Second}
 
 func newCryptoEVM(chain CryptoChain, dev bool) (*cryptoEVM, error) {
+	if chain.ChainID <= 0 || chain.Family == "solana" || chain.ChainID == 101 {
+		return nil, commerceFail(409, "链编号无效")
+	}
+	return newCryptoRPCClient(chain, dev)
+}
+
+// The JSON-RPC transport is shared by chain-specific adapters. It validates
+// remote addresses only; callers must still verify their protocol and genesis.
+func newCryptoRPCClient(chain CryptoChain, dev bool) (*cryptoEVM, error) {
 	if chain.ChainID <= 0 {
 		return nil, commerceFail(409, "链编号无效")
 	}
@@ -112,7 +126,13 @@ func (c *cryptoEVM) rpc(ctx context.Context, endpoint, method string, params any
 	if e != nil || len(body) > 4<<20 {
 		return commerceFail(409, "RPC 响应超过限制")
 	}
-	if json.Unmarshal(body, &v) != nil || v.ID != 1 || v.JSONRPC != "2.0" || v.Error != nil || len(v.Result) == 0 {
+	if json.Unmarshal(body, &v) != nil || v.ID != 1 || v.JSONRPC != "2.0" {
+		return commerceFail(409, "RPC 方法不可用或返回无效数据")
+	}
+	if v.Error != nil {
+		return cryptoRPCMethodError{Code: v.Error.Code}
+	}
+	if len(v.Result) == 0 {
 		return commerceFail(409, "RPC 方法不可用或返回无效数据")
 	}
 	if json.Unmarshal(v.Result, out) != nil {
@@ -202,8 +222,14 @@ func (c *cryptoEVM) Chain(ctx context.Context) error {
 			return commerceFail(409, "RPC 链编号与配置不一致")
 		}
 	}
-	_, e = c.block(ctx, "0x0")
-	return e
+	genesis, e := c.block(ctx, "0x0")
+	if e != nil {
+		return e
+	}
+	if c.chain.ChainID == cryptoPlasmaChainID && (genesis.Number != 0 || genesis.Hash != cryptoPlasmaGenesisHash || genesis.Timestamp != 0) {
+		return commerceFail(409, "RPC Plasma 主网创世区块与官方记录不一致")
+	}
+	return nil
 }
 func decodeCryptoBlock(raw json.RawMessage) (cryptoEVMBlock, error) {
 	var v struct {

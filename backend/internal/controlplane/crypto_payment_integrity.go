@@ -9,8 +9,8 @@ import (
 func (s *Store) validateCryptoPayments(deep bool) error {
 	fail := errors.New("crypto payment integrity failed")
 	for _, query := range []string{
-		"SELECT COUNT(*) FROM crypto_invoices i LEFT JOIN commerce_orders o ON o.id=i.order_id LEFT JOIN payment_attempts p ON p.id=i.attempt_id LEFT JOIN crypto_wallet_addresses a ON a.id=i.address_id WHERE o.id IS NULL OR p.id IS NULL OR a.id IS NULL OR i.user_id<>o.user_id OR p.order_id<>i.order_id OR p.user_id<>i.user_id OR p.provider_id<>'crypto' OR a.wallet_id<>i.wallet_id OR LOWER(a.address)<>LOWER(i.address)",
-		"SELECT COUNT(*) FROM crypto_transfers t LEFT JOIN crypto_invoices i ON i.id=t.invoice_id WHERE i.id IS NULL OR t.recipient<>LOWER(i.address) OR t.state NOT IN ('confirmed','review_required') OR t.block_number<0 OR t.block_time<0",
+		"SELECT COUNT(*) FROM crypto_invoices i LEFT JOIN commerce_orders o ON o.id=i.order_id LEFT JOIN payment_attempts p ON p.id=i.attempt_id LEFT JOIN crypto_wallet_addresses a ON a.id=i.address_id WHERE o.id IS NULL OR p.id IS NULL OR a.id IS NULL OR i.user_id<>o.user_id OR p.order_id<>i.order_id OR p.user_id<>i.user_id OR p.provider_id<>'crypto' OR a.wallet_id<>i.wallet_id OR ((i.chain_id=101 AND a.address<>i.address) OR (i.chain_id<>101 AND LOWER(a.address)<>LOWER(i.address)))",
+		"SELECT COUNT(*) FROM crypto_transfers t LEFT JOIN crypto_invoices i ON i.id=t.invoice_id WHERE i.id IS NULL OR ((i.chain_id=101 AND t.recipient<>i.address) OR (i.chain_id<>101 AND t.recipient<>LOWER(i.address))) OR t.state NOT IN ('confirmed','review_required') OR t.block_number<0 OR t.block_time<0",
 		"SELECT COUNT(*) FROM crypto_invoices i WHERE i.state='paid' AND NOT EXISTS (SELECT 1 FROM payment_receipts r WHERE r.attempt_id=i.attempt_id AND r.order_id=i.order_id AND r.account_scope='evm_crypto' AND r.external_ref='invoice:'||i.id)",
 		"SELECT COUNT(*) FROM crypto_invoice_chains c LEFT JOIN crypto_invoices i ON i.id=c.invoice_id WHERE i.id IS NULL OR c.next_block<0",
 	} {
@@ -79,7 +79,14 @@ func (s *Store) validateCryptoPayments(deep bool) error {
 		if e = rows.Scan(&chain, &contract, &atoms, &txhash, &blockhash); e != nil {
 			return e
 		}
-		if _, e = cryptoAtoms(atoms); e != nil || !cryptoHash(txhash) || !cryptoHash(blockhash) || contract != strings.ToLower(contract) {
+		if _, e = cryptoAtoms(atoms); e != nil {
+			return fail
+		}
+		if chain == cryptoSolanaChainID {
+			if !cryptoSolanaSignature(txhash) || !cryptoSolanaAddress(blockhash) || !cryptoSolanaAddress(contract) {
+				return fail
+			}
+		} else if !cryptoHash(txhash) || !cryptoHash(blockhash) || contract != strings.ToLower(contract) {
 			return fail
 		}
 		valid := false

@@ -25,6 +25,8 @@ type cryptoSweepRPCFixture struct {
 	latest, final                     uint64
 	chain                             int64
 	price                             int64
+	tokenGas                          uint64
+	nativeGas                         uint64
 	sends                             int
 	acceptedError, wrongNonce, revert bool
 	durabilityFailed                  bool
@@ -86,8 +88,14 @@ func (f *cryptoSweepRPCFixture) serve(w http.ResponseWriter, r *http.Request) {
 		}
 		_ = json.Unmarshal(req.Params[0], &call)
 		result = "0x5208"
+		if f.nativeGas > 0 {
+			result = cryptoHex(f.nativeGas)
+		}
 		if call.Data != "" {
 			result = cryptoHex(50000)
+			if f.tokenGas > 0 {
+				result = cryptoHex(f.tokenGas)
+			}
 		}
 	case "eth_getTransactionCount":
 		result = "0x0"
@@ -168,16 +176,22 @@ func (f *cryptoSweepRPCFixture) mine(final bool) {
 func cryptoSweepFixture(t *testing.T) (*App, Record, CryptoWallet, *cryptoSweepRPCFixture) {
 	t.Helper()
 	a := testApp(t)
+	// Unit/HTTP regressions never fetch a real market quote. The separate,
+	// explicit opt-in probe is the only test that reads public mainnet RPCs.
+	priceTime := time.Now()
+	a.cryptoNativePriceNext = priceTime.Add(time.Hour)
+	a.cryptoNativePrices = map[string]cryptoNativePrice{}
+	for _, symbol := range []string{"ETH", "BNB", "SOL", "XPL"} {
+		a.cryptoNativePrices[symbol] = cryptoNativePrice{USD: "100", CNY: "670", Source: "fixture", Updated: priceTime.Unix(), Expires: priceTime.Unix() + 300}
+	}
 	owner := testUser(t, a, "owner", "owner")
 	v, _ := cryptoTestCreate(t, a, owner, true)
 	v = cryptoTestConfirm(t, a, owner, v)
-	alloc := cryptoTestAllocate(t, a, owner, v)
-	v = alloc.Wallet
 	funding, e := a.store.cryptoFundingAddress(context.Background(), v)
 	if e != nil {
 		t.Fatal(e)
 	}
-	f := &cryptoSweepRPCFixture{app: a, native: map[string]*big.Int{strings.ToLower(funding.Address): big.NewInt(1000000000000)}, tokens: map[string]*big.Int{strings.ToLower(alloc.Address.Address): big.NewInt(2000000)}, txs: map[string]*types.Transaction{}, receipts: map[string]object{}, latest: 100, final: 100, chain: 1, price: 100, funding: funding.Address, receive: alloc.Address.Address}
+	f := &cryptoSweepRPCFixture{app: a, native: map[string]*big.Int{strings.ToLower(funding.Address): big.NewInt(1000000000000)}, tokens: map[string]*big.Int{strings.ToLower(v.FirstAddress): big.NewInt(2000000)}, txs: map[string]*types.Transaction{}, receipts: map[string]object{}, latest: 100, final: 100, chain: 1, price: 100, funding: funding.Address, receive: v.FirstAddress}
 	p := httptest.NewServer(http.HandlerFunc(f.serve))
 	b := httptest.NewServer(http.HandlerFunc(f.serve))
 	t.Cleanup(p.Close)
@@ -191,12 +205,25 @@ func cryptoSweepFixture(t *testing.T) (*App, Record, CryptoWallet, *cryptoSweepR
 	s.Chains[0].RPCURL = p.URL
 	s.Chains[0].RPCBackupURL = b.URL
 	s.Assets[1].Enabled = true
+	s.Assets[1].CNYPerToken = "7"
+	s.Assets[1].RateUpdatedAt = time.Now().Unix()
+	s.Assets[1].RateExpiresAt = time.Now().Unix() + 86400
 	f.contract = s.Assets[1].Contract
 	raw, e := a.store.vault.seal(s)
 	if e != nil {
 		t.Fatal(e)
 	}
 	if _, e = a.store.db.Exec("INSERT INTO crypto_payment_settings(id,revision,doc) VALUES(1,1,?)", raw); e != nil {
+		t.Fatal(e)
+	}
+	member := testUser(t, a, "sweep-member", "user")
+	order := newOrder(t, a, member, commerceOffer(t, a, owner))
+	invoice := decoded[CryptoInvoice](t, req(t, a, member, "POST", "/api/commerce/crypto/invoices", object{"order_id": order.ID, "asset_id": "ethereum-usdc", "operation_id": randomToken(24)}), 201)
+	if invoice.Address != v.FirstAddress {
+		t.Fatal("fixture did not allocate first order address")
+	}
+	v, e = cryptoWalletByID(a.store.db, v.ID)
+	if e != nil {
 		t.Fatal(e)
 	}
 	return a, owner, v, f

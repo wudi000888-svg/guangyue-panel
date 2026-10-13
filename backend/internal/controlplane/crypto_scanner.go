@@ -13,9 +13,10 @@ import (
 )
 
 type cryptoScannedTransfer struct {
-	Log       cryptoEVMLog
-	Timestamp int64
-	Final     bool
+	Log          cryptoEVMLog
+	Timestamp    int64
+	Final        bool
+	ReviewReason string
 }
 
 func (a *App) runCryptoPaymentWorker(ctx context.Context) {
@@ -103,6 +104,9 @@ func (a *App) scanCryptoInvoice(ctx context.Context, v CryptoInvoice) error {
 	if e != nil {
 		return e
 	}
+	if v.ChainID == cryptoSolanaChainID {
+		return a.scanCryptoSolanaInvoice(ctx, v, settings)
+	}
 	chains := []CryptoChain{v.Snapshot.Chain}
 	for _, c := range settings.Chains {
 		if c.ChainID == v.ChainID {
@@ -111,7 +115,7 @@ func (a *App) scanCryptoInvoice(ctx context.Context, v CryptoInvoice) error {
 			}
 			continue
 		}
-		if c.RPCURL != "" && c.RPCBackupURL != "" && (c.ChainID == 1 || c.ChainID == 56) {
+		if c.RPCURL != "" && c.RPCBackupURL != "" && (c.ChainID == 1 || c.ChainID == 56 || c.ChainID == 9745) {
 			chains = append(chains, c)
 		}
 	}
@@ -119,7 +123,7 @@ func (a *App) scanCryptoInvoice(ctx context.Context, v CryptoInvoice) error {
 		if e := a.store.cryptoChainAvailable(a.store.db, chain.ChainID); e != nil {
 			return e
 		}
-		chain.FinalityVerified = chain.ChainID == 1 || chain.ChainID == 56
+		chain.FinalityVerified = cryptoChainAutomatic(chain.ChainID)
 		client, e := newCryptoEVM(chain, a.cfg.Dev)
 		if e != nil {
 			return e
@@ -295,7 +299,9 @@ func (a *App) applyCryptoScan(id string, chainID, from int64, to uint64, next in
 		state, reason := "observed", ""
 		if item.Final {
 			state = "confirmed"
-			if chainID != v.ChainID || l.Address != v.Contract {
+			if item.ReviewReason != "" {
+				state, reason = "review_required", item.ReviewReason
+			} else if chainID != v.ChainID || l.Address != v.Contract {
 				state, reason = "review_required", "资产或网络与付款单不符"
 			} else if item.Timestamp >= v.Expires {
 				state, reason = "review_required", "付款截止后上链，需人工核对"
@@ -303,7 +309,11 @@ func (a *App) applyCryptoScan(id string, chainID, from int64, to uint64, next in
 				state, reason = "review_required", "付款单创建前的链上转账，需人工核对"
 			}
 		}
-		if len(l.Topics) != 3 || l.Topics[0] != cryptoTransferTopic || l.Topics[2] != "0x"+cryptoABIAddress(v.Address) || l.Index > 1<<63-1 {
+		if chainID == cryptoSolanaChainID {
+			if !item.Final || len(l.Topics) != 3 || l.Topics[0] != "solana_transfer" || l.Topics[2] != v.Address || !cryptoSolanaAddress(l.Topics[1]) || !cryptoSolanaSignature(l.TxHash) || !cryptoSolanaAddress(l.BlockHash) || l.Index > 1<<63-1 {
+				return errors.New("invalid Solana transfer identity")
+			}
+		} else if len(l.Topics) != 3 || l.Topics[0] != cryptoTransferTopic || l.Topics[2] != "0x"+cryptoABIAddress(v.Address) || l.Index > 1<<63-1 {
 			return errors.New("invalid transfer identity")
 		}
 		if !item.Final {
@@ -324,7 +334,14 @@ func (a *App) applyCryptoScan(id string, chainID, from int64, to uint64, next in
 		if _, e = tx.Exec("DELETE FROM crypto_transfer_observations WHERE chain_id=? AND tx_hash=?", chainID, l.TxHash); e != nil {
 			return e
 		}
-		sender := "0x" + l.Topics[1][len(l.Topics[1])-40:]
+		sender := ""
+		recipient := v.Address
+		if chainID == cryptoSolanaChainID {
+			sender = l.Topics[1]
+		} else {
+			sender = "0x" + l.Topics[1][len(l.Topics[1])-40:]
+			recipient = strings.ToLower(v.Address)
+		}
 		var oldInvoice, oldAtoms, oldHash string
 		read := tx.QueryRow("SELECT invoice_id,atoms,block_hash FROM crypto_transfers WHERE chain_id=? AND tx_hash=? AND log_index=?", chainID, l.TxHash, int64(l.Index)).Scan(&oldInvoice, &oldAtoms, &oldHash)
 		if read != nil && !errors.Is(read, sql.ErrNoRows) {
@@ -333,8 +350,13 @@ func (a *App) applyCryptoScan(id string, chainID, from int64, to uint64, next in
 		if read == nil && (oldInvoice != id || oldAtoms != atoms.String() || oldHash != l.BlockHash) {
 			return errCryptoFinality
 		}
+		// Solana credits are immutable owner-level net balance deltas. Re-scanning
+		// must never reinterpret an earlier reviewed receipt as a new payment.
+		if read == nil && chainID == cryptoSolanaChainID {
+			continue
+		}
 		now := time.Now().Unix()
-		if _, e = tx.Exec("INSERT INTO crypto_transfers(chain_id,tx_hash,log_index,invoice_id,contract,sender,recipient,atoms,block_number,block_hash,block_time,state,reason,created,updated) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(chain_id,tx_hash,log_index) DO UPDATE SET block_number=excluded.block_number,block_hash=excluded.block_hash,block_time=excluded.block_time,state=excluded.state,reason=excluded.reason,updated=excluded.updated", chainID, l.TxHash, int64(l.Index), id, l.Address, sender, strings.ToLower(v.Address), atoms.String(), int64(l.BlockNumber), l.BlockHash, item.Timestamp, state, reason, now, now); e != nil {
+		if _, e = tx.Exec("INSERT INTO crypto_transfers(chain_id,tx_hash,log_index,invoice_id,contract,sender,recipient,atoms,block_number,block_hash,block_time,state,reason,created,updated) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(chain_id,tx_hash,log_index) DO UPDATE SET block_number=excluded.block_number,block_hash=excluded.block_hash,block_time=excluded.block_time,state=excluded.state,reason=excluded.reason,updated=excluded.updated", chainID, l.TxHash, int64(l.Index), id, l.Address, sender, recipient, atoms.String(), int64(l.BlockNumber), l.BlockHash, item.Timestamp, state, reason, now, now); e != nil {
 			return e
 		}
 	}

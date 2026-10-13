@@ -109,28 +109,62 @@ func (s *Store) validateCryptoWallets(deep bool) error {
 		if !deep {
 			continue
 		}
+		var solMnemonic string
+		if v.Mode == "hot" {
+			value, secretErr := s.cryptoSecret(tx, v)
+			if secretErr != nil {
+				return fail
+			}
+			solMnemonic = value.Mnemonic
+		}
 		rows, e = tx.Query("SELECT address_index,path,address FROM crypto_wallet_addresses WHERE wallet_id IN ("+cryptoWalletOwnerScope+") ORDER BY address_index", v.ID)
 		if e != nil {
 			return e
 		}
-		previous := int64(-1)
+		addresses := []CryptoWalletAddress{}
 		for rows.Next() {
-			var n int64
-			var path, addr string
-			if e = rows.Scan(&n, &path, &addr); e != nil {
+			var x CryptoWalletAddress
+			if e = rows.Scan(&x.Index, &x.Path, &x.Address); e != nil {
 				rows.Close()
 				return e
 			}
-			want, e := cryptoDeriveAddress(v.XPub, v.Path, uint32(n))
-			if e != nil || n <= previous || n < 0 || n >= v.NextIndex || path != cryptoFullPath(v.Path, n) || addr != want {
-				rows.Close()
-				return fail
-			}
-			previous = n
+			addresses = append(addresses, x)
 		}
 		if e = errors.Join(rows.Err(), rows.Close()); e != nil {
 			return e
 		}
+		previous := int64(-1)
+		for _, x := range addresses {
+			if x.Index <= previous || x.Index < 0 || x.Index >= v.NextIndex {
+				return fail
+			}
+			if cryptoIsSolanaPath(x.Path) {
+				if e = s.cryptoSolanaAddressProof(tx, v, x.Index, x.Path, x.Address); e != nil {
+					return fail
+				}
+				if v.Mode == "hot" {
+					want, deriveErr := cryptoSolanaDerive(solMnemonic, uint32(x.Index))
+					if deriveErr != nil || x.Path != cryptoSolanaPath(uint32(x.Index)) || want != x.Address {
+						return fail
+					}
+				}
+			} else {
+				want, deriveErr := cryptoDeriveAddress(v.XPub, v.Path, uint32(x.Index))
+				if deriveErr != nil || x.Path != cryptoFullPath(v.Path, x.Index) || x.Address != want {
+					return fail
+				}
+			}
+			previous = x.Index
+		}
+		if cryptoWalletSupports(v, cryptoSolanaChainID) {
+			p, pubErr := s.cryptoSolanaPublicByID(tx, v.ID)
+			first, deriveErr := cryptoSolanaDerive(solMnemonic, 0)
+			fund, fundErr := cryptoSolanaDerive(solMnemonic, cryptoSolanaFundingIndex)
+			if pubErr != nil || deriveErr != nil || fundErr != nil || p.First != first || p.Funding.Address != fund || p.Funding.Path != cryptoSolanaPath(cryptoSolanaFundingIndex) {
+				return fail
+			}
+		}
+		solMnemonic = ""
 	}
 	if deep {
 		rows, e = tx.Query("SELECT fingerprint,response FROM crypto_wallet_operations")

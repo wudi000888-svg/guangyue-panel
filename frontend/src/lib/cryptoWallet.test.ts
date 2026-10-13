@@ -1,9 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
-import { canAllocate, deleteCryptoWallet, saveImportedWallet, walletFormOperation, walletChains, walletSupportsChain, validateWalletChains, mergeCryptoWallets, CRYPTO_BACKUP_FILE_LIMIT, MAX_WALLET_NEXT_INDEX, parseCryptoBackup, saveGeneratedWallet, validateBackupPassword, type CryptoWallet, type WalletAPI } from './cryptoWallet';
+import { canAllocate, deleteCryptoWallet, saveWalletNetworks, saveImportedWallet, walletFormOperation, walletChains, walletSupportsChain, validateWalletChains, mergeCryptoWallets, CRYPTO_BACKUP_FILE_LIMIT, MAX_WALLET_NEXT_INDEX, parseCryptoBackup, saveGeneratedWallet, validateBackupPassword, type CryptoWallet, type WalletAPI } from './cryptoWallet';
 import type { HotWalletMaterial } from './walletCore';
 
 const wallet = { id: 'wallet-test', mode: 'hot', enabled: true, backup_confirmed: false, recovery_required: false, next_index: 0 } as CryptoWallet;
 const material = (): HotWalletMaterial => ({ mnemonic: 'public test words', xpub: 'xpub-test', path: "m/44'/60'/0'", first_address: '0x-test', engine_version: '4.8.4' });
+it('adds Solana and Plasma to the exact existing wallet without enabling a paused wallet or retaining the password',async()=>{
+ const target={...wallet,id:'wallet/id',enabled:false,revision:7,supported_chain_ids:[56]},input={wallet:target,supported_chain_ids:[56,101,9745],password:'admin-test',operation_id:'same-operation'};let wire:unknown,retained:Record<string,unknown>|undefined;
+ const api=vi.fn(async(_route:string,_method?:string,body?:unknown)=>{retained=body as Record<string,unknown>;wire=JSON.parse(JSON.stringify(body));return {...target,revision:8,supported_chain_ids:[56,101,9745],solana_funding_address:'public-sol-address'}});
+ const result=await saveWalletNetworks(api as WalletAPI,input);expect(api.mock.calls[0]?.[0]).toBe('/wallets/wallet%2Fid/status');expect(wire).toEqual({enabled:false,supported_chain_ids:[56,101,9745],revision:7,password:'admin-test',operation_id:'same-operation'});expect(result.enabled).toBe(false);expect(result.solana_funding_address).toBe('public-sol-address');expect(input.password).toBe('');expect(retained?.password).toBe('');
+});
+it('rejects hiding existing networks or extending an external EVM xpub to Solana before sending any request',async()=>{
+ const api=vi.fn();for(const [mode,ids] of [['hot',[101]],['watch_only',[56,101]]] as const){const input={wallet:{...wallet,mode,enabled:true,revision:1,supported_chain_ids:[56]},supported_chain_ids:[...ids],password:'admin-test',operation_id:'same-operation'};await expect(saveWalletNetworks(api as WalletAPI,input)).rejects.toThrow();expect(input.password).toBe('')};expect(api).not.toHaveBeenCalled();
+});
 
 describe('wallet secrets and request lifecycle', () => {
   it('sends only the explicit creation request and drops mnemonic/password references after success', async () => {

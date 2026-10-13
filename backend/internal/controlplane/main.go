@@ -29,6 +29,12 @@ type App struct {
 	cryptoRateMu           sync.Mutex
 	cryptoRateNextAttempt  time.Time
 	cryptoRateFetch        func(context.Context) (cryptoMarketRates, error)
+	cryptoNativePriceMu    sync.Mutex
+	cryptoNativePrices     map[string]cryptoNativePrice
+	cryptoNativePriceNext  time.Time
+	cryptoNativePriceBusy  bool
+	cryptoNativePriceError string
+	cryptoNativePriceFetch func(context.Context) (map[string]cryptoNativePrice, error)
 	paymentClient          *http.Client
 	clientDownloadMu       sync.Mutex
 	clientDownloads        *clientDownloadRelay

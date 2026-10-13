@@ -90,9 +90,24 @@ func (s *Store) scanCryptoInvoice(row cryptoScanner) (CryptoInvoice, error) {
 	if v.RateSource == "" {
 		v.RateSource = "管理员手动汇率"
 	}
-	v.QRURI = "ethereum:" + v.Contract + "@" + strconv.FormatInt(v.ChainID, 10) + "/transfer?address=" + v.Address + "&uint256=" + v.ExpectedAtoms
+	v.QRURI = cryptoInvoiceQR(v, v.ExpectedAtoms)
 	return v, nil
 }
+func cryptoInvoiceQR(v CryptoInvoice, atoms string) string {
+	if v.ChainID == cryptoSolanaChainID {
+		amount := atoms
+		for len(amount) <= v.Decimals {
+			amount = "0" + amount
+		}
+		if v.Decimals > 0 {
+			at := len(amount) - v.Decimals
+			amount = amount[:at] + "." + amount[at:]
+		}
+		return "solana:" + v.Address + "?amount=" + amount + "&spl-token=" + v.Contract
+	}
+	return "ethereum:" + v.Contract + "@" + strconv.FormatInt(v.ChainID, 10) + "/transfer?address=" + v.Address + "&uint256=" + atoms
+}
+
 func (s *Store) cryptoInvoice(q cryptoWalletQuery, id string) (CryptoInvoice, error) {
 	return s.scanCryptoInvoice(q.QueryRow("SELECT "+cryptoInvoiceColumns+" FROM crypto_invoices WHERE id=?", id))
 }
@@ -164,7 +179,7 @@ func (s *Store) decorateCryptoInvoice(v CryptoInvoice) (CryptoInvoice, error) {
 		}
 	}
 	if v.State == "partial" {
-		v.QRURI = "ethereum:" + v.Contract + "@" + strconv.FormatInt(v.ChainID, 10) + "/transfer?address=" + v.Address + "&uint256=" + v.RemainingAtoms
+		v.QRURI = cryptoInvoiceQR(v, v.RemainingAtoms)
 	}
 	switch v.State {
 	case "waiting":
@@ -313,7 +328,7 @@ func (a *App) createCryptoInvoice(w http.ResponseWriter, r *http.Request, actor 
 		return e
 	}
 	// Validate both RPCs and finalized token metadata before reserving any address.
-	client, e := newCryptoEVM(chain, a.cfg.Dev)
+	client, e := newCryptoBalanceClient(chain, a.cfg.Dev)
 	if e != nil {
 		return commerceFail(409, e.Error())
 	}
@@ -441,13 +456,18 @@ func (a *App) createCryptoInvoice(w http.ResponseWriter, r *http.Request, actor 
 	if e != nil {
 		return e
 	}
-	address, e := cryptoDeriveAddress(wallet.XPub, wallet.Path, uint32(wallet.NextIndex))
+	address, allocationPath, e := a.store.cryptoWalletDerive(tx, wallet, wallet.NextIndex, chain.ChainID == cryptoSolanaChainID)
 	if e != nil {
 		return e
 	}
-	allocation := CryptoWalletAddress{ID: serial("GYA"), WalletID: wallet.ID, Index: wallet.NextIndex, Path: cryptoFullPath(wallet.Path, wallet.NextIndex), Address: address, Label: "订单 " + order.ID, Created: now}
+	allocation := CryptoWalletAddress{ID: serial("GYA"), WalletID: wallet.ID, Index: wallet.NextIndex, Path: allocationPath, Address: address, Label: "订单 " + order.ID, Created: now}
 	if _, e = tx.Exec("INSERT INTO crypto_wallet_addresses(id,wallet_id,address_index,path,address,label,created) VALUES(?,?,?,?,?,?,?)", allocation.ID, allocation.WalletID, allocation.Index, allocation.Path, allocation.Address, allocation.Label, now); e != nil {
 		return e
+	}
+	if cryptoIsSolanaPath(allocation.Path) {
+		if e = a.store.cryptoSealSolanaAddress(tx, wallet, allocation); e != nil {
+			return e
+		}
 	}
 	if _, e = tx.Exec("UPDATE crypto_wallets SET next_index=next_index+1,revision=revision+1 WHERE id=?", wallet.ID); e != nil {
 		return e

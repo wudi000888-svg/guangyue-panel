@@ -27,6 +27,14 @@ type CryptoGasSnapshot struct {
 	BlockNumber                     uint64 `json:"block_number"`
 	Finality                        string `json:"finality"`
 	LastAttemptAt                   int64  `json:"last_attempt_at"`
+	NativeDecimals                  int    `json:"native_decimals,omitempty"`
+	FeeModel                        string `json:"fee_model,omitempty"`
+	NativePriceUSD                  string `json:"native_price_usd,omitempty"`
+	NativePriceCNY                  string `json:"native_price_cny,omitempty"`
+	PriceCheckedAt                  int64  `json:"price_checked_at,omitempty"`
+	PriceExpiresAt                  int64  `json:"price_expires_at,omitempty"`
+	FiatSource                      string `json:"fiat_source,omitempty"`
+	FiatError                       string `json:"fiat_error,omitempty"`
 }
 type cryptoGasCacheEntry struct {
 	fingerprint           string
@@ -36,7 +44,7 @@ type cryptoGasCacheEntry struct {
 	done                  chan struct{}
 }
 
-func (a *App) cryptoWalletGas(ctx context.Context, id, chainID string) (CryptoGasSnapshot, error) {
+func (a *App) cryptoWalletGas(ctx context.Context, id, chainID string) (out CryptoGasSnapshot, err error) {
 	ctx, cancel := context.WithTimeout(ctx, 8*time.Second)
 	defer cancel()
 	// Current authorization, live wallet and configuration always precede cache
@@ -56,6 +64,13 @@ func (a *App) cryptoWalletGas(ctx context.Context, id, chainID string) (CryptoGa
 	if !cryptoWalletSupports(wallet, chain.ChainID) {
 		return CryptoGasSnapshot{}, commerceFail(409, "此钱包未选择该网络")
 	}
+	// Fiat is display-only and independently cached. A slow or unavailable
+	// market feed must never delay a five-second RPC poll or authorize a transfer.
+	defer func() {
+		if err == nil {
+			a.cryptoDecorateGasFiat(&out, chain)
+		}
+	}()
 	fingerprint := digest(string(jsonBytes(object{"chain": chain, "xpub": wallet.XPub, "path": wallet.Path, "supported_chain_ids": wallet.SupportedChainIDs})))
 	key := id + "|" + chainID
 	a.cryptoGasMu.Lock()
@@ -119,6 +134,9 @@ func (a *App) cryptoWalletGas(ctx context.Context, id, chainID string) (CryptoGa
 	return v, nil
 }
 func (a *App) cryptoRefreshGas(ctx context.Context, wallet CryptoWallet, chain CryptoChain, prior CryptoGasSnapshot, slots chan struct{}) CryptoGasSnapshot {
+	if chain.ChainID == 101 {
+		return a.cryptoSolanaGas(ctx, wallet, chain, prior, slots)
+	}
 	out := prior
 	out.WalletID = wallet.ID
 	out.ChainID = chain.ID

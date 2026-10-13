@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math/big"
 	"strings"
 	"time"
@@ -193,7 +194,7 @@ func (a *App) cryptoStageTransfer(ctx context.Context, id, lease, itemID, kind s
 	if e != nil {
 		return out, e
 	}
-	price, e := c.gasPrice(ctx)
+	price, e := c.rawGasPrice(ctx)
 	if e != nil {
 		return out, e
 	}
@@ -202,7 +203,7 @@ func (a *App) cryptoStageTransfer(ctx context.Context, id, lease, itemID, kind s
 		return out, e
 	}
 	if price.Cmp(approvedPrice) > 0 {
-		return out, commerceFail(409, "实时 Gas 价格超过已批准报价，任务保留原交易并等待价格恢复")
+		return out, fmt.Errorf("%w：实时 Gas 价格超过原批准报价", errCryptoGasReview)
 	}
 	from, path, to, token := plan.Address, plan.Path, quote.Preview.Destination, quote.Asset.Contract
 	amount, e := cryptoAtoms(plan.AmountAtoms)
@@ -222,6 +223,27 @@ func (a *App) cryptoStageTransfer(ctx context.Context, id, lease, itemID, kind s
 		return out, e
 	}
 	if kind == "gas" {
+		eligible, err := cryptoAutoGasOrder(a.store.db, v.ID, quote.Chain.ChainID, plan.AddressID, quote.Asset)
+		if err != nil {
+			return out, err
+		}
+		if !eligible {
+			return out, commerceFail(409, "自动补 Gas 仅限本站真实订单的收款地址")
+		}
+		tokenBalance, err := c.TokenBalance(ctx, quote.Asset.Contract, plan.Address, latest.Number)
+		if err != nil {
+			return out, err
+		}
+		if !cryptoAutoGasEligible(quote.Asset, tokenBalance) || tokenBalance.Cmp(amount) < 0 {
+			return out, commerceFail(409, "收款地址当前稳定币余额必须大于 0.1 且足以完成原批准转账，已停止补 Gas")
+		}
+		sweepEstimate, err := c.rawEstimateGas(ctx, plan.Address, quote.Asset.Contract, cryptoTransferData(quote.Preview.Destination, amount), big.NewInt(0))
+		if err != nil {
+			return out, err
+		}
+		if sweepEstimate > plan.GasLimit {
+			return out, fmt.Errorf("%w：当前代币转账 Gas 用量超过原批准上限", errCryptoGasReview)
+		}
 		balance, e := c.NativeBalance(ctx, plan.Address, latest.Number)
 		if e != nil {
 			return out, e
@@ -265,12 +287,12 @@ func (a *App) cryptoStageTransfer(ctx context.Context, id, lease, itemID, kind s
 		txTo = token
 		value.SetInt64(0)
 	}
-	estimate, e := c.estimateGas(ctx, from, txTo, data, value)
+	estimate, e := c.rawEstimateGas(ctx, from, txTo, data, value)
 	if e != nil {
 		return out, e
 	}
 	if estimate > gas || gas == 0 {
-		return out, commerceFail(409, "实际 Gas 用量超过批准上限，任务等待核对")
+		return out, fmt.Errorf("%w：实际 Gas 用量超过原批准上限", errCryptoGasReview)
 	}
 	fee := new(big.Int).Mul(new(big.Int).SetUint64(gas), approvedPrice)
 	required := new(big.Int).Add(new(big.Int).Set(value), fee)
@@ -305,6 +327,15 @@ func (a *App) cryptoStageTransfer(ctx context.Context, id, lease, itemID, kind s
 	}
 	if !errors.Is(e, sql.ErrNoRows) {
 		return out, e
+	}
+	if kind == "gas" {
+		eligible, err := cryptoAutoGasOrder(tx, v.ID, quote.Chain.ChainID, plan.AddressID, quote.Asset)
+		if err != nil {
+			return out, err
+		}
+		if !eligible {
+			return out, commerceFail(409, "收款订单归属已变化，已阻止补 Gas")
+		}
 	}
 	// Reserve every nonce in durable storage. An unknown broadcast is never
 	// replaced by a new nonce; independent workers can only replay the same raw.
@@ -504,6 +535,9 @@ func (a *App) cryptoSweepStep(ctx context.Context, id, lease string) error {
 	if current, ok := settings.chain(quote.Chain.ChainID); ok && current.RPCURL != "" && current.RPCBackupURL != "" {
 		quote.Chain.RPCURL, quote.Chain.RPCBackupURL = current.RPCURL, current.RPCBackupURL
 	}
+	if quote.Chain.ChainID == cryptoSolanaChainID {
+		return a.cryptoSolanaSweepStep(ctx, id, lease, quote)
+	}
 	c, e := newCryptoEVM(quote.Chain, a.cfg.Dev)
 	if e != nil {
 		return e
@@ -591,6 +625,9 @@ func (a *App) cryptoSweepWork(ctx context.Context) error {
 		var ce commerceError
 		if errors.As(e, &ce) && ce.status == 422 {
 			state = "failed"
+		}
+		if errors.Is(e, errCryptoGasReview) {
+			state = "fee_review_required"
 		}
 	}
 	// Release only our own fenced lease. A completed step has already cleared it.
