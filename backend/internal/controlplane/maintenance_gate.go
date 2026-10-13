@@ -81,14 +81,19 @@ func maintenanceWorkerGroup(ctx context.Context, pending func() bool, work []fun
 		}
 		child, cancel := context.WithCancel(ctx)
 		var workers sync.WaitGroup
+		var skipped atomic.Bool
 		for _, run := range work {
 			workers.Add(1)
 			active.Add(1)
 			go func(run func(context.Context)) {
 				defer workers.Done()
 				defer active.Add(-1)
-				if child.Err() == nil && !pending() {
-					run(child)
+				if child.Err() == nil {
+					if pending() {
+						skipped.Store(true)
+					} else {
+						run(child)
+					}
 				}
 			}(run)
 		}
@@ -101,6 +106,7 @@ func maintenanceWorkerGroup(ctx context.Context, pending func() bool, work []fun
 			case <-ctx.Done():
 				break watch
 			case <-done:
+				paused = pending() || skipped.Load()
 				break watch
 			case <-ticker.C:
 				if pending() {

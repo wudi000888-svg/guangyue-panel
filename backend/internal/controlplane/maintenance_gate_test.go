@@ -200,6 +200,30 @@ func TestMaintenanceWorkersStartOnlyAfterCommitAndNeverOverlapGenerations(t *tes
 	}
 }
 
+func TestMaintenanceWorkerDispatchRaceResumesAfterFenceClears(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var active, checks, started atomic.Int32
+	// The fence appears precisely between the initial wait and dispatch, then
+	// clears before the watcher sees done. A skipped generation must retry.
+	pending := func() bool { return checks.Add(1) == 2 }
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		maintenanceWorkerGroup(ctx, pending, []func(context.Context){func(ctx context.Context) {
+			started.Add(1)
+			<-ctx.Done()
+		}}, &active)
+	}()
+	maintenanceWaitFor(t, func() bool { return started.Load() == 1 })
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("worker group did not resume after a dispatch-time maintenance fence")
+	}
+}
+
 func maintenanceWaitFor(t *testing.T, predicate func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
