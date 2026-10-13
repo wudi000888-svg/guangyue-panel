@@ -670,7 +670,7 @@ func (a *App) cryptoSweepAPIRoute(w http.ResponseWriter, r *http.Request, actor 
 	}
 	path := strings.TrimPrefix(r.URL.Path, cryptoWalletPrefix)
 	p := strings.Split(path, "/")
-	matched := path == "sweeps" || (len(p) == 3 && p[0] == "sweeps" && (p[2] == "retry" || p[2] == "cancel")) || (len(p) >= 3 && p[0] == "wallets" && (p[2] == "balances" || p[2] == "sweeps"))
+	matched := path == "sweeps" || (len(p) == 3 && p[0] == "sweeps" && (p[2] == "retry" || p[2] == "cancel")) || (len(p) >= 3 && p[0] == "wallets" && (p[2] == "balances" || p[2] == "portfolio" || p[2] == "sweeps"))
 	if !matched {
 		return false
 	}
@@ -687,7 +687,7 @@ func (a *App) cryptoSweepAPIRoute(w http.ResponseWriter, r *http.Request, actor 
 		commerceWriteError(w, e)
 		return true
 	}
-	if len(p) == 3 && p[0] == "wallets" && p[2] == "balances" && r.Method == "GET" || len(p) == 4 && p[0] == "wallets" && p[2] == "sweeps" && p[3] == "preview" && r.Method == "POST" {
+	if len(p) == 3 && p[0] == "wallets" && (p[2] == "balances" || p[2] == "portfolio") && r.Method == "GET" || len(p) == 4 && p[0] == "wallets" && p[2] == "sweeps" && p[3] == "preview" && r.Method == "POST" {
 		_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(100 * time.Second))
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 90*time.Second)
@@ -696,6 +696,20 @@ func (a *App) cryptoSweepAPIRoute(w http.ResponseWriter, r *http.Request, actor 
 		switch {
 		case path == "sweeps":
 			e = a.cryptoListSweeps(w, r.URL.Query().Get("wallet_id"))
+		case len(p) == 3 && p[2] == "portfolio":
+			after := int64(-1)
+			if raw := r.URL.Query().Get("after"); raw != "" {
+				after, e = strconv.ParseInt(raw, 10, 64)
+				if e != nil || after < 0 {
+					e = commerceFail(400, "地址游标无效")
+					break
+				}
+			}
+			var v CryptoWalletPortfolio
+			v, e = a.cryptoWalletPortfolio(ctx, p[1], r.URL.Query().Get("chain_id"), after, r.URL.Query().Get("filter"))
+			if e == nil {
+				jsonResponse(w, 200, v)
+			}
 		case len(p) == 3 && p[2] == "balances":
 			after := int64(-1)
 			if raw := r.URL.Query().Get("after"); raw != "" {

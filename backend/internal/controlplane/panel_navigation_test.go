@@ -22,6 +22,20 @@ func putNavigation(role string, items []string, revision string) object {
 	return object{"role": role, "items": items, "revision": revision}
 }
 
+func TestPanelNavigationCryptoModulePinning(t *testing.T) {
+	a := testApp(t)
+	owner := testUser(t, a, "owner", "owner")
+	base := getNavigation(t, a, owner, "admin")
+	saved := decoded[navigationSettings](t, req(t, a, owner, "PUT", "/api/settings/navigation", putNavigation("admin", []string{"crypto-payments", "orders"}, base.Revision)), 200)
+	if !slices.Equal(saved.Items, []string{"crypto-payments", "orders", "settings"}) || !slices.Equal(getNavigation(t, a, owner, "admin").Items, saved.Items) {
+		t.Fatal("crypto module pin did not persist")
+	}
+	member := getNavigation(t, a, owner, "member")
+	if req(t, a, owner, "PUT", "/api/settings/navigation", putNavigation("member", []string{"crypto-payments"}, member.Revision)).Code != 400 {
+		t.Fatal("admin crypto module exposed in member navigation")
+	}
+}
+
 func TestPanelNavigationPartialSaveAndRevisions(t *testing.T) {
 	a := testApp(t)
 	owner := testUser(t, a, "owner", "owner")
