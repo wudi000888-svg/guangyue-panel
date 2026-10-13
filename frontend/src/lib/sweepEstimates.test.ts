@@ -24,6 +24,32 @@ it('retains the last successful estimate on outage while disabling stale authori
  reader.setContext({walletID:'wallet',input});await reader.read();expect(reader.freeze()).toBeDefined();
  fail=true;await reader.read();expect(reader.getState().preview?.quote).toBe('authenticated-quote');expect(reader.getState().error).toBe('RPC unavailable');expect(reader.freeze()).toBeUndefined();
 });
+it('shows the first underfunded estimate with exact costs and its shortage reason without granting authorization',async()=>{
+ const value:SweepPreview={...preview(),can_submit:false,quote:'',unavailable_reason:'Gas 资金地址余额不足，请充值对应网络的原生币并等待最终确认',total_gas_atoms:'900719925474099301',required_funding_atoms:'900719925474099301',funding_balance_atoms:'1',funding_shortfall_atoms:'900719925474099300'};
+ const reader=createSweepEstimator(async()=>value,()=>{},()=>100);
+ reader.setContext({walletID:'wallet',input});await reader.read();
+ expect(reader.getState().error).toBe('');expect(reader.getState().preview).toEqual(value);
+ expect(reader.getState().preview?.funding_shortfall_atoms).toBe('900719925474099300');
+ expect(reader.getState().preview?.total_gas_atoms).toBe('900719925474099301');
+ expect(reader.getState().preview?.unavailable_reason).toContain('Gas 资金地址余额不足');
+ expect(sweepEstimateCurrent(value,'wallet',input,100)).toBe(false);expect(reader.freeze()).toBeUndefined();
+});
+it('revokes an older usable quote when a fresh estimate cannot submit, even if that response contains a quote',async()=>{
+ let value=preview();const reader=createSweepEstimator(async()=>value,()=>{},()=>100);
+ reader.setContext({walletID:'wallet',input});await reader.read();expect(reader.freeze()).toBeDefined();
+ value={...preview(),can_submit:false,unavailable_reason:'没有达到提取条件的地址'};
+ await reader.read();expect(reader.getState().error).toBe('');expect(reader.getState().preview).toEqual(value);
+ expect(sweepEstimateCurrent(value,'wallet',input,100)).toBe(false);expect(reader.freeze()).toBeUndefined();
+});
+it('rejects a mismatched or expired display estimate and keeps any prior estimate unfit for authorization',async()=>{
+ for(const invalid of [{wallet_id:'other'}, {destination:'0x'+'b'.repeat(40)}, {expires_at:100}]){
+  let value=preview();const reader=createSweepEstimator(async()=>value,()=>{},()=>100);
+  reader.setContext({walletID:'wallet',input});await reader.read();expect(reader.freeze()).toBeDefined();
+  value={...preview(),can_submit:false,quote:'',...invalid};await reader.read();
+  expect(reader.getState().error).toContain('当前选择不一致或已过期');
+  expect(reader.getState().preview?.quote).toBe('authenticated-quote');expect(reader.freeze()).toBeUndefined();
+ }
+});
 it('freezes an exact reviewed quote and rejects expiration or mismatched intent',async()=>{
  let now=100;const value=preview();const reader=createSweepEstimator(async()=>value,()=>{},()=>now);
  reader.setContext({walletID:'wallet',input});await reader.read();const frozen=reader.freeze()!;
