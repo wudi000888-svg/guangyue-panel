@@ -9,6 +9,24 @@ import (
 const cryptoGasTTL = 4 * time.Second
 const cryptoGasMaxEntries = 64
 
+// Adding a network to a wallet is independent of opening customer payments.
+// Gas reads may use the built-in public pair until that network has explicit
+// RPC settings. This is a request-local copy: it never enables payments, stores
+// a configuration, or authorizes the sweep worker to use unconfigured sources.
+// A partial/custom pair is deliberately kept unchanged and must fail closed.
+func cryptoGasReadChain(chain CryptoChain) CryptoChain {
+	if chain.RPCURL != "" || chain.RPCBackupURL != "" {
+		return chain
+	}
+	if pair, ok := cryptoBuiltinRPCs()[chain.ChainID]; ok {
+		chain.RPCURL, chain.RPCBackupURL = pair[0], pair[1]
+		// Finalized still authenticates both identities and the canonical block.
+		// This flag applies only to the read-only copy, never the saved settings.
+		chain.FinalityVerified = cryptoChainAutomatic(chain.ChainID)
+	}
+	return chain
+}
+
 // A lightweight read-only market/funding snapshot. It does not read receiving
 // addresses, allocate nonces, create jobs or authorize a transfer.
 type CryptoGasSnapshot struct {
@@ -64,6 +82,7 @@ func (a *App) cryptoWalletGas(ctx context.Context, id, chainID string) (out Cryp
 	if !cryptoWalletSupports(wallet, chain.ChainID) {
 		return CryptoGasSnapshot{}, commerceFail(409, "此钱包未选择该网络")
 	}
+	chain = cryptoGasReadChain(chain)
 	// Fiat is display-only and independently cached. A slow or unavailable
 	// market feed must never delay a five-second RPC poll or authorize a transfer.
 	defer func() {

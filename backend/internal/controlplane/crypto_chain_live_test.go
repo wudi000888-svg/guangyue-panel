@@ -1,6 +1,7 @@
 package controlplane
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"testing"
@@ -36,13 +37,8 @@ func TestCryptoSolanaBuiltInReadOnlyGasProbe(t *testing.T) {
 	}
 	settings := cryptoDefaultSettings()
 	settings.Revision = 2
-	for i := range settings.Chains {
-		chain := &settings.Chains[i]
-		if chain.ChainID == 101 {
-			rpc := cryptoBuiltinRPCs()[101]
-			chain.RPCURL, chain.RPCBackupURL, chain.FinalityVerified = rpc[0], rpc[1], true
-		}
-	}
+	// Reproduce adding the network to a wallet without opening payments. The
+	// Gas API must resolve a request-local public pair without persisting it.
 	sealed, err := a.store.vault.seal(settings)
 	if err != nil {
 		t.Fatal(err)
@@ -51,6 +47,11 @@ func TestCryptoSolanaBuiltInReadOnlyGasProbe(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, label := range []string{"cold", "warm"} {
+		if label == "warm" {
+			// Match the UI's real five-second cadence, not a burst against the
+			// operators' free endpoints while bypassing our coalescing cache.
+			time.Sleep(5 * time.Second)
+		}
 		// Force a fresh RPC market query without waiting on the cache TTL. Keep
 		// the ordinary shared transport and read-only genesis cache for warm.
 		a.cryptoGasMu.Lock()
@@ -65,6 +66,63 @@ func TestCryptoSolanaBuiltInReadOnlyGasProbe(t *testing.T) {
 			t.Fatalf("%s readonly gas probe: elapsed=%s fee=%s gas_error=%s funding_error=%s error=%v", label, elapsed, gas.ReferenceNativeTransferFeeAtoms, gas.GasError, gas.FundingError, err)
 		}
 		t.Logf("%s SOL gas: elapsed=%s fee_lamports=%s finalized_slot=%d native_decimals=%d", label, elapsed, gas.ReferenceNativeTransferFeeAtoms, gas.BlockNumber, gas.NativeDecimals)
+	}
+	cryptoProbeGasHasNoFinancialEffects(t, a, sealed)
+}
+
+func TestCryptoPlasmaBuiltInReadOnlyGasProbe(t *testing.T) {
+	if os.Getenv("RUN_CRYPTO_NETWORK_PROBE") != "1" {
+		t.Skip("explicit public RPC probe disabled")
+	}
+	a, _, wallet, _ := cryptoSweepFixture(t)
+	if os.Getenv("CRYPTO_PROBE_PRODUCTION_TRANSPORT") == "1" {
+		a.cfg.Dev = false
+	}
+	if _, err := a.store.db.Exec("UPDATE crypto_wallets SET supported_chain_ids='[9745]' WHERE id=?", wallet.ID); err != nil {
+		t.Fatal(err)
+	}
+	settings := cryptoDefaultSettings()
+	settings.Revision = 2
+	sealed, err := a.store.vault.seal(settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = a.store.db.Exec("UPDATE crypto_payment_settings SET revision=2,doc=? WHERE id=1", sealed); err != nil {
+		t.Fatal(err)
+	}
+	for _, label := range []string{"cold", "warm"} {
+		if label == "warm" {
+			time.Sleep(5 * time.Second)
+		}
+		a.cryptoGasMu.Lock()
+		if entry := a.cryptoGasSnapshots[wallet.ID+"|plasma"]; entry != nil {
+			entry.expires = time.Time{}
+		}
+		a.cryptoGasMu.Unlock()
+		started := time.Now()
+		gas, err := a.cryptoWalletGas(context.Background(), wallet.ID, "plasma")
+		elapsed := time.Since(started)
+		price, priceErr := cryptoAtoms(gas.GasPriceAtoms)
+		fee, feeErr := cryptoAtoms(gas.ReferenceNativeTransferFeeAtoms)
+		if err != nil || gas.GasError != "" || gas.FundingError != "" || gas.GasCheckedAt == 0 || gas.FundingCheckedAt == 0 || gas.FundingBalanceAtoms == "" || gas.BlockNumber == 0 || gas.Finality != "finalized" || priceErr != nil || feeErr != nil || price.Sign() <= 0 || fee.Sign() <= 0 || elapsed >= 8*time.Second {
+			t.Fatalf("%s readonly gas probe: elapsed=%s fee=%s gas_error=%s funding_error=%s error=%v", label, elapsed, gas.ReferenceNativeTransferFeeAtoms, gas.GasError, gas.FundingError, err)
+		}
+		t.Logf("%s XPL gas: elapsed=%s gas_price_wei=%s native_transfer_fee_wei=%s finalized_block=%d", label, elapsed, gas.GasPriceAtoms, gas.ReferenceNativeTransferFeeAtoms, gas.BlockNumber)
+	}
+	cryptoProbeGasHasNoFinancialEffects(t, a, sealed)
+}
+
+func cryptoProbeGasHasNoFinancialEffects(t *testing.T, a *App, sealed []byte) {
+	t.Helper()
+	var after []byte
+	if err := a.store.db.QueryRow("SELECT doc FROM crypto_payment_settings WHERE id=1").Scan(&after); err != nil || !bytes.Equal(sealed, after) {
+		t.Fatal("read-only default RPCs changed payment settings", err)
+	}
+	for _, table := range []string{"crypto_sweep_jobs", "crypto_solana_transactions", "crypto_chain_transactions"} {
+		var count int
+		if err := a.store.db.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&count); err != nil || count != 0 {
+			t.Fatal("live probe created financial work", table, count, err)
+		}
 	}
 }
 

@@ -23,3 +23,7 @@ it('a finalized commitment without a known slot never displays fictitious block 
  const html=await renderToString(createSSRApp(WalletGasPanel,{chain,gas:{...gas,block_number:0},fundingAddress:'',watchOnly:false,writable:true,now:100}));
  expect(html).toContain('每 5 秒更新');expect(html).not.toContain('#0');
 });
+it('shows the actual RPC failure with unknown fees instead of hiding the configuration reason',async()=>{
+ const html=await renderToString(createSSRApp(WalletGasPanel,{chain,gas:{...gas,reference_native_transfer_fee_atoms:'',gas_checked_at:0,gas_error:'请配置两个独立的 HTTPS RPC',funding_balance_atoms:'',funding_error:'Solana 钱包资金地址尚未完成初始化'},fundingAddress:'',watchOnly:false,writable:false,now:100}));
+ expect(html).toContain('请配置两个独立的 HTTPS RPC');expect(html).toContain('Solana 钱包资金地址尚未完成初始化');expect(html).toContain('等待 Gas 查询');expect(html).not.toContain('每 5 秒更新');expect(html).not.toContain('0.000005');
+});
