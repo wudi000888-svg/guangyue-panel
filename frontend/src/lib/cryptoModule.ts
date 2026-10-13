@@ -9,7 +9,7 @@ export interface CryptoWorkspaceSection {
 export const cryptoWorkspaceSections: CryptoWorkspaceSection[] = [
   { id: 'payments', label: '收款配置', description: '选择钱包、网络、资产与报价策略' },
   { id: 'wallets', label: 'HD 钱包', description: '管理热钱包、公钥、地址和备份' },
-  { id: 'treasury', label: '余额与归集', description: '查看链上余额、Gas 和归集任务' },
+  { id: 'treasury', label: '钱包资产', description: '查看全部资产、Gas 和归集任务' },
 ];
 
 export interface CryptoWorkspaceSettings {

@@ -20,6 +20,9 @@ import (
 )
 
 type App struct {
+	cryptoPortfolioMu      sync.Mutex
+	cryptoPortfolios       map[string]*cryptoPortfolioCacheEntry
+	cryptoPortfolioSlots   chan struct{}
 	cryptoRateMu           sync.Mutex
 	cryptoRateNextAttempt  time.Time
 	cryptoRateFetch        func(context.Context) (cryptoMarketRates, error)

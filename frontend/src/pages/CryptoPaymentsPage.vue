@@ -11,10 +11,22 @@ import '../styles/admin-ui.css';
 import '../styles/integrations.css';
 
 const api = useApi('/commerce/crypto/admin');
-const section = ref<CryptoWorkspaceSectionID>('payments');
+const section = ref<CryptoWorkspaceSectionID>('treasury');
 const settings = ref<CryptoSettings>();
 const loading = ref(true);
 const error = ref('');
+const sectionTabs = ref<HTMLElement>();
+
+function navigateSection(event: KeyboardEvent) {
+  const buttons = Array.from(sectionTabs.value?.querySelectorAll<HTMLButtonElement>('[role="tab"]') || []);
+  const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+  if (index < 0 || !['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+  event.preventDefault();
+  const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1
+    : (index + (event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length;
+  buttons[next]?.click();
+  buttons[next]?.focus();
+}
 
 const readiness = computed(() => settings.value
   ? cryptoWorkspaceReadiness(settings.value)
@@ -45,22 +57,24 @@ onMounted(() => { void load(); });
 
     <section class="crypto-workspace-status" :class="'tone-' + readiness.tone" aria-live="polite">
       <div class="crypto-workspace-status-icon"><CircleCheck v-if="readiness.tone === 'ready'" :size="21" /><ShieldAlert v-else :size="21" /></div>
-      <div><strong>{{ readiness.label }}</strong><p>{{ t(readiness.detail) }}</p></div>
+      <div><strong>{{ t(readiness.label) }}</strong><p>{{ t(readiness.detail) }}</p></div>
       <button type="button" :disabled="loading" @click="load"><RefreshCw :size="16" :class="{ spin: loading }" />{{ t('刷新状态') }}</button>
     </section>
     <p v-if="error" class="error crypto-workspace-error" role="alert">{{ error }} <button type="button" @click="load">{{ t('重试') }}</button></p>
     <p class="crypto-workspace-risk"><ShieldAlert :size="17" /><span>{{ t('热钱包密钥由面板服务器保管，仅建议存放小额资金并定期归集；外部 xpub 只读，不能在面板签名。') }}</span></p>
 
-    <nav class="crypto-workspace-tabs" role="tablist" :aria-label="t('加密货币模块')">
-      <button v-for="item in cryptoWorkspaceSections" :key="item.id" type="button" role="tab" :aria-selected="section === item.id" :class="{ active: section === item.id }" @click="section = item.id">
+    <nav ref="sectionTabs" class="crypto-workspace-tabs" role="tablist" :aria-label="t('加密货币模块')" @keydown="navigateSection">
+      <button v-for="item in cryptoWorkspaceSections" :id="'crypto-section-' + item.id" :key="item.id" type="button" role="tab" :aria-selected="section === item.id" aria-controls="crypto-section-panel" :tabindex="section === item.id ? 0 : -1" :class="{ active: section === item.id }" @click="section = item.id">
         <Coins :size="17" /><span><strong>{{ t(item.label) }}</strong><small>{{ t(item.description) }}</small></span>
       </button>
     </nav>
 
-    <CryptoWalletSettings :active="true" :section="section" />
+    <section id="crypto-section-panel" role="tabpanel" :aria-labelledby="'crypto-section-' + section">
+      <CryptoWalletSettings :active="true" :section="section" @manage-wallets="section = 'wallets'" />
+    </section>
   </section>
 </template>
 
 <style scoped>
-.crypto-workspace{gap:20px;min-width:0}.crypto-workspace-link{display:inline-flex;align-items:center;gap:7px;color:var(--accent-text);font-size:13px}.crypto-workspace-status{display:flex;align-items:center;gap:13px;padding:16px 18px;border:1px solid var(--border);border-radius:13px;background:var(--surface);min-width:0}.crypto-workspace-status-icon{display:grid;place-items:center;width:38px;height:38px;flex:0 0 38px;border-radius:11px;background:var(--accent-soft);color:var(--accent-text)}.crypto-workspace-status strong{font-size:14px}.crypto-workspace-status p{margin:5px 0 0;color:var(--secondary);font-size:12px;line-height:1.7}.crypto-workspace-status button{display:inline-flex;align-items:center;gap:7px;margin-left:auto;min-height:42px;flex-shrink:0}.crypto-workspace-status.tone-warning .crypto-workspace-status-icon{background:color-mix(in srgb,#c99a45 14%,var(--surface));color:var(--warning)}.crypto-workspace-status.tone-muted .crypto-workspace-status-icon{background:var(--surface-raised);color:var(--muted)}.crypto-workspace-error{margin:0}.crypto-workspace-error button{margin-left:8px}.crypto-workspace-risk{display:flex;align-items:flex-start;gap:9px;margin:0;padding:13px 15px;border:1px solid color-mix(in srgb,#c99a45 28%,var(--border));border-radius:10px;background:color-mix(in srgb,#c99a45 8%,var(--surface));color:var(--secondary);font-size:12px;line-height:1.8}.crypto-workspace-risk svg{flex-shrink:0;color:var(--warning);margin-top:2px}.crypto-workspace-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.crypto-workspace-tabs button{display:flex;align-items:flex-start;gap:10px;text-align:left;min-width:0;min-height:76px;padding:13px 14px;border:1px solid var(--border);border-radius:11px;background:var(--surface);color:var(--secondary)}.crypto-workspace-tabs button.active{border-color:var(--accent);background:var(--accent-soft);color:var(--accent-text)}.crypto-workspace-tabs button>span{display:grid;gap:5px;min-width:0}.crypto-workspace-tabs strong{font-size:13px}.crypto-workspace-tabs small{font-size:11px;line-height:1.5;color:var(--muted);overflow-wrap:anywhere}.crypto-workspace-tabs button.active small{color:var(--accent-text)}@media(max-width:650px){.crypto-workspace-status{align-items:flex-start;flex-wrap:wrap}.crypto-workspace-status button{margin-left:51px}.crypto-workspace-tabs{grid-template-columns:1fr}.crypto-workspace-tabs button{min-height:62px}}
+.crypto-workspace{gap:20px;min-width:0}.crypto-workspace-link{display:inline-flex;align-items:center;gap:7px;color:var(--accent-text);font-size:13px}.crypto-workspace-status{display:flex;align-items:center;gap:13px;padding:16px 18px;border:1px solid var(--border);border-radius:13px;background:var(--surface);min-width:0}.crypto-workspace-status-icon{display:grid;place-items:center;width:38px;height:38px;flex:0 0 38px;border-radius:11px;background:var(--accent-soft);color:var(--accent-text)}.crypto-workspace-status strong{font-size:14px}.crypto-workspace-status p{margin:5px 0 0;color:var(--secondary);font-size:12px;line-height:1.7}.crypto-workspace-status button{display:inline-flex;align-items:center;gap:7px;margin-left:auto;min-height:42px;flex-shrink:0}.crypto-workspace-status.tone-warning .crypto-workspace-status-icon{background:color-mix(in srgb,#c99a45 14%,var(--surface));color:var(--warning)}.crypto-workspace-status.tone-muted .crypto-workspace-status-icon{background:var(--surface-raised);color:var(--muted)}.crypto-workspace-error{margin:0}.crypto-workspace-error button{margin-left:8px}.crypto-workspace-risk{display:flex;align-items:flex-start;gap:9px;margin:0;padding:13px 15px;border:1px solid color-mix(in srgb,#c99a45 28%,var(--border));border-radius:10px;background:color-mix(in srgb,#c99a45 8%,var(--surface));color:var(--secondary);font-size:12px;line-height:1.8}.crypto-workspace-risk svg{flex-shrink:0;color:var(--warning);margin-top:2px}.crypto-workspace-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}.crypto-workspace-tabs button{display:flex;align-items:flex-start;gap:10px;text-align:left;min-width:0;min-height:76px;padding:13px 14px;border:1px solid var(--border);border-radius:11px;background:var(--surface);color:var(--secondary)}.crypto-workspace-tabs button.active{border-color:var(--accent);background:var(--accent-soft);color:var(--accent-text)}.crypto-workspace-tabs button>span{display:grid;gap:5px;min-width:0}.crypto-workspace-tabs strong{font-size:13px}.crypto-workspace-tabs small{font-size:11px;line-height:1.5;color:var(--muted);overflow-wrap:anywhere}.crypto-workspace-tabs button.active small{color:var(--accent-text)}@media(max-width:650px){.crypto-workspace-status{align-items:flex-start;flex-wrap:wrap}.crypto-workspace-status button{margin-left:51px}.crypto-workspace-tabs{gap:6px}.crypto-workspace-tabs button{min-height:48px;padding:10px 7px;align-items:center;justify-content:center;gap:5px}.crypto-workspace-tabs small{display:none}.crypto-workspace-tabs strong{font-size:12px}}
 </style>
