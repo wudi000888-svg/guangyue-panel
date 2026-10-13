@@ -28,7 +28,7 @@
 | `POST /wallets/{id}/reveal` | `password`；仅热钱包临时返回助记词，前端限时并在离开时清除 |
 | `POST /wallets/restore` | `password,backup_password,backup:{format,data},operation_id`；新恢复分支暂停并要求核对索引 |
 | `POST /wallets/{id}/recovery` | `password,operation_id,revision,next_index,recovery_ack:true`；索引不得低于已知高水位，核对后仍需启用 |
-| `POST /wallets/{id}/delete` | `password,operation_id,revision,delete_ack:true`；永久删除，返回 `{id,deleted:true}`；没有撤销或恢复删除入口 |
+| `POST /wallets/{id}/delete` | `password,operation_id,revision,delete_ack:true,permanent_delete_ack:true`；永久删除，返回 `{id,deleted:true}`；没有撤销或恢复删除入口，旧页面缺少永久删除确认会被拒绝 |
 
 钱包 DTO 新增 `supported_chain_ids`、`funding_address`、`funding_path`。新界面默认 `[56]`，可选 `[1,56]`；显式空列表、重复链或未知链拒绝。历史迁移/旧备份缺失字段默认 `[1,56]`。热钱包固定 Gas 描述可离线派生，xpub 返回空资金地址。新付款、余额查询及新归集任务校验支持链；既有付款单和已批准任务仍继续核对冻结网络。
 

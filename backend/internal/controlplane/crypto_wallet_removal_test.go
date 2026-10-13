@@ -1,8 +1,14 @@
 package controlplane
 
 import (
+	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -10,11 +16,103 @@ import (
 )
 
 func cryptoWalletRemoveInput(v CryptoWallet) object {
-	return object{"password": commerceTestPassword, "revision": v.Revision, "operation_id": randomToken(24), "delete_ack": true}
+	return object{"password": commerceTestPassword, "revision": v.Revision, "operation_id": randomToken(24), "delete_ack": true, "permanent_delete_ack": true}
 }
 func cryptoWalletDeleteTest(t *testing.T, a *App, owner Record, v CryptoWallet) CryptoWalletDeletion {
 	t.Helper()
 	return decoded[CryptoWalletDeletion](t, req(t, a, owner, "POST", cryptoWalletPrefix+"wallets/"+v.ID+"/delete", cryptoWalletRemoveInput(v)), 200)
+}
+
+func TestCryptoWalletPermanentDeletionRejectsLegacyConsentWithoutMutation(t *testing.T) {
+	a, owner, wallet, _ := cryptoSweepFixture(t)
+	path := cryptoWalletPrefix + "wallets/" + wallet.ID + "/delete"
+	var seed []byte
+	if e := a.store.db.QueryRow("SELECT secret FROM crypto_wallets WHERE id=?", wallet.ID).Scan(&seed); e != nil || len(seed) == 0 {
+		t.Fatal("hot wallet seed unavailable", e)
+	}
+	settings, e := a.store.cryptoPaymentSettings()
+	if e != nil || !settings.Enabled || settings.WalletID != wallet.ID {
+		t.Fatal("collection fixture unavailable", e)
+	}
+	type historyState struct {
+		hash          string
+		next, deleted int64
+	}
+	history := func() historyState {
+		t.Helper()
+		var out historyState
+		if e := a.store.db.QueryRow("SELECT receive_hash,next_index,deleted_at FROM crypto_wallet_history WHERE id=?", wallet.ID).Scan(&out.hash, &out.next, &out.deleted); e != nil {
+			t.Fatal(e)
+		}
+		return out
+	}
+	before := history()
+	in := object{"password": commerceTestPassword, "revision": wallet.Revision, "operation_id": randomToken(24), "delete_ack": true}
+	for _, payload := range []object{in, {"password": commerceTestPassword, "revision": wallet.Revision, "operation_id": randomToken(24), "delete_ack": false, "permanent_delete_ack": true}} {
+		w := req(t, a, owner, "POST", path, payload)
+		if w.Code != 400 || !strings.Contains(w.Body.String(), "刷新") || !strings.Contains(w.Body.String(), "永久") {
+			t.Fatal("legacy or incomplete consent accepted", w.Code, w.Body.String())
+		}
+		var retainedSeed []byte
+		if e = a.store.db.QueryRow("SELECT secret FROM crypto_wallets WHERE id=?", wallet.ID).Scan(&retainedSeed); e != nil || !bytes.Equal(seed, retainedSeed) {
+			t.Fatal("unconfirmed deletion changed encrypted seed", e)
+		}
+		currentSettings, e := a.store.cryptoPaymentSettings()
+		if e != nil || !reflect.DeepEqual(settings, currentSettings) || !reflect.DeepEqual(wallet, cryptoTestCurrent(t, a, wallet.ID)) || before != history() {
+			t.Fatal("unconfirmed deletion changed wallet, settings or history", e)
+		}
+	}
+	in["permanent_delete_ack"] = true
+	deleted := decoded[CryptoWalletDeletion](t, req(t, a, owner, "POST", path, in), 200)
+	if deleted.ID != wallet.ID || !deleted.Deleted {
+		t.Fatal("confirmed deletion failed", deleted)
+	}
+	if replay := decoded[CryptoWalletDeletion](t, req(t, a, owner, "POST", path, in), 200); replay != deleted {
+		t.Fatal("confirmed deletion is not idempotent")
+	}
+	delete(in, "permanent_delete_ack")
+	if w := req(t, a, owner, "POST", path, in); w.Code != 400 {
+		t.Fatal("legacy consent bypassed acknowledgement through replay", w.Code)
+	}
+}
+
+func TestCryptoWalletLegacyOperationReceiptReplayAndPermanentDeletion(t *testing.T) {
+	a := testApp(t)
+	owner := testUser(t, a, "owner", "owner")
+	wallet, payload := cryptoTestCreate(t, a, owner, false)
+	var in cryptoWalletInput
+	if e := json.Unmarshal(jsonBytes(payload), &in); e != nil {
+		t.Fatal(e)
+	}
+	in.Password = ""
+	// v0.39.17 serialized neither of the new intent fields. Preserve the
+	// original struct field order when reconstructing its keyed receipt.
+	legacy := bytes.ReplaceAll(jsonBytes(in), []byte(`,"import":false`), nil)
+	legacy = bytes.ReplaceAll(legacy, []byte(`,"permanent_delete_ack":false`), nil)
+	if bytes.Contains(legacy, []byte(`"import"`)) || bytes.Contains(legacy, []byte(`"permanent_delete_ack"`)) {
+		t.Fatal("fixture does not represent the legacy request shape")
+	}
+	var sealed, key []byte
+	if e := a.store.db.QueryRow("SELECT hmac_secret FROM crypto_wallet_state WHERE id=1").Scan(&sealed); e != nil {
+		t.Fatal(e)
+	}
+	if e := a.store.vault.open(sealed, &key); e != nil || len(key) != 32 {
+		t.Fatal("operation key unavailable", e)
+	}
+	defer clear(key)
+	mac := hmac.New(sha256.New, key)
+	mac.Write(jsonBytes([]any{"wallets/xpub", json.RawMessage(legacy)}))
+	if _, e := a.store.db.Exec("UPDATE crypto_wallet_operations SET fingerprint=? WHERE id=?", hex.EncodeToString(mac.Sum(nil)), in.OperationID); e != nil {
+		t.Fatal(e)
+	}
+	replay := decoded[CryptoWallet](t, req(t, a, owner, "POST", cryptoWalletPrefix+"wallets/xpub", payload), 200)
+	if replay.ID != wallet.ID || replay.Revision != wallet.Revision {
+		t.Fatal("legacy replay mutated the active wallet")
+	}
+	cryptoWalletDeleteTest(t, a, owner, wallet)
+	if w := req(t, a, owner, "POST", cryptoWalletPrefix+"wallets/xpub", payload); w.Code != 410 || strings.Contains(w.Body.String(), wallet.XPub) {
+		t.Fatal("legacy replay did not honor permanent deletion", w.Code)
+	}
 }
 
 func TestCryptoWalletRemovalAuthorizationCASAndReplay(t *testing.T) {

@@ -108,8 +108,8 @@ export async function deleteCryptoWallet(api:WalletAPI,input:{wallet:Pick<Crypto
  let payload:Record<string,unknown>|undefined;
  try{
   if(!input.password||!input.operation_id||!Number.isSafeInteger(input.wallet.revision)||input.wallet.revision<0)throw new Error('请刷新钱包并输入管理员密码');
-  if(!input.delete_ack)throw new Error('请确认永久删除将清除面板中的钱包和加密密钥');
-  payload={password:input.password,revision:input.wallet.revision,operation_id:input.operation_id,delete_ack:true};
+  if(input.delete_ack!==true)throw new Error('请确认永久删除将清除面板中的钱包和加密密钥');
+  payload={password:input.password,revision:input.wallet.revision,operation_id:input.operation_id,delete_ack:true,permanent_delete_ack:true};
   const result=await api<CryptoWalletDeletion>('/wallets/'+encodeURIComponent(input.wallet.id)+'/delete','POST',payload);
   if(result.id!==input.wallet.id||result.deleted!==true)throw new Error('删除结果与所选钱包不一致，请刷新核对');
   return result;

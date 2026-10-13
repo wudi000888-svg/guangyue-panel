@@ -106,7 +106,7 @@ func TestCryptoGasAuthorizationAndWalletScopePrecedeCache(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	deleted := req(t, a, owner, "POST", cryptoWalletPrefix+"wallets/"+wallet.ID+"/delete", object{"password": commerceTestPassword, "revision": wallet.Revision, "operation_id": "gas-test-permanent-delete", "delete_ack": true})
+	deleted := req(t, a, owner, "POST", cryptoWalletPrefix+"wallets/"+wallet.ID+"/delete", object{"password": commerceTestPassword, "revision": wallet.Revision, "operation_id": "gas-test-permanent-delete", "delete_ack": true, "permanent_delete_ack": true})
 	if deleted.Code != 200 {
 		t.Fatalf("delete failed: %d %s", deleted.Code, deleted.Body.String())
 	}

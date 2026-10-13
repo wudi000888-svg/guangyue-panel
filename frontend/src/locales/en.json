@@ -3910,5 +3910,6 @@
   "Gas 查询失败，当前费用未知。": "Gas query failed. The current fee is unknown.",
   "支付服务状态尚未确认，暂不能归集提现。": "Payment service status has not been confirmed. Withdrawals are temporarily unavailable.",
   "支付模块已关闭，暂不能归集提现。": "The payment module is disabled. Withdrawals are temporarily unavailable.",
-  "只读钱包不能在面板归集，请使用持有私钥的外部钱包。": "Watch-only wallets cannot withdraw through the panel. Use an external wallet holding the private key."
+  "只读钱包不能在面板归集，请使用持有私钥的外部钱包。": "Watch-only wallets cannot withdraw through the panel. Use an external wallet holding the private key.",
+  "钱包删除已改为永久删除，请刷新页面后确认清除钱包和加密密钥；链上资金不会转移，无外部备份可能失去提取能力": "Wallet deletion is now permanent. Refresh the page and confirm erasing the wallet and encrypted keys. On-chain funds will not move; without an external backup you may lose withdrawal access."
 }

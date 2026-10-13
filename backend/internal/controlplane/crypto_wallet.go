@@ -64,25 +64,26 @@ type cryptoWalletSecret struct {
 }
 
 type cryptoWalletInput struct {
-	Name              string             `json:"name"`
-	Mnemonic          string             `json:"mnemonic"`
-	XPub              string             `json:"xpub"`
-	Path              string             `json:"path"`
-	FirstAddress      string             `json:"first_address"`
-	EngineVersion     string             `json:"engine_version"`
-	Password          string             `json:"password"`
-	OperationID       string             `json:"operation_id"`
-	RiskAck           bool               `json:"risk_ack"`
-	Revision          int64              `json:"revision"`
-	Enabled           *bool              `json:"enabled"`
-	Label             string             `json:"label"`
-	BackupPassword    string             `json:"backup_password"`
-	NextIndex         *int64             `json:"next_index"`
-	RecoveryAck       bool               `json:"recovery_ack"`
-	Backup            cryptoWalletBackup `json:"backup"`
-	SupportedChainIDs []int64            `json:"supported_chain_ids"`
-	DeleteAck         bool               `json:"delete_ack"`
-	Import            bool               `json:"import"`
+	Name               string             `json:"name"`
+	Mnemonic           string             `json:"mnemonic"`
+	XPub               string             `json:"xpub"`
+	Path               string             `json:"path"`
+	FirstAddress       string             `json:"first_address"`
+	EngineVersion      string             `json:"engine_version"`
+	Password           string             `json:"password"`
+	OperationID        string             `json:"operation_id"`
+	RiskAck            bool               `json:"risk_ack"`
+	Revision           int64              `json:"revision"`
+	Enabled            *bool              `json:"enabled"`
+	Label              string             `json:"label"`
+	BackupPassword     string             `json:"backup_password"`
+	NextIndex          *int64             `json:"next_index"`
+	RecoveryAck        bool               `json:"recovery_ack"`
+	Backup             cryptoWalletBackup `json:"backup"`
+	SupportedChainIDs  []int64            `json:"supported_chain_ids"`
+	DeleteAck          bool               `json:"delete_ack"`
+	PermanentDeleteAck bool               `json:"permanent_delete_ack,omitempty"`
+	Import             bool               `json:"import,omitempty"`
 }
 
 type cryptoWalletQuery interface {
@@ -375,6 +376,9 @@ func (a *App) cryptoWalletPost(w http.ResponseWriter, r *http.Request, actor Rec
 	if strings.HasSuffix(route, "/undelete") {
 		return commerceFail(404, "永久删除的钱包不存在恢复入口")
 	}
+	if strings.HasSuffix(route, "/delete") && (!in.DeleteAck || !in.PermanentDeleteAck) {
+		return commerceFail(400, "钱包删除已改为永久删除，请刷新页面后确认清除钱包和加密密钥；链上资金不会转移，无外部备份可能失去提取能力")
+	}
 	if strings.HasSuffix(route, "/backup") {
 		return a.cryptoWalletExport(w, r, route, in)
 	}
@@ -470,9 +474,6 @@ func (a *App) cryptoWalletPost(w http.ResponseWriter, r *http.Request, actor Rec
 		}
 		switch strings.Join(p[2:], "/") {
 		case "delete":
-			if !in.DeleteAck {
-				return commerceFail(400, "请确认永久删除面板钱包和加密密钥；链上资金不会转移，无外部备份可能失去提取能力")
-			}
 			if e = a.store.permanentlyDeleteCryptoWallet(tx, v); e != nil {
 				return e
 			}
