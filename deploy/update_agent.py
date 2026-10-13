@@ -63,7 +63,10 @@ def download(url, destination, maximum):
 
 def catalog(force=False):
     cached = state.read('catalog.json', {'checked_at': 0, 'releases': []})
-    if cached['checked_at'] > time.time() - (60 if force else 900): return cached
+    # Explicit checks must observe a release whose assets finished uploading
+    # since the preceding check. Status polling reads this cache separately and
+    # must not cause a GitHub request on every poll.
+    if not force and cached['checked_at'] > time.time() - 900: return cached
     try:
         with tempfile.TemporaryDirectory(dir=state.ROOT) as temp:
             path = Path(temp) / 'releases.json'; download(API, path, 4 << 20)
@@ -85,7 +88,12 @@ def catalog(force=False):
         state.write('catalog.json', cached)
         return cached
     except Exception:
-        return dict(cached, warning='版本来源暂不可用，请稍后重试')
+        # Preserve the last successful catalogue and its timestamp. Persist a
+        # safe error so a following state poll cannot turn an outage into a
+        # misleading "no updates" result or renew an expired apply allowance.
+        cached = dict(cached, warning='版本来源暂不可用，请稍后重试')
+        state.write('catalog.json', cached)
+        return cached
 
 
 def asset_name(v, edition):
@@ -160,8 +168,9 @@ def status():
     # Polling must not open the database while its files are being backed up or
     # restored (nor recreate SQLite WAL sidecars under the updater's identity).
     rollback = [] if (op or {}).get('stage') in ACTIVE else [{k: r[k] for k in ['version', 'created', 'compatible']} for r in state.candidates()]
-    warning = PROXY_WARNING if (state.read('proxy-migration.json') or {}).get('failed') else ''
-    return {'available': True, 'current_version': current, 'installed_version': state.baseline()['version'], 'checked_at': cached['checked_at'], 'releases': releases, 'rollback_versions': rollback, 'operation': op, 'refresh_seconds': 8, 'warning': warning}
+    catalog_error = cached.get('warning', '')
+    warning = ' · '.join(filter(None, [PROXY_WARNING if (state.read('proxy-migration.json') or {}).get('failed') else '', catalog_error]))
+    return {'available': True, 'current_version': current, 'installed_version': state.baseline()['version'], 'checked_at': cached['checked_at'], 'catalog_stale': cached['checked_at'] < time.time() - 900, 'catalog_error': catalog_error, 'releases': releases, 'rollback_versions': rollback, 'operation': op, 'refresh_seconds': 8, 'warning': warning}
 
 
 def reconcile_panel_proxy():
@@ -308,7 +317,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 with lock:
                     if (state.read('operation.json') or {}).get('stage') in ACTIVE: raise ValueError('已有版本操作正在执行')
                     c = catalog(True); result = status()
-                    result['warning'] = ' · '.join(filter(None, [result.get('warning'), c.get('warning')]))
+                    result['warning'] = ' · '.join(dict.fromkeys(part for message in [result.get('warning', ''), c.get('warning', '')] for part in message.split(' · ') if part))
             elif self.path == '/apply' and self.command == 'POST':
                 size = int(self.headers.get('Content-Length', '0'))
                 if size <= 0 or size > 1024: raise ValueError('更新请求过大或为空')

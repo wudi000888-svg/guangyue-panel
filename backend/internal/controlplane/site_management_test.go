@@ -229,6 +229,75 @@ func TestManagedSubsiteVersionOperations(t *testing.T) {
 	}
 }
 
+func TestManagedSubsiteChecksFreshCatalogueBeforeUpdate(t *testing.T) {
+	master, child := testApp(t), testApp(t)
+	master.cfg.Edition = "pro"
+	owner := testUser(t, master, "master-owner", "owner")
+	childOwner := testUser(t, child, "child-owner", "owner")
+	checked := false
+	var calls []string
+	requestID := "11111111-2222-4333-a444-555555555555"
+	child.updateClient = &http.Client{Transport: updateRoundTrip(func(r *http.Request) (*http.Response, error) {
+		calls = append(calls, r.Method+" "+r.URL.Path)
+		if r.URL.Host != "updater" || r.Header.Get("Authorization") != "" || r.Header.Get("Cookie") != "" {
+			t.Fatal("remote credentials escaped into the root updater")
+		}
+		status, body := 200, `{"available":true,"current_version":"0.39.15","catalog_stale":true,"releases":[]}`
+		switch r.Method + " " + r.URL.Path {
+		case "GET /state":
+			// Reading state is deliberately passive; only an explicit check can
+			// discover the release and establish an apply authorization.
+		case "POST /check":
+			var in object
+			if json.NewDecoder(r.Body).Decode(&in) != nil || len(in) != 0 {
+				t.Fatal("invalid forwarded catalogue check")
+			}
+			checked = true
+			body = `{"available":true,"current_version":"0.39.15","catalog_stale":false,"catalog_error":"","releases":[{"version":"0.39.16","name":"v0.39.16"}]}`
+		case "POST /apply":
+			var in map[string]string
+			if json.NewDecoder(r.Body).Decode(&in) != nil || !checked || in["action"] != "update" || in["version"] != "0.39.16" || in["request_id"] != requestID {
+				t.Fatalf("invalid forwarded version operation: %#v", in)
+			}
+			if in["expected_version"] != "0.39.15" {
+				status, body = 409, `{"error":"当前版本已变化，请重新检测"}`
+			} else {
+				body = `{"stage":"queued","action":"update","version":"0.39.16","expected_version":"0.39.15","request_id":"` + requestID + `"}`
+			}
+		default:
+			t.Fatalf("unexpected updater request: %s %s", r.Method, r.URL.Path)
+		}
+		return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
+	})}
+	server := httptest.NewServer(child.routes())
+	defer server.Close()
+	child.cfg.PublicURL = server.URL
+	token := fleetToken(t, child, childOwner, "manage")
+	w := req(t, master, owner, "POST", "/api/business-sites/import", object{"token": token, "url": server.URL})
+	var site BusinessSite
+	if w.Code != 201 || json.Unmarshal(w.Body.Bytes(), &site) != nil || site.Connection == nil {
+		t.Fatalf("import child: %d %s", w.Code, w.Body.String())
+	}
+	path := "/api/business-sites/" + site.ID + "/updates"
+	if w = req(t, master, owner, "GET", path, nil); w.Code != 200 || !strings.Contains(w.Body.String(), `"catalog_stale":true`) || checked {
+		t.Fatalf("passive updater state: %d %s", w.Code, w.Body.String())
+	}
+	if w = req(t, master, owner, "POST", path+"/check", object{}); w.Code != 200 || !strings.Contains(w.Body.String(), `"version":"0.39.16"`) || !checked {
+		t.Fatalf("fresh remote catalogue: %d %s", w.Code, w.Body.String())
+	}
+	apply := object{"action": "update", "version": "0.39.16", "expected_version": "0.39.15", "request_id": requestID}
+	if w = req(t, master, owner, "POST", path+"/apply", apply); w.Code != 200 || !strings.Contains(w.Body.String(), `"request_id":"`+requestID+`"`) {
+		t.Fatalf("remote update submission: %d %s", w.Code, w.Body.String())
+	}
+	apply["expected_version"] = "0.39.14"
+	if w = req(t, master, owner, "POST", path+"/apply", apply); w.Code != 409 || !strings.Contains(w.Body.String(), "当前版本已变化") {
+		t.Fatalf("child version conflict was not preserved: %d %s", w.Code, w.Body.String())
+	}
+	if len(calls) != 4 || strings.Join(calls, ",") != "GET /state,POST /check,POST /apply,POST /apply" {
+		t.Fatalf("unexpected updater calls: %#v", calls)
+	}
+}
+
 func TestSiteTokenValidation(t *testing.T) {
 	token := "gyp_" + randomToken(32)
 	for _, address := range []string{"http://example.com", "https://u:p@example.com", "https://example.com/path", "https://example.com?token=secret"} {
