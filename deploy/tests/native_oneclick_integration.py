@@ -5,8 +5,10 @@ import http.client
 import json
 import os
 import re
+import selectors
 import shutil
 import socket
+import ssl
 import subprocess
 import sys
 import tempfile
@@ -67,6 +69,71 @@ def new_cert(directory, suffix):
     run('openssl', 'req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '3', '-subj', '/CN=panel.example.com', '-addext', 'subjectAltName=DNS:panel.example.com,DNS:node.example.com', '-keyout', str(key), '-out', str(cert))
     cert.chmod(0o600); key.chmod(0o600)
     return cert, key
+
+
+def require_fixture_controls():
+    if os.geteuid() != 0 or os.environ.get('GITHUB_ACTIONS') != 'true' or os.environ.get('GY_ONECLICK_INTEGRATION') != '1':
+        raise ValueError('Disposable native CI fixture controls are required')
+
+
+def stop_fixture(process):
+    if process is not None and process.poll() is None:
+        process.terminate()
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill(); process.wait(timeout=5)
+
+
+def checked_loopback_target(address):
+    match = re.fullmatch(r'127\.0\.0\.1:([0-9]{1,5})', address)
+    if not match or not 1024 <= int(match.group(1)) <= 65535:
+        raise ValueError('Reality fixture must use a loopback ephemeral port')
+    return int(match.group(1))
+
+
+def start_reality_fixture(work):
+    require_fixture_controls()
+    directory = Path(work) / 'reality-target'; directory.mkdir(mode=0o700)
+    executable = directory / 'target'
+    go = os.environ.get('GY_GO')
+    assert go and Path(go).is_file(), 'CI needs its explicit GY_GO toolchain'
+    environment = {key: value for key, value in os.environ.items() if key not in {'GOOS', 'GOARCH'}}
+    environment['CGO_ENABLED'] = '0'
+    run(go, 'build', '-trimpath', '-o', str(executable), str(Path(__file__).with_name('reality_target_fixture.go')), timeout=180, environment=environment)
+    with (directory / 'target.log').open('wb') as log:
+        process = subprocess.Popen([str(executable), '-state', str(directory)], stdout=subprocess.PIPE, stderr=log, text=True, env=environment)
+    try:
+        with selectors.DefaultSelector() as readiness:
+            readiness.register(process.stdout, selectors.EVENT_READ)
+            assert readiness.select(10), 'synthetic Reality target did not become ready'
+            address = json.loads(process.stdout.readline(8193))['address']
+        port = checked_loopback_target(address)
+        context = ssl.create_default_context(cafile=str(directory / 'cert.pem'))
+        context.minimum_version = ssl.TLSVersion.TLSv1_3; context.set_alpn_protocols(['h2'])
+        with socket.create_connection(('127.0.0.1', port), 4) as connection, context.wrap_socket(connection, server_hostname='www.cloudflare.com') as secured:
+            assert secured.version() == 'TLSv1.3' and secured.selected_alpn_protocol() == 'h2'
+        print('PASS guarded synthetic loopback Reality target with verified certificate, TLS 1.3 and h2; production target is unchanged', flush=True)
+        return process, address
+    except Exception:
+        stop_fixture(process)
+        raise
+    finally:
+        process.stdout.close()
+
+
+def install_fixture(plan, bundle, *, cert_file, key_file, reality_target):
+    require_fixture_controls()
+    checked_loopback_target(reality_target)
+    original = native.atomic_json
+    def fixture_config(path, value, *args, **kwargs):
+        if Path(path) == native.CONFIG:
+            value = dict(value, reality_target=reality_target)
+        return original(path, value, *args, **kwargs)
+    # This override exists only in the doubly guarded disposable CI script.
+    # Production installation accepts no new private-target flag or parameter.
+    with patch.object(native, 'atomic_json', side_effect=fixture_config):
+        return native.install(plan, bundle, cert_file=cert_file, key_file=key_file)
 
 
 def https_health(cert, version):
@@ -243,6 +310,7 @@ def main():
     next_version = f'{major}.{minor}.{patch_number + 2}'
     fault_version = f'{major}.{minor}.{patch_number + 3}'
     work = Path(tempfile.mkdtemp(prefix='guangyue-native-ci-', dir='/root')); work.chmod(0o700)
+    reality_process = None
     print('CI ONLY: isolated synthetic versions verify transactions; no Release or tag is created.', flush=True)
     try:
         baseline = nginx_snapshot()
@@ -263,6 +331,7 @@ def main():
 
         base = synthetic_bundle(source, work, base_version)
         target = synthetic_bundle(source, work, next_version)
+        reality_process, reality_target = start_reality_fixture(work)
         cert, key = new_cert(work, 'initial')
         plan = {'schema': 1, 'id': str(uuid.uuid4()), 'version': base_version, 'edition': edition, 'backend': 'native', 'panel_domain': 'panel.example.com', 'node_domain': 'node.example.com', 'reality_sni': 'www.cloudflare.com', 'site_id': 'default', 'acme_agreed': True, 'acme_email': '', 'created_at': int(time.time())}
         real_run = native.run
@@ -273,7 +342,7 @@ def main():
             return result
         with patch.object(native, 'run', side_effect=after_prepare):
             try:
-                native.install(plan, base, cert_file=cert, key_file=key)
+                install_fixture(plan, base, cert_file=cert, key_file=key, reality_target=reality_target)
             except ValueError:
                 pass
             else:
@@ -288,17 +357,17 @@ def main():
         original = unit.read_bytes(); unit.write_bytes(original + b'\n# CI external edit\n')
         edited = fingerprint(unit)
         try:
-            native.install(plan, base, cert_file=cert, key_file=key)
+            install_fixture(plan, base, cert_file=cert, key_file=key, reality_target=reality_target)
         except ValueError:
             assert fingerprint(unit) == edited
         else:
             raise AssertionError('externally modified owned unit was overwritten')
         unit.write_bytes(original)
-        result = native.install(plan, base, cert_file=cert, key_file=key)
+        result = install_fixture(plan, base, cert_file=cert, key_file=key, reality_target=reality_target)
         assert result['stage'] == 'installed'
         assert {str(path): fingerprint(path) for path in map(Path, keys)} == keys, 'resume regenerated account or master/config keys'
         # Completed installation is a health check, not a fresh initialization.
-        native.install(plan, base, cert_file=cert, key_file=key)
+        install_fixture(plan, base, cert_file=cert, key_file=key, reality_target=reality_target)
         assert {str(path): fingerprint(path) for path in map(Path, keys)} == keys
         assert native.STATE.stat().st_mode & 0o777 == 0o700
         assert native.DEPLOYMENT.stat().st_mode & 0o777 == 0o600
@@ -426,9 +495,12 @@ def main():
     finally:
         for name in ('guangyue-gateway-cert.timer', 'guangyue-gateway-cert.path', 'guangyue-gateway-cert.service', 'guangyue-updater.socket', 'guangyue-updater.service', *native.UNITS):
             subprocess.run(['systemctl', 'stop', name], capture_output=True)
-        if native.journal_path().exists():
-            native.stop_owned(json.loads(native.journal_path().read_text()))
-        shutil.rmtree(work)
+        try:
+            if native.journal_path().exists():
+                native.stop_owned(json.loads(native.journal_path().read_text()))
+        finally:
+            stop_fixture(reality_process)
+            shutil.rmtree(work)
 
 
 if __name__ == '__main__':

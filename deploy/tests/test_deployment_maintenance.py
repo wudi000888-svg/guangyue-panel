@@ -68,6 +68,40 @@ class MaintenanceTests(unittest.TestCase):
         self.assertEqual(stat.S_IMODE((cache / 'common.cpython-312.pyc').stat().st_mode), 0o600)
         self.assertEqual(upgrade._helper_source_files(helper), [])
 
+    def native_fixture_functions(self):
+        source = Path(upgrade.__file__).parent / 'tests/native_oneclick_integration.py'
+        with patch.object(os, 'geteuid', return_value=0), patch.dict(os.environ, {'GITHUB_ACTIONS': 'true', 'GY_ONECLICK_INTEGRATION': '1'}):
+            return runpy.run_path(str(source), run_name='native_fixture_unit')
+
+    def test_native_reality_override_rejects_either_missing_guard_without_side_effects(self):
+        functions = self.native_fixture_functions()
+        import native_gateway
+        for github, integration in [('false', '1'), ('true', ''), ('false', '')]:
+            with self.subTest(github=github, integration=integration), patch.object(os, 'geteuid', return_value=0), patch.dict(os.environ, {'GITHUB_ACTIONS': github, 'GY_ONECLICK_INTEGRATION': integration}), patch.object(native_gateway, 'install') as install:
+                with self.assertRaisesRegex(ValueError, 'fixture controls'):
+                    functions['start_reality_fixture'](self.root)
+                with self.assertRaisesRegex(ValueError, 'fixture controls'):
+                    functions['install_fixture']({}, self.root, cert_file=self.root/'cert', key_file=self.root/'key', reality_target='127.0.0.1:12345')
+                install.assert_not_called()
+                self.assertFalse((self.root/'reality-target').exists())
+
+    def test_native_reality_fixture_changes_only_its_config_target_and_preserves_sni(self):
+        functions = self.native_fixture_functions()
+        import native_gateway
+        original = {'reality_sni': 'www.cloudflare.com', 'reality_target': 'www.cloudflare.com:443'}
+        def installing(*args, **kwargs):
+            native_gateway.atomic_json(native_gateway.CONFIG, original, 0o640, 'guangyue')
+            native_gateway.atomic_json(self.root/'unrelated.json', original)
+            return 'fixture-installed'
+        with patch.object(os, 'geteuid', return_value=0), patch.dict(os.environ, {'GITHUB_ACTIONS': 'true', 'GY_ONECLICK_INTEGRATION': '1'}), patch.object(native_gateway, 'atomic_json') as write, patch.object(native_gateway, 'install', side_effect=installing) as install:
+            self.assertEqual(functions['install_fixture']({}, self.root, cert_file=self.root/'cert', key_file=self.root/'key', reality_target='127.0.0.1:12345'), 'fixture-installed')
+            self.assertEqual(write.call_args_list[0].args[1], {'reality_sni': 'www.cloudflare.com', 'reality_target': '127.0.0.1:12345'})
+            self.assertEqual(write.call_args_list[1].args[1], original)
+            self.assertEqual(set(install.call_args.kwargs), {'cert_file', 'key_file'})
+            for target in ['www.cloudflare.com:443', '0.0.0.0:12345', '127.0.0.1:443', '127.0.0.1:65536']:
+                with self.assertRaises(ValueError): functions['checked_loopback_target'](target)
+        self.assertEqual(original['reality_target'], 'www.cloudflare.com:443')
+
     def test_proxy_fixture_diagnostic_has_transport_context_without_credentials(self):
         source = Path(upgrade.__file__).parent / 'tests/entitlement_integration.py'
         module_spec = importlib.util.spec_from_file_location('entitlement_fixture_diagnostic', source)

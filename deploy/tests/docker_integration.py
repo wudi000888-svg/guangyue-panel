@@ -442,13 +442,20 @@ def main():
             pass
         else:
             raise AssertionError('Post-prepare image failure was incorrectly acknowledged')
+        # An injected failure is expected only after production recovery has
+        # fully completed. A restored marker/schema alone does not prove that
+        # the application can connect as its original least-privileged role.
+        assert docker_deploy.safe_json(docker_deploy.transaction_file(), missing=True) is None, 'failure recovery left its transaction unfinished'
+        assert not Path('/var/lib/guangyue-maintenance/pending').exists(), 'failure recovery left the financial maintenance fence active'
         assert docker_deploy.load()['version'] == next_version
+        docker_deploy.validate_runtime(docker_deploy.load(), require_helper=True)
         assert docker_deploy.schema(docker_deploy.read_config()) == signature
         assert api('/api/health')[0]['version'] == next_version
         markers = list(Path('/root/guangyue-backups').glob('docker-upgrade-*/failed-state/ci-prepare-fault.json'))
         assert any(json.loads(path.read_text()) == {'prepare_completed': True, 'own_schema_mutated': True} for path in markers), 'fault did not execute after real database preparation'
         if edition == 'pro':
             assert docker_deploy.pg_sql(docker_deploy.load(), "SELECT to_regclass('gy_default.ci_after_prepare') IS NULL;").strip() == 't'
+            assert docker_deploy.pg_sql(docker_deploy.load(), "SELECT pg_get_userbyid(nspowner)='guangyue' AND has_schema_privilege('guangyue',oid,'USAGE,CREATE') AND NOT EXISTS (SELECT 1 FROM pg_class WHERE relnamespace=pg_namespace.oid AND pg_get_userbyid(relowner)<>'guangyue') FROM pg_namespace WHERE nspname='gy_default';").strip() == 't', 'restored objects are not owned by the application role'
         else:
             import sqlite3
             connection = sqlite3.connect('file:' + str(state / 'panel.db') + '?mode=ro', uri=True)
