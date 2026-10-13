@@ -3,8 +3,8 @@
 :root {
   --canvas:#f7f8f5; --bg:var(--canvas);
   --surface:#fff; --surface-raised:#eff3ed; --surface-soft:var(--surface-raised); --surface-muted:var(--surface-raised); --surface-hover:#edf3ed;
-  --text:#203631; --secondary:#53695f; --muted:#66766d;
-  --border:#e1e7df; --input:#fff; --input-bg:var(--input); --input-border:#b9c8bd;
+  --text:#203631; --secondary:#53695f; --muted:#53675e;
+  --border:#e1e7df; --input:#fff; --input-bg:var(--input); --input-border:#77887c;
   --accent:#285fa9; --accent-text:#214f8d; --accent-soft:#e7effa; --accent-contrast:#fff;
   --green:var(--accent); --red:#a83f42; --warning:#946425; --info:#376d91;
   --success:var(--accent-text); --danger:var(--red); --overlay:#102d276b;

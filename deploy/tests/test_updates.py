@@ -196,6 +196,83 @@ class UpdateTests(unittest.TestCase):
             cached = agent.catalog(); self.assertEqual(cached['releases'][0]['version'], '0.19.0'); self.assertIn('warning', cached)
             self.assertNotIn('private', cached['warning'])
 
+    def release(self, value, **extra):
+        return dict(tag_name='v' + value, assets=[
+            {'name': agent.asset_name(value, 'lite'), 'state': 'uploaded'},
+            {'name': 'SHA256SUMS', 'state': 'uploaded'},
+        ], **extra)
+
+    def test_explicit_check_refreshes_even_when_previous_check_is_recent(self):
+        self.cache()
+        with patch.object(agent, 'download', side_effect=lambda url, path, maximum: path.write_text(json.dumps([self.release('0.20.0')]))):
+            result = agent.catalog(force=True)
+        self.assertEqual([row['version'] for row in result['releases']], ['0.20.0'])
+        self.assertEqual(state.read('catalog.json'), result)
+        with patch.object(agent, 'download', side_effect=AssertionError('status polls must reuse the cache')):
+            self.assertEqual(agent.catalog(), result)
+            self.assertEqual(agent.status()['releases'][0]['version'], '0.20.0')
+
+    def test_explicit_check_observes_finished_assets_without_advertising_incomplete_release(self):
+        incomplete = self.release('0.20.0')
+        incomplete['assets'][0]['state'] = 'new'
+        with patch.object(agent, 'download', side_effect=lambda url, path, maximum: path.write_text(json.dumps([incomplete, self.release('0.19.0')]))):
+            self.assertEqual([row['version'] for row in agent.catalog(force=True)['releases']], ['0.19.0'])
+        # A real release can finish uploading within seconds of that check.
+        with patch.object(agent, 'download', side_effect=lambda url, path, maximum: path.write_text(json.dumps([self.release('0.20.0'), self.release('0.19.0')]))):
+            self.assertEqual(agent.catalog(force=True)['releases'][0]['version'], '0.20.0')
+
+    def test_catalog_failure_survives_polling_and_success_clears_error(self):
+        self.cache(); saved = state.read('catalog.json')
+        state.write('proxy-migration.json', {'failed': True})
+        with patch.object(agent, 'download', side_effect=OSError('private network credential')):
+            agent.catalog(force=True)
+        status = agent.status()
+        self.assertEqual(status['checked_at'], saved['checked_at'])
+        self.assertEqual(status['releases'], saved['releases'])
+        self.assertFalse(status['catalog_stale'])
+        self.assertIn('版本来源暂不可用', status['catalog_error'])
+        self.assertIn(agent.PROXY_WARNING, status['warning'])
+        self.assertNotIn('private', json.dumps(status))
+        handler = unittest.mock.Mock()
+        handler.path = '/check'; handler.command = 'POST'; handler.wfile = io.BytesIO()
+        with patch.object(agent, 'download', side_effect=OSError('unavailable')):
+            agent.Handler.handle_api(handler)
+        warning = json.loads(handler.wfile.getvalue())['warning']
+        self.assertEqual(warning.count('版本来源暂不可用'), 1)
+        self.assertIn(agent.PROXY_WARNING, warning)
+        with patch.object(agent, 'download', side_effect=lambda url, path, maximum: path.write_text(json.dumps([self.release('0.20.0')]))):
+            agent.catalog(force=True)
+        status = agent.status()
+        self.assertEqual(status['catalog_error'], '')
+        self.assertEqual(status['warning'], agent.PROXY_WARNING)
+        self.assertEqual(status['releases'][0]['version'], '0.20.0')
+
+    def test_failed_check_does_not_renew_expired_update_authorization(self):
+        self.cache(); saved = state.read('catalog.json'); saved['checked_at'] = 1
+        state.write('catalog.json', saved)
+        with patch.object(agent, 'download', side_effect=OSError('unavailable')):
+            agent.catalog(force=True)
+        self.assertEqual(agent.status()['checked_at'], 1)
+        self.assertTrue(agent.status()['catalog_stale'])
+        with self.assertRaisesRegex(ValueError, '请先检查更新'):
+            agent.submit(self.request(), launch=False)
+        self.assertIsNone(state.read('operation.json'))
+
+    def test_first_managed_check_populates_state_and_authorizes_exact_apply(self):
+        self.assertTrue(agent.status()['catalog_stale'])
+        handler = unittest.mock.Mock()
+        handler.path = '/check'; handler.command = 'POST'; handler.wfile = io.BytesIO()
+        with patch.object(agent, 'download', side_effect=lambda url, path, maximum: path.write_text(json.dumps([self.release('0.19.0')]))):
+            agent.Handler.handle_api(handler)
+        handler.send_response.assert_called_once_with(200)
+        result = json.loads(handler.wfile.getvalue())
+        self.assertFalse(result['catalog_stale'])
+        self.assertEqual(result['catalog_error'], '')
+        self.assertEqual(result['releases'][0]['version'], '0.19.0')
+        request = self.request(); operation = agent.submit(request, launch=False)
+        self.assertEqual(operation['stage'], 'queued')
+        self.assertEqual(agent.submit(request, launch=False), operation)
+
     def test_download_origin_restricted(self):
         for url in ['http://github.com/a', 'https://github.com.attacker.test/a', 'https://user@github.com/a', 'https://127.0.0.1/a', 'https://github.com:444/a']:
             with self.assertRaises(ValueError): agent.trusted_url(url)

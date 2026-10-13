@@ -31,5 +31,5 @@ onMounted(()=>{void load();poll.start();});onUnmounted(()=>{poll.stop();requests
 </template>
 
 <style scoped>
-.task-filters{display:flex;flex-wrap:wrap;gap:8px}.task-filters button{min-height:44px;border-color:var(--border);font-size:13px;background:var(--surface);gap:10px}.task-filters button[aria-pressed=true]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-text)}.task-filters span{font-size:12px;font-variant-numeric:tabular-nums;opacity:.8}.adaptive-table code{overflow-wrap:anywhere;white-space:normal}@media(max-width:650px){.task-filters{width:100%}.task-filters button{flex:1;min-height:44px}}
+.task-filters{display:flex;flex-wrap:wrap;gap:8px}.task-filters button{min-height:44px;border-color:var(--border);font-size:13px;background:var(--surface);gap:10px}.task-filters button[aria-pressed=true]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent-text)}.task-filters span{font-size:12px;font-variant-numeric:tabular-nums}.adaptive-table code{overflow-wrap:anywhere;white-space:normal}@media(max-width:650px){.task-filters{width:100%}.task-filters button{flex:1;min-height:44px}}
 </style>

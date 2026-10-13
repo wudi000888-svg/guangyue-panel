@@ -3844,5 +3844,17 @@
   "订单": "Orders",
   "保管与收款说明": "Custody and payment details",
   "刷新收款状态": "Refresh payment status",
-  "钱包已被更新，请关闭窗口后重新打开，核对状态再确认。": "The wallet has changed. Close and reopen this dialog, review its current state, then confirm again."
+  "钱包已被更新，请关闭窗口后重新打开，核对状态再确认。": "The wallet has changed. Close and reopen this dialog, review its current state, then confirm again.",
+  "尚未检查正式发布版本，请检查更新": "Official releases have not been checked yet. Check for updates.",
+  "版本列表已过期，请重新检查更新": "The release list is out of date. Check for updates again.",
+  "尚未确认最新版本": "Latest release not confirmed",
+  "重新提交同一次操作": "Retry the same operation",
+  "结束本次等待": "Stop waiting for this operation",
+  "版本检查超时，请重试": "Version check timed out. Please retry.",
+  "提交等待超时，正在确认更新状态": "Submission timed out. Checking the update status.",
+  "本次等待已结束，请重新检查子站版本。": "Stopped waiting. Check the child site version again.",
+  "子站尚未确认本次提交。检测到服务空闲后，可用同一操作编号重试。": "The child site has not confirmed this submission. Once the service is confirmed idle, you can retry with the same operation ID.",
+  "将使用原操作编号重新提交，目标版本和当前版本校验保持不变。": "Retry using the original operation ID, target version and current version check.",
+  "已重新提交同一次操作": "Retried the same operation",
+  "仅结束本地等待，不会取消子站任务或更改已安装版本。请先核对子站当前版本。": "This only stops waiting locally. It does not cancel a child site task or change its installed version. Verify the child site version first."
 }

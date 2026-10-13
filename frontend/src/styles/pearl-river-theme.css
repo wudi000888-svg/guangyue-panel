@@ -10,11 +10,11 @@
   --surface-table: rgba(251, 253, 255, 0.98);
   --text: #152238;
   --secondary: #52637c;
-  --muted: #6c7d94;
+  --muted: #53647c;
   --border: rgba(37, 63, 96, 0.18);
   --input: rgba(246, 249, 253, 0.98);
   --input-bg: var(--input);
-  --input-border: rgba(61, 91, 126, 0.34);
+  --input-border: #73839b;
   --accent: #285fa9;
   --accent-text: #214f8d;
   --accent-soft: rgba(40, 95, 169, 0.12);
@@ -52,7 +52,7 @@
   --shadow-popover: 0 18px 50px rgba(12, 25, 46, 0.24);
   --gy-shadow: var(--shadow-card);
   --gy-focus: 0 0 0 3px rgba(40, 95, 169, 0.24);
-  --wallpaper-overlay: linear-gradient(90deg, rgba(232, 239, 248, 0.91) 0%, rgba(232, 239, 248, 0.82) 38%, rgba(232, 239, 248, 0.72) 100%), linear-gradient(180deg, rgba(224, 234, 245, 0.42), rgba(224, 234, 245, 0.78));
+  --wallpaper-overlay: linear-gradient(90deg, rgba(232, 239, 248, 0.95) 0%, rgba(232, 239, 248, 0.93) 38%, rgba(232, 239, 248, 0.9) 100%), linear-gradient(180deg, rgba(224, 234, 245, 0.42), rgba(224, 234, 245, 0.78));
   --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
   color-scheme: light;
 }
@@ -72,7 +72,7 @@
   --border: rgba(185, 204, 231, 0.16);
   --input: rgba(12, 21, 35, 0.96);
   --input-bg: var(--input);
-  --input-border: rgba(185, 204, 231, 0.24);
+  --input-border: #7386a3;
   --accent: #83b9ff;
   --accent-text: #a9ceff;
   --accent-soft: rgba(131, 185, 255, 0.16);
@@ -116,6 +116,41 @@
 
 html, body { background: var(--canvas); }
 body { color: var(--text); }
+
+/* Navigation remains dark in both themes. Give it its own semantic context so
+   component styles, hover states and native selects never inherit light ink. */
+:is(.sidebar, .topbar, .mobile-quick-nav) {
+  --text: var(--nav-selected);
+  --secondary: var(--nav-text);
+  --muted: var(--nav-muted);
+  --surface: #142137;
+  --surface-raised: #1c2b43;
+  --surface-soft: var(--surface-raised);
+  --surface-muted: var(--surface-raised);
+  --surface-hover: #253750;
+  --input: #142137;
+  --input-bg: var(--input);
+  --input-border: #7386a3;
+  --border: var(--nav-border);
+  --accent: #83b9ff;
+  --accent-text: #a9ceff;
+  --accent-soft: rgba(131, 185, 255, 0.16);
+  --accent-contrast: #08182d;
+  --green: var(--accent);
+  --success: var(--accent-text);
+  --success-soft: var(--accent-soft);
+  --gy-jade: var(--accent);
+  --gy-focus: 0 0 0 3px rgba(131, 185, 255, 0.28);
+  --warning: #f4cc83;
+  --warning-soft: #382e22;
+  --red: #ffabb0;
+  --danger: var(--red);
+  --danger-soft: #36212b;
+  --info: #a9d0f2;
+  --info-soft: #263746;
+  color: var(--text);
+  color-scheme: dark;
+}
 
 .app-shell {
   position: relative;
@@ -231,7 +266,8 @@ tbody tr:hover { background: var(--surface-hover); }
 .login-scene:after { background: linear-gradient(180deg, rgba(7, 14, 25, 0.16), rgba(7, 14, 25, 0.74)); }
 .login-entry { background: var(--surface-soft); }
 .login-brand, .login-form h1 { color: var(--text); }
-.login-form .eyebrow, .courtyard-kicker { color: var(--gy-moon); }
+.login-form .eyebrow, .courtyard-kicker { color: var(--accent-text); }
+.login-scene .courtyard-kicker { color: var(--gy-moon); }
 .login-notice { background: var(--accent-soft); color: var(--secondary); border-color: var(--border); }
 
 .mobile-quick-nav { background: var(--nav-bg); border-top-color: var(--nav-border); box-shadow: 0 -8px 20px rgba(4, 10, 20, 0.18); }
