@@ -418,7 +418,14 @@ func (a *App) collect() error {
 	live := liveInput{counts: [2]map[int64]int64{{}, {}}}
 	var errs []error
 	// A non-reset query includes the capability marker and session gauges.
+	xGeneration := ""
+	if coreprocess.ContainerMode() {
+		xGeneration = coreprocess.Generation("guangyue-xray.service")
+	}
 	b, err := a.xapi("statsquery")
+	if err == nil && coreprocess.ContainerMode() && (xGeneration == "" || xGeneration != coreprocess.Generation("guangyue-xray.service")) {
+		err = errors.New("Xray generation changed during traffic query")
+	}
 	if err == nil {
 		var result struct {
 			Stat []struct {
@@ -429,6 +436,9 @@ func (a *App) collect() error {
 		err = json.Unmarshal(b, &result)
 		if err == nil {
 			generation := strconv.Itoa(corePID("guangyue-xray.service"))
+			if coreprocess.ContainerMode() {
+				generation = xGeneration
+			}
 			live.generation[0], live.traffic[0] = generation, true
 			for _, s := range result.Stat {
 				value, e := s.Value.Int64()
@@ -458,7 +468,14 @@ func (a *App) collect() error {
 	if err != nil {
 		errs = append(errs, errors.New("Xray traffic unavailable"))
 	}
+	hyGeneration := ""
+	if coreprocess.ContainerMode() {
+		hyGeneration = coreprocess.Generation("guangyue-hy2.service")
+	}
 	b, err = a.hyRequest("GET", "/traffic", nil)
+	if err == nil && coreprocess.ContainerMode() && (hyGeneration == "" || hyGeneration != coreprocess.Generation("guangyue-hy2.service")) {
+		err = errors.New("HY2 generation changed during traffic query")
+	}
 	if err == nil {
 		var result map[string]struct {
 			TX int64 `json:"tx"`
@@ -467,6 +484,9 @@ func (a *App) collect() error {
 		err = json.Unmarshal(b, &result)
 		if err == nil {
 			generation := strconv.Itoa(corePID("guangyue-hy2.service"))
+			if coreprocess.ContainerMode() {
+				generation = hyGeneration
+			}
 			live.generation[1], live.traffic[1] = generation, true
 			for id, s := range result {
 				uid, _ := strconv.ParseInt(strings.TrimPrefix(strings.SplitN(id, ".", 2)[0], "u"), 10, 64)
@@ -483,7 +503,7 @@ func (a *App) collect() error {
 	if err != nil {
 		errs = append(errs, errors.New("HY2 traffic unavailable"))
 	}
-	if b, e := a.hyRequest("GET", "/online", nil); e == nil {
+	if b, e := a.hyRequest("GET", "/online", nil); e == nil && (!coreprocess.ContainerMode() || hyGeneration != "" && hyGeneration == coreprocess.Generation("guangyue-hy2.service")) {
 		var online map[string]int64
 		if json.Unmarshal(b, &online) == nil && online != nil {
 			live.connections[1] = true

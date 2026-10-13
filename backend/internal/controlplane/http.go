@@ -65,7 +65,7 @@ func (a *App) routes() http.Handler {
 	mux.HandleFunc("GET /api/site", a.siteInfo)
 	mux.HandleFunc("GET /api/access-status", a.accessStatus)
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
-		jsonResponse(w, 200, object{"ok": true, "version": version, "edition": a.cfg.edition(), "product": a.cfg.productName(), "site_id": a.cfg.siteID(), "role": a.cfg.deploymentRole()})
+		jsonResponse(w, 200, object{"ok": true, "version": version, "edition": a.cfg.edition(), "product": a.cfg.productName(), "site_id": a.cfg.siteID(), "role": a.cfg.deploymentRole(), "maintenance": a.maintenancePending(), "background_frozen": a.maintenanceFrozen()})
 	})
 	mux.HandleFunc("GET /sub/{token}", a.serveSubscription)
 	mux.HandleFunc("GET /public-sub/{user}/{token}", a.serveSubscription)
@@ -332,7 +332,7 @@ func (a *App) state(w http.ResponseWriter, r *http.Request, actor Record) {
 		system["node_save_receipts"] = true
 		system["reality_sni"] = a.cfg.RealitySNI
 		system["hy2_old_connections"] = a.oldHYConnections
-		system["services"] = []object{{"name": "Xray", "active": a.cfg.Dev || corePID("guangyue-xray.service") > 0}, {"name": "Hysteria2", "active": a.cfg.Dev || corePID("guangyue-hy2.service") > 0}, {"name": "Nginx", "active": a.cfg.Dev || corePID("nginx.service") > 0}}
+		system["services"] = []object{{"name": "Xray", "active": a.cfg.Dev || corePID("guangyue-xray.service") > 0}, {"name": "Hysteria2", "active": a.cfg.Dev || corePID("guangyue-hy2.service") > 0}, a.gatewayServiceStatus()}
 	}
 	history := []object{}
 	query := "SELECT hour,SUM(upload),SUM(download) FROM traffic WHERE hour>=?"

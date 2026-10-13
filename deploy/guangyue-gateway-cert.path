@@ -1,0 +1,9 @@
+[Unit]
+Description=Watch Guangyue native gateway certificate generation
+
+[Path]
+PathChanged=/var/lib/guangyue/tls/certificate-generation.json
+Unit=guangyue-gateway-cert.service
+
+[Install]
+WantedBy=multi-user.target

@@ -211,7 +211,7 @@ class InfrastructureBundleTests(unittest.TestCase):
         import shutil
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp)
-            for name in ['infrastructure.py','common.py']:
+            for name in ['infrastructure.py','common.py','deployment_mode.py']:
                 shutil.copyfile(Path(install.__file__).parent/name,root/name)
             subprocess.run([sys.executable,str(root/'infrastructure.py'),'--help'],check=True,capture_output=True)
             self.assertFalse((root/'__pycache__').exists())
@@ -285,6 +285,7 @@ class PostgresRecoveryTests(unittest.TestCase):
                 return subprocess.CompletedProcess(args, 0, stdout=self.toc)
             if args[0] == 'pg_restore':
                 self.assertIn('--file=-', args)
+                self.assertIn('--no-owner', args)
                 self.assertFalse(any(arg == '-n' or arg.startswith('--schema') for arg in args))
                 self.assertNotIn('--clean', args)
                 kwargs['stdout'].write(b'CREATE SCHEMA gy_site_a;\nCREATE TABLE gy_site_a.users(id bigint);\n')
@@ -304,6 +305,8 @@ class PostgresRecoveryTests(unittest.TestCase):
                 self.assertIn("EXECUTE 'DROP SCHEMA gy_site_a RESTRICT'", sql)
                 self.assertIn('CREATE SCHEMA gy_site_a;', sql)
                 self.assertLess(sql.index('DROP SCHEMA gy_site_a'), sql.index('CREATE SCHEMA gy_site_a'))
+                self.assertLess(sql.index('DROP SCHEMA gy_site_a'), sql.index('SET LOCAL ROLE "fixture";'))
+                self.assertLess(sql.index('SET LOCAL ROLE "fixture";'), sql.index('CREATE SCHEMA gy_site_a'))
             return subprocess.CompletedProcess(args, 0, stdout=b'')
 
         with patch.object(infrastructure.subprocess, 'run', side_effect=command):
@@ -311,6 +314,36 @@ class PostgresRecoveryTests(unittest.TestCase):
         self.assertEqual([args[0] for args in calls], ['pg_restore', 'pg_restore', 'psql'])
         self.assertTrue(scripts)
         self.assertTrue(all(not script.parent.exists() for script in scripts))
+
+    def test_invalid_or_absent_application_role_fails_before_archive_or_database_execution(self):
+        for username in ('', '%00', '%0A', 'a' * 64):
+            config = dict(self.config, database={'driver': 'postgres', 'dsn': 'postgres://' + username + ':fixture@127.0.0.1/fixture'})
+            with self.subTest(username=username), patch.object(infrastructure, 'postgres_run') as command:
+                with self.assertRaisesRegex(ValueError, 'application role'):
+                    infrastructure.restore_postgres(config, self.snapshot)
+                command.assert_not_called()
+
+    def test_restore_role_is_a_quoted_identifier_for_native_and_docker_transports(self):
+        config = dict(self.config, database={'driver': 'postgres', 'dsn': 'postgres://fixture%22role:fixture@127.0.0.1/fixture'})
+        for docker_transport in (False, True):
+            scripts = []
+            def command(args, *_transport, **kwargs):
+                if args[:2] == ['pg_restore', '--list']:
+                    return subprocess.CompletedProcess(args, 0, stdout=self.toc)
+                if args[0] == 'pg_restore':
+                    kwargs['stdout'].write(b'CREATE SCHEMA gy_site_a;\n')
+                else:
+                    scripts.append(Path(args[args.index('--file') + 1]).read_text())
+                return subprocess.CompletedProcess(args, 0, stdout=b'')
+            with self.subTest(docker=docker_transport), patch.object(infrastructure.deployment_mode, 'docker', return_value=docker_transport):
+                if docker_transport:
+                    with patch('docker_deploy.postgres_run', side_effect=command):
+                        infrastructure.restore_postgres(config, self.snapshot)
+                else:
+                    with patch.object(infrastructure.subprocess, 'run', side_effect=command):
+                        infrastructure.restore_postgres(config, self.snapshot)
+            self.assertEqual(len(scripts), 1)
+            self.assertIn('SET LOCAL ROLE "fixture""role";', scripts[0])
 
     def test_corrupt_archive_or_sql_failure_is_private_and_export_failure_never_connects(self):
         for stage in ['list', 'export', 'apply']:

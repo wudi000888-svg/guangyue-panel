@@ -13,6 +13,7 @@ from urllib.parse import urlparse, unquote, parse_qs
 import subprocess
 import tempfile
 from pathlib import Path
+import deployment_mode
 from common import deployment_lock
 
 PROFILE = Path('/etc/guangyue-infrastructure.json')
@@ -106,10 +107,17 @@ def postgres_env(config):
     env.setdefault('PGCONNECT_TIMEOUT','10')
     return env
 
+
+def postgres_run(args, config, **kwargs):
+    if deployment_mode.docker():
+        import docker_deploy
+        return docker_deploy.postgres_run(args, config, **kwargs)
+    return subprocess.run(args, env=postgres_env(config), **kwargs)
+
 def dump_postgres(config, path):
     env=postgres_env(config)
     with Path(path).open('xb') as output:
-        subprocess.run(['pg_dump','--format=custom','--schema=gy_'+config.get('site_id','default')],env=env,stdout=output,stderr=subprocess.PIPE,check=True)
+        postgres_run(['pg_dump','--format=custom','--schema=gy_'+config.get('site_id','default')],config,stdout=output,stderr=subprocess.PIPE,check=True)
 
 def restore_postgres(config, path):
     """Restore a trusted, site-scoped snapshot without cascading into other sites.
@@ -126,8 +134,15 @@ def restore_postgres(config, path):
     if path.is_symlink() or not path.is_file():
         raise ValueError('PostgreSQL recovery requires a regular snapshot file')
     env=postgres_env(config)
+    role = env.get('PGUSER', '')
+    if not role or len(role.encode('utf-8')) > 63 or any(ord(character) < 32 or ord(character) == 127 for character in role):
+        raise ValueError('PostgreSQL recovery requires an explicit valid application role')
+    # The Docker maintenance transport connects as its local administrator;
+    # native maintenance already connects as this application role. Quote the
+    # validated DSN identifier rather than trusting archive ownership metadata.
+    quoted_role = '"' + role.replace('"', '""') + '"'
     try:
-        listing = subprocess.run(['pg_restore', '--list', str(path)], env=env,
+        listing = postgres_run(['pg_restore', '--list', str(path)], config,
                                  capture_output=True, check=True).stdout.decode('utf-8')
     except (subprocess.CalledProcessError, UnicodeError):
         raise ValueError('PostgreSQL snapshot could not be validated') from None
@@ -215,19 +230,24 @@ $guangyue_restore$;
         descriptor = os.open(script, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         with os.fdopen(descriptor, 'wb') as output:
             output.write(cleanup.encode('utf-8'))
+            # psql --single-transaction begins the server transaction before
+            # reading this script. Keep cleanup under its existing connection
+            # role, then create every restored object as the app role. This
+            # also repairs a previous interrupted administrator-owned restore.
+            output.write(('SET LOCAL ROLE ' + quoted_role + ';\n').encode('utf-8'))
             output.flush()
             try:
                 # Namespace filtering omits the SCHEMA TOC item. The whole
                 # archive was scoped above, so restore it including CREATE
                 # SCHEMA and its privileges rather than filtering a second time.
-                subprocess.run(['pg_restore', '--file=-', '--no-owner', '--exit-on-error',
-                                str(path)], env=env,
+                postgres_run(['pg_restore', '--file=-', '--no-owner', '--exit-on-error',
+                                str(path)], config,
                                stdout=output, stderr=subprocess.PIPE, check=True)
             except subprocess.CalledProcessError:
                 raise ValueError('PostgreSQL snapshot could not be decoded; database was not changed') from None
         try:
-            subprocess.run(['psql', '-X', '--no-password', '--set=ON_ERROR_STOP=1',
-                            '--single-transaction', '--file', str(script)], env=env,
+            postgres_run(['psql', '-X', '--no-password', '--set=ON_ERROR_STOP=1',
+                            '--single-transaction', '--file', str(script)], config,
                            capture_output=True, check=True)
         except subprocess.CalledProcessError:
             # SQL errors can echo sensitive row values. Never expose raw psql

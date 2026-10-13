@@ -131,6 +131,14 @@ go_version = subprocess.check_output([go, 'env', 'GOVERSION'], cwd=root / 'backe
 collect('golang-go', go_version, goroot, 'generic', 'BSD-3-Clause')
 (out / 'GO-LICENSE.txt').write_text((Path(goroot) / 'LICENSE').read_text())
 go_modules(root / 'backend')
+mihomo_source = root / '.cache/mihomo-source'
+collect('github.com/MetaCubeX/mihomo', 'v1.19.30', mihomo_source, 'golang', 'GPL-3.0')
+go_modules(mihomo_source)
+packages['golang:github.com/MetaCubeX/mihomo@v1.19.30'].update(
+    downloadLocation='https://github.com/MetaCubeX/mihomo/tree/ac017cdd246ce8bd547653d927e7bf77d7ee73d5',
+    sourceInfo='Unmodified official amd64-compatible executable. Fixed complete upstream source, build scripts, Go module locks and GPL license are included as licenses/mihomo-source.tar.gz and MIHOMO-SOURCE.json.',
+    checksums=[{'algorithm': 'SHA256', 'checksumValue': '8ad44e28fe72be4640254b96741b677f4074991b99186cc4486a1c28ded02b1a'}],
+)
 xray_source = root / '.cache/xray-monitor-source'
 collect('github.com/xtls/xray-core', 'v26.3.27-guangyue-sessions1', xray_source, 'golang', 'MPL-2.0')
 go_modules(xray_source)

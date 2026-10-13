@@ -21,10 +21,13 @@ import urllib.request
 import uuid
 from pathlib import Path
 sys.dont_write_bytecode = True
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 import update_state as state
 from common import deployment_lock
 import upgrade
 import network
+import deployment_mode
+import maintenance_gate
 
 API = 'https://api.github.com/repos/' + state.REPO + '/releases?per_page=100'
 DOWNLOAD = 'https://github.com/' + state.REPO + '/releases/download/'
@@ -83,6 +86,8 @@ def catalog(force=False):
             names = {a.get('name') for a in row.get('assets', []) if a.get('state') == 'uploaded'}
             editions = [e for e in ['lite', 'pro'] if asset_name(v, e) in names]
             if 'SHA256SUMS' not in names or not editions: continue
+            if deployment_mode.docker() and not {'DOCKER_IMAGES.json', 'guangyue-panel-docker-' + v + '-linux-amd64.tar.gz'} <= names:
+                continue
             releases.append({'version': v, 'name': str(row.get('name') or tag)[:160], 'notes': str(row.get('body') or '')[:10000], 'published_at': row.get('published_at'), 'url': 'https://github.com/' + state.REPO + '/releases/tag/' + tag, 'editions': editions})
         cached = {'checked_at': int(time.time()), 'releases': sorted(releases, key=lambda r: state.version(r['version']), reverse=True)}
         state.write('catalog.json', cached)
@@ -123,7 +128,7 @@ def extract(archive, destination, prefix):
             name = member.name
             if len(seen) >= 10000 or name in seen or name.startswith('/') or '..' in Path(name).parts or Path(name).parts[0] != prefix or not (member.isfile() or member.isdir()): raise ValueError('安装包包含不安全路径或链接')
             seen.add(name); total += member.size
-            if total > 300 << 20: raise ValueError('安装包解压大小超过限制')
+            if total > 800 << 20: raise ValueError('安装包解压大小超过限制')
             target = destination / name
             if member.isdir(): target.mkdir(mode=0o755, parents=True, exist_ok=True)
             else:
@@ -155,7 +160,7 @@ def fetch_bundle(target, edition, temp):
     entries = [line.split('  ', 1) for line in sums.read_text().splitlines()]
     matches = [h for h, n in entries if n == name and re.fullmatch('[a-f0-9]{64}', h)]
     if len(matches) != 1: raise ValueError('发行版缺少唯一的安装包校验值')
-    archive = temp / name; download(DOWNLOAD + 'v' + target + '/' + name, archive, 100 << 20)
+    archive = temp / name; download(DOWNLOAD + 'v' + target + '/' + name, archive, 300 << 20)
     if hashlib.sha256(archive.read_bytes()).hexdigest() != matches[0]: raise ValueError('下载文件校验失败')
     return extract(archive, temp, name.removesuffix('.tar.gz'))
 
@@ -174,6 +179,7 @@ def status():
 
 
 def reconcile_panel_proxy():
+    if deployment_mode.private_gateway(): return
     # Custom or invalid Nginx configuration must not disable the maintenance
     # socket. The migration restores its original fragment on reload failure;
     # keep a safe, persistent warning and retry on the next helper startup.
@@ -200,7 +206,11 @@ def execute(request, local_bundle=None):
             target = request['version']; state.require_floor(target)
             upgrade.preflight()
             if request['action'] == 'rollback':
-                upgrade.rollback(target, progress)
+                if deployment_mode.docker():
+                    import docker_deploy
+                    docker_deploy.rollback(target, progress)
+                else:
+                    upgrade.rollback(target, progress)
             else:
                 if state.version(target) <= state.version(state.current()): raise ValueError('请选择高于当前版本的更新')
                 edition = json.loads(state.CONFIG.read_text()).get('edition', 'lite')
@@ -210,7 +220,11 @@ def execute(request, local_bundle=None):
                     progress('verifying'); verify_payload(bundle)
                     if (bundle / 'VERSION').read_text().strip() != target or (bundle / 'EDITION').read_text().strip() != edition: raise ValueError('安装包版本或类型不匹配')
                     cores(bundle)
-                    upgrade.upgrade(bundle, progress=progress)
+                    if deployment_mode.docker():
+                        import docker_deploy
+                        docker_deploy.upgrade(bundle, progress=progress)
+                    else:
+                        upgrade.upgrade(bundle, progress=progress)
             progress('succeeded')
     except Exception as exc:
         # Record locations and exception type only; command arguments/output may
@@ -265,22 +279,45 @@ def submit(request, launch=True):
 
 
 def recover():
+    if deployment_mode.docker():
+        import docker_deploy
+        try:
+            with deployment_lock():
+                docker_deploy.recover()
+                op = state.read('operation.json')
+                if op and op['stage'] in ACTIVE:
+                    op.update(stage='failed', error='上次版本操作被中断，已完成恢复，请核对当前版本后重试', updated_at=int(time.time()))
+                    state.write('operation.json', op)
+        except ValueError as exc:
+            if 'another install' in str(exc): return
+            raise
+        return
     journal = state.read('transaction.json'); op = state.read('operation.json')
     if not journal and not (op and op['stage'] in ACTIVE): return
     try:
         with deployment_lock():
             if journal:
-                if journal['phase'] == 'preparing':
-                    upgrade.run('systemctl', 'start', *upgrade.UNITS)
+                if journal['phase'] == 'committed':
+                    upgrade.health(journal['target'])
+                elif journal['phase'] == 'preparing':
+                    upgrade.run('systemctl', 'start', *upgrade.managed_units())
                     upgrade.health(journal['previous'])
+                    if deployment_mode.private_gateway():
+                        state.write('transaction.json', dict(journal, phase='committed', target=journal['previous']))
                 else:
                     p = Path(journal['backup'])
                     if not p.is_relative_to('/root/guangyue-backups'): raise ValueError('恢复记录无效')
                     if journal['phase'] == 'healthy':
                         upgrade.health(journal['target'])
                         state.remember(p, json.loads((p / 'config.json').read_text()), journal['schema'])
+                        if deployment_mode.private_gateway():
+                            state.setup(journal['target'], state.APP / 'deploy')
+                            state.write('transaction.json', dict(journal, phase='committed'))
                     else:
                         upgrade.restore_current(p)
+                        if deployment_mode.private_gateway():
+                            state.write('transaction.json', dict(journal, phase='committed', target=state.current()))
+                if deployment_mode.private_gateway(): maintenance_gate.finish()
                 state.write('transaction.json', None)
             if op and op['stage'] in ACTIVE:
                 op.update(stage='failed', error='上次版本操作被中断，请核对当前版本后重试', updated_at=int(time.time())); state.write('operation.json', op)
@@ -297,7 +334,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
         global last_activity
         last_activity = time.monotonic()
         try:
-            if self.path == '/network' and self.command == 'GET': result = network.status()
+            if self.path == '/network' and deployment_mode.private_gateway():
+                if self.command == 'POST': raise ValueError('独立部署默认保持宿主网络参数；请通过 SSH 单独管理系统网络优化')
+                result = {'bbr': False, 'hy2': False, 'revision': 'isolated-deployment', 'warning': '本部署保持宿主机网络参数', 'operation': None}
+            elif self.path == '/network' and self.command == 'GET': result = network.status()
             elif self.path == '/network' and self.command == 'POST':
                 size = int(self.headers.get('Content-Length', '0'))
                 if size <= 0 or size > 1024: raise ValueError('网络优化请求无效')
@@ -344,9 +384,9 @@ def serve():
     # modules. Reconcile this scoped proxy addition once the new helper starts,
     # including after the first status request following an online upgrade.
     reconcile_panel_proxy()
-    network.setup()
+    if not deployment_mode.private_gateway(): network.setup()
     loaded = (state.HELPER / 'VERSION').read_text()
-    if (state.read('network-operation.json') or {}).get('stage') in {'queued', 'applying'}:
+    if not deployment_mode.private_gateway() and (state.read('network-operation.json') or {}).get('stage') in {'queued', 'applying'}:
         subprocess.run(['systemctl', 'start', '--no-block', 'guangyue-network.service'], check=True, capture_output=True, timeout=5)
     if os.environ.get('LISTEN_PID') != str(os.getpid()) or os.environ.get('LISTEN_FDS') != '1': raise ValueError('更新服务必须由 systemd socket 启动')
     server = Server(state.SOCKET, Handler, bind_and_activate=False)
@@ -374,7 +414,13 @@ if __name__ == '__main__':
             state.write('operation.json', dict(request, stage='queued')); execute(request, bundle)
             if state.read('operation.json')['stage'] != 'succeeded': raise ValueError(state.read('operation.json')['error'])
         elif len(sys.argv) == 3 and sys.argv[1] == 'rollback':
-            with deployment_lock(): upgrade.preflight(); upgrade.rollback(sys.argv[2])
+            with deployment_lock():
+                upgrade.preflight()
+                if deployment_mode.docker():
+                    import docker_deploy
+                    docker_deploy.rollback(sys.argv[2])
+                else:
+                    upgrade.rollback(sys.argv[2])
         else: raise ValueError('Use serve, status, install-bundle PATH, or rollback VERSION')
     except Exception as exc:
         raise SystemExit(str(exc) if isinstance(exc, ValueError) else 'Update operation failed; inspect service health and private backup')

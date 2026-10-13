@@ -14,6 +14,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/wudi000888-svg/guangyue-panel/backend/internal/coreprocess"
 )
 
 func runtimeServiceCommand(name string) (string, []string, error) {
@@ -32,7 +34,14 @@ func runtimeServiceCommand(name string) (string, []string, error) {
 // Exactly one child lifetime per systemd MainPID. Exiting children terminate
 // the wrapper, allowing systemd to restart with a new accounting generation.
 func superviseRuntimeChild(ctx context.Context, cmd *exec.Cmd, dir string, out, errOut io.Writer) error {
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	container := coreprocess.ContainerMode()
+	if container && syscall.Getpgrp() != os.Getpid() {
+		return errors.New("container wrapper must own its process group")
+	}
+	// Container wrappers and their children share one group so the supervisor
+	// can terminate every descendant even if a wrapper crashes. Native wrappers
+	// retain their independent child group and systemd-owned MainPID.
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: !container}
 	cmd.Stdout = &runtimeLogWriter{dir: dir, out: out}
 	cmd.Stderr = &runtimeLogWriter{dir: dir, out: errOut}
 	cmd.WaitDelay = 2 * time.Second
@@ -46,14 +55,18 @@ func superviseRuntimeChild(ctx context.Context, cmd *exec.Cmd, dir string, out, 
 		return err
 	case <-ctx.Done():
 		// Signal the whole child group, including the panel's managed bridge.
-		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
+		pgid := cmd.Process.Pid
+		if container {
+			pgid = os.Getpid()
+		}
+		_ = syscall.Kill(-pgid, syscall.SIGTERM)
 		timer := time.NewTimer(12 * time.Second)
 		defer timer.Stop()
 		select {
 		case err := <-done:
 			return err
 		case <-timer.C:
-			_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+			_ = syscall.Kill(-pgid, syscall.SIGKILL)
 			return <-done
 		}
 	}
@@ -63,6 +76,16 @@ func runRuntimeService(name string) int {
 	path, args, err := runtimeServiceCommand(name)
 	if err != nil {
 		return 2
+	}
+	if coreprocess.ContainerMode() {
+		if syscall.Getpgrp() != os.Getpid() {
+			return 2
+		}
+		cleanup, err := coreprocess.RegisterContainerWrapper(name)
+		if err != nil {
+			return 1
+		}
+		defer cleanup()
 	}
 	// The child keeps the existing service's memory/concurrency environment;
 	// these limits apply only to the small output/signal wrapper itself.

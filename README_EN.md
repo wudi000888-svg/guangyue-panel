@@ -5,7 +5,7 @@
 
 A network resource console for cross-border commerce teams. Lite defaults to an independent SQLite site; Pro defaults to the master with PostgreSQL, Redis, durable background tasks, unified subscriptions and full control of sub-site permissions. A pairing token can be generated after setup. Lite can issue tokens but only Pro can use one to take over a site. Both editions share Go, Vue 3 and the proxy cores. See [edition selection and Pro setup](docs/EDITIONS.md).
 
-[中文](README.md) · [Installation](docs/INSTALL.md) · [User guide](docs/USER_GUIDE.md) · [Operations](docs/OPERATIONS.md)
+[中文](README.md) · [One-click installation](docs/INSTALL.md) · [Docker](docs/DOCKER.md) · [User guide](docs/USER_GUIDE.md) · [Operations](docs/OPERATIONS.md)
 
 ## Features
 
@@ -14,24 +14,30 @@ A network resource console for cross-border commerce teams. Lite defaults to an 
 - Node traffic multipliers (0–100×), permission groups, versioned plan templates and manual entitlements without payments; [guide](docs/PLANS.md).
 - Separate raw and quota usage, 30-day/calendar-month periods and per-node usage reports. Node deletion automatically removes group membership.
 - Multi-user VLESS Reality/Vision and Hysteria 2, including protected default direct nodes.
-- Nginx TCP 443 SNI routing alongside website HTTPS; HY2 shares the port number over UDP.
+- Interactive Docker or native installation, an independent TCP 443 HTTPS/Reality gateway, automatic TLS certificates and HY2 UDP 443.
 - Private HTTP CONNECT / SOCKS5 exits, subscription and single-node imports, source ownership and staggered daily updates.
 - Independently managed public sources, blacklist, bounded health checks and separate subscription credentials.
 - User expiry, protocol permissions, shared quotas, node links, QR codes and member-visible quality evidence.
-- Chinese / English, light / dark themes, simple / professional navigation, inbox and site settings.
+- Chinese / English, light / dark themes, customizable navigation, inbox and site settings.
 - Per-node DNS/IPv6 policy, encrypted stored credentials, backup/restore, normal/no-logs runtime modes.
 
 ## Deployment
 
-The release installer supports **Linux amd64 with Debian 12/13 or Ubuntu 22.04/24.04 and systemd**. Start with 1 CPU / 1 GiB RAM; actual usage depends on active cores, traffic, probes and imported resources. Each VPS runs its own proxy data plane. Database high availability is not included.
+From 0.41.0, the installer defaults to **Docker**, with **native systemd** available in the same wizard. Its OS preflight accepts Linux amd64 Debian 12/13 and Ubuntu 22.04/24.04. Consult the release CI for actual VM verification; accepting Debian in preflight is not a claim of completed native Debian VM testing. Start with 1 CPU / 1 GiB for Lite or 2 CPU / 2 GiB for Pro, plus capacity for other applications and backups. Docker requires Linux 5.4 or newer.
 
-1. Point one or two DNS names to your VPS. One name works; separate panel and node names are recommended. Open TCP 80/443 and UDP 443.
-2. Follow the [complete installation guide](docs/INSTALL.md) for packages, ACME certificates and checksum-verified release artifacts.
-3. Verify the bundled Xray session extension and fetch pinned upstream Mihomo using the included scripts. Xray source and its MPL license are included.
-4. Run `python3 deploy/install.py --help`. Preflight is read-only; installation requires `--apply`.
-5. Read initial owner credentials locally on the server, sign in, change the password, create a member and import the member subscription into a compatible client.
+1. Point one or two domains directly to the VPS and disable CDN proxying. Docker currently exposes IPv4 only, so use A records; choose native for public IPv6/AAAA. TCP and UDP 443 must both be free and allowed through the security group. Existing Nginx HTTP 80 remains intact.
+2. Run the script below, choose the edition, domains and backend, accept ACME terms and review the detected installation plan. Packages, verified components and TLS-ALPN certificates are prepared automatically.
+3. Read `/var/lib/guangyue/initial-owner.json` privately, log in as `owner`, change the random password and test real VLESS/HY2 connections.
 
-For an existing HTTPS server, follow [Nginx coexistence](docs/NGINX.md) before applying the installer. It refuses occupied ports and existing installations. There is no Docker deployment promise in this release.
+```bash
+gy_install_file=$(mktemp)
+curl --proto '=https' --proto-redir '=https' -fsSL \
+  https://github.com/wudi000888-svg/guangyue-panel/releases/latest/download/install.sh \
+  -o "$gy_install_file" && sudo bash "$gy_install_file"
+rm -f "$gy_install_file"
+```
+
+The script pins a complete official release and verifies installer/runtime/image archives. Images are loaded from public release assets without a registry account. `--check` performs read-only inspection; `--resume` retains the original plan, credentials and keys. It refuses foreign port ownership and leaves Nginx configuration intact. Existing Nginx installations keep their original upgrade path; see the [legacy guide](docs/LEGACY_INSTALL.md).
 
 ## Evidence and limits
 

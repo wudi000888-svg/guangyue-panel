@@ -18,7 +18,7 @@ import (
 	"strings"
 )
 
-const version = "0.40.1"
+const version = "0.41.0"
 
 const businessAdoptionFile = "business-adoption.json"
 
@@ -29,6 +29,7 @@ type businessAdoption struct {
 }
 
 type Config struct {
+	PrivateGateway  bool                `json:"private_gateway,omitempty"`
 	HY2Optimized    bool                `json:"hy2_optimized,omitempty"`
 	Role            string              `json:"role,omitempty"`
 	ControllerURL   string              `json:"controller_url,omitempty"`

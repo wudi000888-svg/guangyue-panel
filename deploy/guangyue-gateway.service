@@ -1,0 +1,37 @@
+[Unit]
+Description=Guangyue isolated TCP 443 and automatic TLS gateway
+After=network-online.target guangyue.service guangyue-xray.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=guangyue
+Group=guangyue
+ExecStart=/opt/guangyue-personal/bin/guangyue-gateway -config /etc/guangyue-gateway.json
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=15
+Environment=GOMEMLIMIT=96MiB
+Environment=GOMAXPROCS=2
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/guangyue/gateway /var/lib/guangyue/tls
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictNamespaces=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+LockPersonality=true
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+MemoryHigh=128M
+MemoryMax=192M
+TasksMax=512
+LimitNOFILE=2048
+
+[Install]
+WantedBy=multi-user.target

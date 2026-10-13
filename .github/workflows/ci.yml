@@ -13,7 +13,7 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     services:
       postgres:
         image: postgres:17-alpine
@@ -63,6 +63,7 @@ jobs:
             build/releases/*.tar.gz
             build/releases/SHA256SUMS
             build/releases/SBOM.spdx.json
+            build/releases/install.sh
           retention-days: 7
   installation:
     name: installation (${{ matrix.os }}, ${{ matrix.edition }})
@@ -120,3 +121,102 @@ jobs:
           sudo cp -R "$bundle" /root/guangyue-ci-bundle/release
           sudo chown -R root:root /root/guangyue-ci-bundle/release
           sudo --preserve-env=GITHUB_ACTIONS,GY_INTEGRATION_EDITION python3 deploy/tests/integration.py /root/guangyue-ci-bundle/release
+  docker-build:
+    name: docker image archive (linux/amd64)
+    needs: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Download the exact checked native artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download "$GITHUB_RUN_ID" --name linux-amd64 --dir build/releases
+      - name: Build immutable application and database image archive
+        run: bash scripts/build-docker.sh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: docker-linux-amd64
+          path: |
+            build/docker-releases/*.tar.gz
+            build/docker-releases/DOCKER_IMAGES.json
+            build/docker-releases/SHA256SUMS
+          retention-days: 7
+  docker-installation:
+    name: docker installation (${{ matrix.edition }})
+    needs: [check, docker-build]
+    strategy:
+      fail-fast: false
+      matrix:
+        edition: [lite, pro]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: '1.26.9'
+          cache-dependency-path: backend/go.sum
+      - name: Record the exact Go executable for isolated CI versions
+        run: printf 'GY_GO=%s\n' "$(command -v go)" >> "$GITHUB_ENV"
+      - name: Download native and Docker artifacts for this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download "$GITHUB_RUN_ID" --name linux-amd64 --dir build/releases
+          gh run download "$GITHUB_RUN_ID" --name docker-linux-amd64 --dir build/docker-releases
+      - name: Prepare disposable host with its existing Nginx on port 80
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y nginx python3 curl openssl iproute2
+          sudo systemctl enable --now nginx
+          sudo chmod go-w /opt
+          sudo install -d -m 0700 /root/guangyue-docker-ci
+          sudo cp -R build/releases build/docker-releases /root/guangyue-docker-ci/
+          sudo chown -R root:root /root/guangyue-docker-ci
+      - name: Real Docker install, TLS, Reality/HY2, isolated restarts and recovery
+        env:
+          GY_DOCKER_INTEGRATION_EDITION: ${{ matrix.edition }}
+        run: sudo --preserve-env=GITHUB_ACTIONS,GY_DOCKER_INTEGRATION_EDITION,GY_GO python3 deploy/tests/docker_integration.py /root/guangyue-docker-ci/releases /root/guangyue-docker-ci/docker-releases
+  native-oneclick:
+    name: native one-click (${{ matrix.os }}, ${{ matrix.edition }})
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            edition: lite
+          - os: ubuntu-24.04
+            edition: pro
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: '1.26.9'
+          cache-dependency-path: backend/go.sum
+      - name: Download this commit's exact native installation artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download "$GITHUB_RUN_ID" --name linux-amd64 --dir build/releases
+      - name: Prepare disposable server and protected release
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y nginx python3 curl openssl
+          sudo systemctl enable --now nginx
+          sudo chmod go-w /opt
+          cd build/releases
+          sha256sum -c SHA256SUMS
+          tar -xzf guangyue-panel-${{ matrix.edition }}-*-linux-amd64.tar.gz
+          bundle=$(realpath guangyue-panel-${{ matrix.edition }}-*-linux-amd64)
+          sudo install -d -m 0700 /root/guangyue-oneclick-ci
+          sudo cp -R "$bundle" /root/guangyue-oneclick-ci/release
+          sudo chown -R root:root /root/guangyue-oneclick-ci/release
+          printf 'GY_GO=%s\n' "$(command -v go)" >> "$GITHUB_ENV"
+      - name: Real private gateway, untouched Nginx, certificate renewal and updater recovery
+        env:
+          GY_NATIVE_EDITION: ${{ matrix.edition }}
+          GY_ONECLICK_INTEGRATION: '1'
+        run: sudo --preserve-env=GITHUB_ACTIONS,GY_NATIVE_EDITION,GY_ONECLICK_INTEGRATION,GY_GO python3 deploy/tests/native_oneclick_integration.py /root/guangyue-oneclick-ci/release

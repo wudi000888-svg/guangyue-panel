@@ -114,7 +114,7 @@ export type State = {
     hy2_host: string;
     reality_sni?: string;
     cert_expires: number;
-    services?: { name: string; active: boolean }[];
+    services?: { name: string; active: boolean; checking?: boolean; checked_at?: number }[];
   };
   history: { hour: number; upload: number; download: number }[];
   audit: { at: number; actor: string; action: string; target: string }[];

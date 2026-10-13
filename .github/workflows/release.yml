@@ -33,7 +33,9 @@ jobs:
           commit=$(git rev-parse HEAD)
           run_id=$(gh run list --workflow ci.yml --commit "$commit" --status success --limit 20 --json databaseId --jq '.[0].databaseId // empty')
           test -n "$run_id" || { echo 'Run full CI, including installation tests, successfully before publishing this tag.'; exit 1; }
-          gh run download "$run_id" --name linux-amd64 --dir build/releases
+          gh run download "$run_id" --name linux-amd64 --dir build/native-artifact
+          gh run download "$run_id" --name docker-linux-amd64 --dir build/docker-artifact
+          python3 scripts/merge-release-assets.py "$(cat VERSION)" build/native-artifact build/docker-artifact build/releases
           (cd build/releases && sha256sum -c SHA256SUMS)
       - name: Upload, verify downloads and publish
         run: bash scripts/publish-release.sh "$RELEASE_TAG"
