@@ -2,6 +2,7 @@ import importlib.util
 import hashlib
 import json
 import os
+import shutil
 import stat
 import subprocess
 import sys
@@ -38,6 +39,83 @@ class MaintenanceTests(unittest.TestCase):
             with patch.object(upgrade, 'run') as command:
                 upgrade.upgrade_panel_proxy()
                 command.assert_not_called()
+
+    def test_isolated_certificate_entry_disables_cache_before_local_imports(self):
+        helper = self.root / 'certificate-helper'; helper.mkdir()
+        for name in ['gateway_certificate.py', 'certificates.py', 'common.py', 'deployment_mode.py', 'update_state.py']:
+            shutil.copyfile(Path(upgrade.__file__).parent / name, helper / name)
+        # Execute the actual entry source without its root-only CLI mutation.
+        # -I ignores PYTHONDONTWRITEBYTECODE on regular CPython; explicit code
+        # must disable writes before any of these local imports occurs.
+        code = 'import runpy,sys; runpy.run_path(sys.argv[1], run_name="certificate_fixture"); assert sys.dont_write_bytecode'
+        result = subprocess.run([sys.executable, '-I', '-c', code, str(helper / 'gateway_certificate.py')], capture_output=True, env=dict(os.environ, PYTHONDONTWRITEBYTECODE='1'), timeout=15)
+        self.assertEqual(result.returncode, 0)
+        self.assertFalse((helper / '__pycache__').exists())
+
+    def helper_restore_fixture(self):
+        app, data, helper, units = (self.root / name for name in ['app', 'state', 'helper', 'units'])
+        for directory in (app, data, helper, units): directory.mkdir(mode=0o755)
+        (app / 'VERSION').write_text('0.41.1\n')
+        (app / 'program').write_text('original application\n')
+        (data / 'counter').write_text('original data\n')
+        (helper / 'VERSION').write_text('0.41.1\n')
+        (helper / 'gateway_certificate.py').write_text('original helper\n')
+        cache = helper / '__pycache__'; cache.mkdir(mode=0o755)
+        (cache / 'common.cpython-312.pyc').write_bytes(b'old compiled cache')
+        (helper / 'old.pyc').write_bytes(b'legacy flat cache')
+        config = self.root / 'config.json'; config.write_text(json.dumps({'database': {'driver': 'sqlite'}}))
+        for name in [*(unit + '.service' for unit in upgrade.UNITS), 'guangyue-gateway.service', 'guangyue-updater.socket', 'guangyue-updater.service', 'guangyue-gateway-cert.path', 'guangyue-gateway-cert.service', 'guangyue-gateway-cert.timer']:
+            (units / name).write_text('owned unit fixture\n')
+        return app, data, helper, units, config
+
+    def test_real_backup_and_restore_handle_only_protected_legacy_python_caches(self):
+        app, data, helper, units, config = self.helper_restore_fixture()
+        actual_copy = shutil.copy2
+        def copy_owned(source, target, *args, **kwargs):
+            def local(value):
+                text = str(value)
+                return units / Path(text).name if text.startswith('/etc/systemd/system/') else value
+            return actual_copy(local(source), local(target), *args, **kwargs)
+        def owned_path(value):
+            if str(value) == '/root/guangyue-backups': return self.root / 'backups'
+            return Path(value)
+        with patch.object(upgrade, 'APP', app), patch.object(upgrade, 'STATE', data), patch.object(upgrade, 'CONFIG', config), patch.object(upgrade.updates, 'HELPER', helper), patch.object(upgrade, 'NGINX_PANEL', self.root / 'no-nginx-panel'), patch.object(deployment_mode, 'private_gateway', return_value=True), patch.object(upgrade, 'Path', side_effect=owned_path), patch.object(upgrade.shutil, 'copy2', side_effect=copy_owned), patch.object(upgrade.shutil, 'chown'), patch.object(upgrade, 'restore_units'), patch.object(upgrade, 'run'), patch.object(upgrade, 'health') as health:
+            backup = upgrade.backup_current(json.loads(config.read_text()))
+            self.assertFalse((backup / 'helper/__pycache__').exists())
+            self.assertFalse(list((backup / 'helper').glob('*.pyc')))
+            # Already-written private backups may contain caches from the old
+            # entry point. Preserve their checksum verification, then skip only
+            # validated cache entries during the actual restoration.
+            shutil.copytree(helper / '__pycache__', backup / 'helper/__pycache__')
+            actual_copy(helper / 'old.pyc', backup / 'helper/old.pyc')
+            (backup / 'helper-checksums.json').write_text(json.dumps(upgrade.app_hashes(backup / 'helper')))
+            (app / 'program').write_text('faulty update\n')
+            (data / 'counter').write_text('uncommitted state\n')
+            (helper / 'gateway_certificate.py').write_text('uncommitted helper\n')
+            upgrade.restore_current(backup)
+            health.assert_called_once_with('0.41.1')
+        self.assertEqual((app / 'program').read_text(), 'original application\n')
+        self.assertEqual((data / 'counter').read_text(), 'original data\n')
+        self.assertEqual((helper / 'gateway_certificate.py').read_text(), 'original helper\n')
+        self.assertFalse((helper / '__pycache__').exists())
+        self.assertFalse((helper / 'old.pyc').exists())
+
+    def test_helper_cache_filter_rejects_unknown_directories_links_and_writable_cache(self):
+        for bad in ['unknown-directory', 'cache-link', 'cache-child-link', 'writable-cache', 'unknown-cache-file']:
+            with self.subTest(bad=bad):
+                helper = self.root / bad; helper.mkdir(mode=0o755)
+                code = helper / 'helper.py'; code.write_text('protected code\n')
+                cache = helper / '__pycache__'
+                if bad == 'unknown-directory': (helper / 'unexpected').mkdir()
+                elif bad == 'cache-link': cache.symlink_to(self.root, target_is_directory=True)
+                else:
+                    cache.mkdir(mode=0o755)
+                    if bad == 'cache-child-link': (cache / 'module.pyc').symlink_to(code)
+                    elif bad == 'writable-cache': cache.chmod(0o777)
+                    else: (cache / 'not-a-python-cache.txt').write_text('preserve\n')
+                with self.assertRaises(ValueError): upgrade._clear_helper_caches(helper)
+                self.assertTrue(cache.exists() or bad == 'unknown-directory')
+                self.assertEqual(code.read_text(), 'protected code\n')
 
     def test_committed_native_cleanup_failure_never_restores_precommit_data(self):
         config = self.root / 'config.json'; config.write_text('{}')

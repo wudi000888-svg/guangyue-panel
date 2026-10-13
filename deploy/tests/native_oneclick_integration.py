@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import traceback
 import urllib.request
 import uuid
 from pathlib import Path
@@ -176,6 +177,14 @@ def connections(subscription):
     return {node['id']: node['uri'].split('#', 1)[0] for node in subscription['nodes']}
 
 
+def recovery_diagnostic(stage, error):
+    # Transaction recovery deliberately hides command output and credentials.
+    # Preserve only the failing fixture stage, exception type and code location
+    # so a genuine restore error cannot be mistaken for a missing test hook.
+    frames = ','.join(Path(frame.filename).name + ':' + str(frame.lineno) for frame in traceback.extract_tb(error.__traceback__))
+    print('CI recovery failure during ' + stage + ': ' + type(error).__name__ + ' at ' + frames, file=sys.stderr, flush=True)
+
+
 def execute(request, bundle=None, expect='succeeded', certificate=None):
     state.write('operation.json', dict(request, stage='queued', queued_at=int(time.time())))
     windows = []
@@ -185,8 +194,16 @@ def execute(request, bundle=None, expect='succeeded', certificate=None):
         frozen_window(certificate, version)
         windows.append('prepared')
     def checked_restore(backup):
-        original_restore(backup)
-        frozen_window(certificate, (Path(backup) / 'app/VERSION').read_text().strip())
+        try:
+            original_restore(backup)
+        except Exception as error:
+            recovery_diagnostic('restore_current', error)
+            raise
+        try:
+            frozen_window(certificate, (Path(backup) / 'app/VERSION').read_text().strip())
+        except Exception as error:
+            recovery_diagnostic('restored_frozen_window', error)
+            raise
         windows.append('recovered')
     assert certificate is not None
     with patch.object(upgrade, 'prepare_start', side_effect=checked_prepare), patch.object(upgrade, 'restore_current', side_effect=checked_restore):
@@ -364,7 +381,21 @@ def main():
         (fault / 'VERSION').write_text(fault_version + '\n')
         (fault / 'bin/guangyue-linux-amd64').write_text('#!/bin/sh\nexit 42\n')
         (fault / 'bin/guangyue-linux-amd64').chmod(0o755); rewrite_manifest(fault)
-        execute(request('update', fault_version, next_version), fault, expect='failed', certificate=new_certificate)
+        legacy_cache = state.HELPER / '__pycache__'; legacy_cache.mkdir(mode=0o700, exist_ok=True)
+        (legacy_cache / 'common.cpython-312.pyc').write_bytes(b'CI-only invalid legacy cache; never executable source')
+        original_backup = upgrade.backup_current
+        def legacy_checked_backup(config):
+            backup = original_backup(config)
+            assert not (backup / 'helper/__pycache__').exists(), 'new backups included bytecode caches'
+            # A historical backup already included these files. Keep its
+            # checksums valid and prove actual recovery skips only this benign,
+            # root-owned cache while clearing the active helper's stale cache.
+            shutil.copytree(legacy_cache, backup / 'helper/__pycache__')
+            (backup / 'helper-checksums.json').write_text(json.dumps(upgrade.app_hashes(backup / 'helper')))
+            return backup
+        with patch.object(upgrade, 'backup_current', side_effect=legacy_checked_backup):
+            execute(request('update', fault_version, next_version), fault, expect='failed', certificate=new_certificate)
+        assert not legacy_cache.exists(), 'restored helper retained stale Python bytecode'
         assert state.current() == next_version
         https_health(new_certificate, next_version); same_nginx(baseline)
         assert fingerprint(native.STATE / 'master.key') == vault_before

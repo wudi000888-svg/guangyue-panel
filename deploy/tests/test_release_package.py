@@ -2,6 +2,7 @@
 import ast
 import hashlib
 import io
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -85,13 +86,14 @@ args=sys.argv[1:]
 if args[:2]==['image','inspect']:
     if len(args)==3:
         redis=args[-1].startswith('redis:')
-        env=['REDIS_VERSION=8.0.0','REDIS_DOWNLOAD_URL=http://download.redis.io/releases/redis-8.0.0.tar.gz','REDIS_DOWNLOAD_SHA='+os.environ['DOCKER_FIXTURE_REDIS_SHA']] if redis else ['PG_VERSION=17.6-1.pgdg12+1','PG_MAJOR=17']
+        env=['REDIS_VERSION=8.0.0'] if redis else ['PG_VERSION=17.6-1.pgdg12+1','PG_MAJOR=17']
         print(json.dumps([{'Id':'sha256:'+('c' if redis else 'b')*64,'Os':'linux','Architecture':'amd64','Config':{'Env':env}}]))
     elif args[3]=='{{.Os}}/{{.Architecture}}': print('linux/amd64')
     else:
         value=args[-1];letter='b' if value.startswith('postgres:') else 'c' if value.startswith('redis:') else 'a'
         print('sha256:'+letter*64)
 elif args[0]=='save': sys.stdout.buffer.write(b'disposable-docker-save-fixture')
+elif args[0]=='history': print('RUN |2 REDIS_DOWNLOAD_URL=https://github.com/redis/redis/archive/refs/tags/8.0.0.tar.gz REDIS_DOWNLOAD_SHA='+os.environ['DOCKER_FIXTURE_REDIS_SHA']+' /bin/sh -c set -eux; # buildkit')
 elif args[0]=='run':
     executable=args[args.index('--entrypoint')+1]
     if executable=='postgres': print('postgres (PostgreSQL) 17.6 (Debian 17.6-1.pgdg12+1)')
@@ -124,4 +126,58 @@ elif args[0] not in ('pull','build'): raise SystemExit(2)
             self.assertEqual(hashlib.sha256((root / 'image-licenses' / provenance['redis']['source_archive']).read_bytes()).hexdigest(), redis_sha)
             self.assertIn('excludes the OS package inventory', provenance['scope'])
             self.assertTrue((root / 'image-licenses/POSTGRES-IMAGE-COPYRIGHT.txt').is_file())
+            self.assertIn('REDIS_DOWNLOAD_SHA=' + redis_sha, (root / 'image-licenses/REDIS-IMAGE-BUILD-HISTORY.txt').read_text())
+            self.assertEqual(provenance['redis']['source'], 'https://github.com/redis/redis/archive/refs/tags/8.0.0.tar.gz')
             self.assertEqual(next(call for call in calls if call[0] == 'save')[1:], ['sha256:' + letter * 64 for letter in 'abc'])
+
+
+class DockerRedisProvenanceTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        path = Path(__file__).resolve().parents[2] / 'scripts/docker-provenance.py'
+        spec = importlib.util.spec_from_file_location('docker_provenance', path)
+        cls.provenance = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(cls.provenance)
+
+    def test_current_immutable_image_build_args_and_legacy_env_are_verified(self):
+        version = '8.2.10'; checksum = 'd6de0ec3bce8eeba13ecbd7478dd56fb87a4bbe8ec832dd876892a86ac1a55ec'
+        source = 'https://github.com/redis/redis/archive/refs/tags/' + version + '.tar.gz'
+        history = 'RUN |2 REDIS_DOWNLOAD_URL=' + source + ' REDIS_DOWNLOAD_SHA=' + checksum + ' /bin/sh -c set -eux; # buildkit'
+        self.assertEqual(self.provenance.redis_build_source({'REDIS_VERSION': version}, history), (version, source, checksum))
+        legacy = {'REDIS_VERSION': version, 'REDIS_DOWNLOAD_URL': 'http://download.redis.io/releases/redis-' + version + '.tar.gz', 'REDIS_DOWNLOAD_SHA': checksum}
+        self.assertEqual(self.provenance.redis_build_source(legacy, '')[1:], ('https://download.redis.io/releases/redis-' + version + '.tar.gz', checksum))
+
+    def test_missing_conflicting_or_unofficial_source_metadata_fails_closed(self):
+        version = '8.2.10'; checksum = 'a' * 64
+        source = 'https://github.com/redis/redis/archive/refs/tags/' + version + '.tar.gz'
+        valid = 'RUN |2 REDIS_DOWNLOAD_URL=' + source + ' REDIS_DOWNLOAD_SHA=' + checksum + ' /bin/sh'
+        for env, history in [
+            ({'REDIS_VERSION': version}, ''),
+            ({'REDIS_VERSION': version, 'REDIS_DOWNLOAD_SHA': 'b' * 64}, valid),
+            ({'REDIS_VERSION': version}, valid + ' REDIS_DOWNLOAD_URL=https://example.com/archive.tar.gz'),
+            ({'REDIS_VERSION': version}, valid.replace('/8.2.10.tar.gz', '/8.2.9.tar.gz')),
+            ({'REDIS_VERSION': version}, valid.replace(checksum, 'unverified')),
+            ({'REDIS_VERSION': '8'}, valid),
+        ]:
+            with self.subTest(env=env, history=history), self.assertRaises(ValueError):
+                self.provenance.redis_build_source(env, history)
+
+    def test_verified_cache_keeps_exact_source_archive_and_rejects_missing_notices(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            cache = Path(temporary)
+            for name, notices in [('source.tar.gz', True), ('no-license.tar.gz', False)]:
+                archive = cache / name
+                with tarfile.open(archive, 'w:gz') as tar:
+                    body = b'upstream license fixture' if notices else b'fixture source'
+                    item = tarfile.TarInfo('redis-8.2.10/' + ('LICENSE.txt' if notices else 'source.c'))
+                    item.size = len(body); tar.addfile(item, io.BytesIO(body))
+                checksum = hashlib.sha256(archive.read_bytes()).hexdigest()
+                pinned = cache / ('redis-source-' + checksum + '.tar.gz'); shutil.copyfile(archive, pinned)
+                history = 'RUN |2 REDIS_DOWNLOAD_URL=https://github.com/redis/redis/archive/refs/tags/8.2.10.tar.gz REDIS_DOWNLOAD_SHA=' + checksum + ' /bin/sh'
+                if notices:
+                    version, source, sha, result, texts = self.provenance.redis_source({'REDIS_VERSION': '8.2.10'}, cache, history)
+                    self.assertEqual((version, sha, result), ('8.2.10', checksum, pinned))
+                    self.assertEqual(texts, {'LICENSE.txt': 'upstream license fixture'})
+                else:
+                    with self.assertRaisesRegex(ValueError, 'no upstream license'):
+                        self.provenance.redis_source({'REDIS_VERSION': '8.2.10'}, cache, history)

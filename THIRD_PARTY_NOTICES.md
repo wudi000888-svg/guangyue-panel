@@ -22,7 +22,7 @@ Trust Wallet Core 的 npm 包不含许可证文件，且 npm 的 MIT 声明不�
 
 面板 LGPL-3.0-only 许可不替代第三方组件。Mihomo 作为独立进程保留 GPL-3.0 许可，其对应源码与构建材料随包提供；不能把整个镜像或二进制集合标成单一面板许可。修改后重新分发仍需满足原有 GPL 条款。Xray 的分发和修改同样遵循 MPL。官方源码地址、固定 commit、校验和与构建脚本为可审计来源。
 
-Docker 离线包额外包含固定摘要的官方 PostgreSQL 17 与 Redis 8 镜像。构建时读取镜像的实际可执行版本与源版本，`licenses/DOCKER_COMPONENTS.json` 记录精确版本、镜像来源及摘要；PostgreSQL 原始版权文件和 Redis 对应发行版的完整源码、原始许可证一并保存在应用镜像的 `licenses` 目录。Redis 源码校验和必须匹配固定镜像中的 `REDIS_DOWNLOAD_SHA`。Redis 8 保留上游提供的 AGPLv3 等许可选项，面板许可不覆盖这些组件。现有 `SBOM.spdx.json` 记录应用依赖与代理核心，不代表 Docker 镜像操作系统全部软件包的 SBOM。
+Docker 离线包额外包含固定摘要的官方 PostgreSQL 17 与 Redis 8 镜像。构建时读取镜像的实际可执行版本与源版本，`licenses/DOCKER_COMPONENTS.json` 记录精确版本、镜像来源及摘要；PostgreSQL 原始版权文件和 Redis 对应发行版的完整源码、原始许可证一并保存在应用镜像的 `licenses` 目录。Redis 源码校验和必须匹配固定镜像环境或构建历史中的 `REDIS_DOWNLOAD_SHA`，对应构建记录也随包保留。Redis 8 保留上游提供的 AGPLv3 等许可选项，面板许可不覆盖这些组件。现有 `SBOM.spdx.json` 记录应用依赖与代理核心，不代表 Docker 镜像操作系统全部软件包的 SBOM。
 
 品牌 banner/logo 为本项目原创 SVG，适用项目 LGPL-3.0-only。国家标记使用 Unicode regional indicator 字符，由设备字体渲染，不再分发来源不明的旗帜位图。
 
