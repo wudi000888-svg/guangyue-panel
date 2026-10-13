@@ -10,6 +10,7 @@ export interface CryptoWallet {
   engine: 'trust-wallet-core' | 'external-xpub';
   engine_version: string;
   enabled: boolean;
+  removed_at: number;
   revision: number;
   next_index: number;
   created: number;
@@ -90,5 +91,25 @@ export function validateBackupPassword(password: string, confirmation: string, a
 }
 
 export function canAllocate(wallet: CryptoWallet): boolean {
-  return wallet.enabled && wallet.next_index < MAX_WALLET_NEXT_INDEX && !wallet.recovery_required && (wallet.mode === 'watch_only' || wallet.backup_confirmed);
+  return !wallet.removed_at && wallet.enabled && wallet.next_index < MAX_WALLET_NEXT_INDEX && !wallet.recovery_required && (wallet.mode === 'watch_only' || wallet.backup_confirmed);
+}
+
+export interface WalletFormOperation {publicKey:string;id:string;revision:number;enabled:boolean}
+/** The target is the copy reviewed when the dialog opened, never a newer list row.
+ * Preserve the same intent and CAS revision when retrying an uncertain response. */
+export function walletFormOperation(publicKey:string,target:Pick<CryptoWallet,'revision'|'enabled'>|undefined,generate:()=>string,current?:WalletFormOperation,newSeed=false):WalletFormOperation{
+ if(current?.publicKey===publicKey&&!newSeed)return current;
+ return {publicKey,id:generate(),revision:target?.revision??0,enabled:target?.enabled??false};
+}
+
+
+/** Removal changes custody visibility, not key material. Reuse one operation key after uncertain replies. */
+export async function changeWalletRemoval(api:WalletAPI,input:{kind:'delete'|'undelete';wallet:Pick<CryptoWallet,'id'|'revision'|'removed_at'>;password:string;operation_id:string;delete_ack?:boolean}):Promise<CryptoWallet>{
+ let payload:Record<string,unknown>|undefined;
+ try{
+  if(!input.password||!input.operation_id||!Number.isSafeInteger(input.wallet.revision)||input.wallet.revision<0)throw new Error('请刷新钱包并输入管理员密码');
+  if(input.kind==='delete'&&!input.delete_ack)throw new Error('请确认删除只停止新收款，历史资产与密钥仍保留');
+  payload={password:input.password,revision:input.wallet.revision,operation_id:input.operation_id,...(input.kind==='delete'?{delete_ack:true}:{})};
+  return await api<CryptoWallet>('/wallets/'+encodeURIComponent(input.wallet.id)+'/'+input.kind,'POST',payload);
+ }finally{input.password='';if(payload)payload.password=''}
 }

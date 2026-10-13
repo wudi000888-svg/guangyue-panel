@@ -75,9 +75,12 @@ func cryptoDefaultSettings() CryptoPaymentSettings {
 	return s
 }
 func (s *Store) cryptoPaymentSettings() (CryptoPaymentSettings, error) {
+	return s.cryptoPaymentSettingsFrom(s.db)
+}
+func (s *Store) cryptoPaymentSettingsFrom(q cryptoWalletQuery) (CryptoPaymentSettings, error) {
 	v := cryptoDefaultSettings()
 	var body []byte
-	e := s.db.QueryRow("SELECT revision,doc FROM crypto_payment_settings WHERE id=1").Scan(&v.Revision, &body)
+	e := q.QueryRow("SELECT revision,doc FROM crypto_payment_settings WHERE id=1").Scan(&v.Revision, &body)
 	if errors.Is(e, sql.ErrNoRows) {
 		return v, nil
 	}
@@ -336,6 +339,17 @@ func (a *App) saveCryptoPaymentSettings(w http.ResponseWriter, r *http.Request, 
 	if revision != in.Revision {
 		return commerceFail(409, "支付设置已变化，请刷新")
 	}
+	// Removal and allocation use this same wallet lock. Recheck after taking
+	// it so a wallet removed during the preflight cannot be enabled for payment.
+	if v.Enabled {
+		wallet, e := cryptoWalletByID(tx, v.WalletID)
+		if e != nil {
+			return e
+		}
+		if e = cryptoWalletReady(wallet); e != nil {
+			return e
+		}
+	}
 	if _, e = tx.Exec("INSERT INTO crypto_payment_settings(id,revision,doc) VALUES(1,?,?) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,doc=excluded.doc", v.Revision, sealed); e != nil {
 		return e
 	}
@@ -350,6 +364,9 @@ func (a *App) saveCryptoPaymentSettings(w http.ResponseWriter, r *http.Request, 
 	return nil
 }
 func cryptoWalletReady(v CryptoWallet) error {
+	if v.RemovedAt > 0 {
+		return commerceFail(409, "收款钱包已删除，请先恢复钱包并重新启用收款")
+	}
 	if !v.Enabled || v.RecoveryRequired {
 		return commerceFail(409, "收款钱包已暂停或需要核对恢复索引")
 	}

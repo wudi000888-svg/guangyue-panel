@@ -18,6 +18,8 @@ func (s *Store) validateCryptoWallets(deep bool) error {
 	for _, q := range []string{
 		"SELECT COUNT(*) FROM crypto_wallet_state WHERE id=1",
 		"SELECT COUNT(*) FROM crypto_wallet_addresses a LEFT JOIN crypto_wallets w ON w.id=a.wallet_id WHERE w.id IS NULL",
+		"SELECT COUNT(*) FROM crypto_wallets WHERE removed_at>0 AND enabled<>0",
+		"SELECT COUNT(*) FROM crypto_sweep_jobs s JOIN crypto_wallets w ON w.id=s.wallet_id WHERE w.removed_at>0 AND s.state NOT IN ('complete','cancelled')",
 		"SELECT COUNT(*) FROM crypto_wallets w WHERE w.next_index<>w.reserved_indices+(SELECT COUNT(*) FROM crypto_wallet_addresses a WHERE a.wallet_id=w.id) OR w.next_index<=(SELECT COALESCE(MAX(a.address_index),-1) FROM crypto_wallet_addresses a WHERE a.wallet_id=w.id)",
 	} {
 		var n int64
