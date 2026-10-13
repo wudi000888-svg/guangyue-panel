@@ -76,7 +76,7 @@ func (s *Store) validateCryptoSweeps(_ bool) error {
 	}
 	defer tx.Rollback()
 	for _, query := range []string{
-		"SELECT COUNT(*) FROM crypto_funding_addresses f LEFT JOIN crypto_wallets w ON w.id=f.wallet_id WHERE w.id IS NULL",
+		"SELECT COUNT(*) FROM crypto_funding_addresses f LEFT JOIN crypto_wallet_history w ON w.id=f.wallet_id WHERE w.id IS NULL",
 		"SELECT COUNT(*) FROM crypto_sweep_items i LEFT JOIN crypto_sweep_jobs j ON j.id=i.job_id WHERE j.id IS NULL",
 		"SELECT COUNT(*) FROM crypto_chain_transactions t LEFT JOIN crypto_sweep_items i ON i.id=t.item_id WHERE i.id IS NULL OR i.job_id<>t.job_id OR t.nonce<0",
 		"SELECT COUNT(*) FROM (SELECT chain_id,LOWER(from_address),nonce FROM crypto_chain_transactions GROUP BY chain_id,LOWER(from_address),nonce HAVING COUNT(*)<>1) duplicates",
@@ -109,6 +109,13 @@ func (s *Store) validateCryptoSweeps(_ bool) error {
 		return e
 	}
 	for id, f := range funding {
+		deleted, e := cryptoWalletDeleted(tx, id)
+		if e != nil {
+			return e
+		}
+		if deleted {
+			continue
+		}
 		wallet, e := cryptoWalletByID(tx, id)
 		if e != nil {
 			return e
@@ -173,7 +180,11 @@ func (s *Store) validateCryptoSweepJob(tx *persistence.Tx, j cryptoIntegrityJob,
 		if e := tx.QueryRow("SELECT wallet_id,address,path FROM crypto_wallet_addresses WHERE id=?", plan.AddressID).Scan(&wallet, &address, &path); e != nil {
 			return e
 		}
-		if wallet != j.wallet || address != plan.Address || path != plan.Path {
+		owns, e := cryptoWalletSameDescriptor(tx, wallet, j.wallet)
+		if e != nil {
+			return e
+		}
+		if !owns || address != plan.Address || path != plan.Path {
 			return errCryptoSweepIntegrity
 		}
 		plans[plan.AddressID] = plan

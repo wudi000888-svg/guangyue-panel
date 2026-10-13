@@ -109,7 +109,7 @@ func cryptoValidateDump(v cryptoWalletDump) error {
 	if _, e := cryptoWalletChainIDs(w.SupportedChainIDs); e != nil {
 		return cryptoInvalidDump()
 	}
-	if v.Version != 1 || v.Exported <= 0 || w.ID == "" || len(w.ID) > 100 || !validText(w.Name, 80) || w.Created <= 0 || w.Revision < 1 || w.NextIndex < 0 || w.NextIndex > cryptoMaxIndex || w.RemovedAt < 0 || w.RemovedAt > 0 && w.Enabled || v.Addresses == nil || v.ReservedIndices < 0 || v.ReservedIndices > cryptoMaxIndex || int64(len(v.Addresses))+v.ReservedIndices != w.NextIndex {
+	if v.Version != 1 || v.Exported <= 0 || w.ID == "" || len(w.ID) > 100 || !validText(w.Name, 80) || w.Created <= 0 || w.Revision < 1 || w.NextIndex < 0 || w.NextIndex > cryptoMaxIndex || v.Addresses == nil || v.ReservedIndices < 0 || v.ReservedIndices > cryptoMaxIndex || int64(len(v.Addresses))+v.ReservedIndices != w.NextIndex {
 		return cryptoInvalidDump()
 	}
 	if e := cryptoValidateXPub(w.XPub, w.Path); e != nil {
@@ -174,9 +174,6 @@ func (a *App) cryptoWalletExport(w http.ResponseWriter, r *http.Request, route s
 	if e != nil {
 		return e
 	}
-	if v.RemovedAt > 0 {
-		return commerceFail(409, "请先恢复已删除的钱包再导出备份")
-	}
 	addresses, e := cryptoWalletAddresses(tx, v.ID, 30001)
 	if e != nil {
 		return e
@@ -220,6 +217,13 @@ func (a *App) cryptoWalletExport(w http.ResponseWriter, r *http.Request, route s
 }
 func (a *App) cryptoWalletRestore(tx *persistence.Tx, dump cryptoWalletDump) (CryptoWallet, error) {
 	v := dump.Wallet
+	deleted, e := cryptoWalletDeleted(tx, v.ID)
+	if e != nil {
+		return v, e
+	}
+	if deleted {
+		return v, commerceFail(409, "该钱包已永久删除，旧备份不能恢复；可用外部助记词明确导入为新钱包并核对地址高水位")
+	}
 	var networkErr error
 	v.SupportedChainIDs, networkErr = cryptoWalletChainIDs(v.SupportedChainIDs)
 	if networkErr != nil {
@@ -267,6 +271,11 @@ func (a *App) cryptoWalletRestore(tx *persistence.Tx, dump cryptoWalletDump) (Cr
 		v.RecoveryRequired = true
 		v.BackupConfirmed = true
 		v.Revision++
+		previous, e := cryptoWalletHighWater(tx, receive)
+		if e != nil {
+			return v, e
+		}
+		v.NextIndex = max(v.NextIndex, previous)
 		var secret []byte
 		if v.Mode == "hot" {
 			secret, e = a.store.vault.seal(cryptoWalletSecret{WalletID: v.ID, ReceiveKey: receive, Mnemonic: dump.Mnemonic})

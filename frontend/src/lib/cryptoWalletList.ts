@@ -1,28 +1,17 @@
-import { mergeCryptoWallets, type CryptoWallet } from './cryptoWallet';
-
-/** A list is authoritative for presence. Revision comparison protects a newer local
- * mutation for an ID actually returned, but cannot retain absent/removed rows. */
-export function applyWalletList(result:{items:CryptoWallet[]},current:CryptoWallet[],removed=false){
+import {mergeCryptoWallets,type CryptoWallet,type CryptoWalletDeletion} from './cryptoWallet';
+/** A list is authoritative for presence. A missing wallet cannot survive a successful refresh. */
+export function applyWalletList(result:{items:CryptoWallet[]},current:CryptoWallet[]){
  const known=new Map(current.map(wallet=>[wallet.id,wallet]));
- const rows=[...new Map(result.items.map(wallet=>{const local=known.get(wallet.id);return [wallet.id,local&&local.revision>wallet.revision?local:wallet] as const})).values()];
- return {wallets:rows.filter(wallet=>!!wallet.removed_at===removed),loaded:true,listError:''};
+ const wallets=[...new Map(result.items.map(wallet=>{const local=known.get(wallet.id);return [wallet.id,local&&local.revision>wallet.revision?local:wallet] as const})).values()];
+ return {wallets,loaded:true,listError:''};
 }
-/** One mutation moves a wallet between lists immediately; a lower-revision reply cannot resurrect it. */
-export function applyWalletMutation(wallets:CryptoWallet[],deletedWallets:CryptoWallet[],incoming:CryptoWallet){
- const merged=mergeCryptoWallets([...wallets,...deletedWallets],[incoming]);
- return {wallets:merged.filter(wallet=>!wallet.removed_at),deletedWallets:merged.filter(wallet=>!!wallet.removed_at)};
+export function applyWalletMutation(wallets:CryptoWallet[],incoming:CryptoWallet){return mergeCryptoWallets(wallets,[incoming])}
+export function applyPermanentWalletDeletion(wallets:CryptoWallet[],result:CryptoWalletDeletion){return result.deleted===true?wallets.filter(wallet=>wallet.id!==result.id):wallets}
+export interface WalletListChange {items:CryptoWallet[];authoritative:boolean;deletedID?:string}
+/** A committed DTO reaches the parent even if a follow-up GET fails. Mutation
+ * events merge partial local knowledge; only successful lists prune absence. */
+export function applyWalletListChange(current:CryptoWallet[],change:WalletListChange){
+ const next=change.authoritative?applyWalletList(change,current).wallets:mergeCryptoWallets(current,change.items);
+ return change.deletedID?next.filter(wallet=>wallet.id!==change.deletedID):next;
 }
-
-/** Active and removed reads may straddle a concurrent transition. Resolve one
- * highest revision per ID before applying each list's authoritative presence. */
-export function reconcileWalletLists(active:{items:CryptoWallet[]}|undefined,removed:{items:CryptoWallet[]}|undefined,wallets:CryptoWallet[],deletedWallets:CryptoWallet[]){
- const known=mergeCryptoWallets([],[...wallets,...deletedWallets,...(active?.items||[]),...(removed?.items||[])]);
- return {
-  wallets:applyWalletList(active||{items:wallets},known).wallets,
-  deletedWallets:applyWalletList(removed||{items:deletedWallets},known,true).wallets,
- };
-}
-
-export function shouldResumeWalletList(hidden: boolean, active: boolean, disposed: boolean, pending: boolean) {
-  return pending && !hidden && active && !disposed;
-}
+export function shouldResumeWalletList(hidden:boolean,active:boolean,disposed:boolean,pending:boolean){return pending&&!hidden&&active&&!disposed}

@@ -20,6 +20,10 @@ describe('wallet asset overview', () => {
   expect(html).not.toContain('987654321098.765432');
   expect(html).not.toContain('USD 估值');
  });
+ it('a first Gas request failure shows the error and never substitutes portfolio Gas values',async()=>{
+  const html=await renderToString(createSSRApp(WalletAssetOverview,{...props,summaries:{bsc:snapshot('bsc','0')},gasError:'RPC unavailable'}));
+  expect(html).toContain('Gas 查询失败，当前费用未知。');expect(html).toContain('RPC unavailable');expect(html).toContain('role="alert"');expect(html).not.toContain('0.000000003');expect(html).not.toContain('0.000000000000000002');
+ });
  it('shows the absence of a successful snapshot instead of a zero balance', async () => {
   const html = await renderToString(createSSRApp(WalletAssetOverview, { ...props, summaries: {} }));
   expect(html).toContain('aria-label="— USDT · BNB Smart Chain"');

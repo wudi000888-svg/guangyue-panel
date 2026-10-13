@@ -123,6 +123,10 @@ func openUninitializedStore(cfg Config) (*Store, error) {
 		return nil, err
 	}
 	s := &Store{db: db, vault: v, stateDir: cfg.StateDir, edition: cfg.edition(), business: cfg.businessAgent()}
+	if err = s.migratePermanentCryptoWalletDeletes(); err != nil {
+		db.Close()
+		return nil, err
+	}
 	if err = s.initRuntimeSettings(); err != nil {
 		db.Close()
 		return nil, err

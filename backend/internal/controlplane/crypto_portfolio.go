@@ -112,7 +112,7 @@ func cryptoPortfolioPage(v CryptoWalletPortfolio, after int64, filter string) Cr
 }
 
 func (a *App) cryptoPortfolioAddressChunk(ctx context.Context, wallet string, after, high int64) ([]CryptoPortfolioAddress, error) {
-	rows, e := a.store.db.QueryContext(ctx, "SELECT a.id,a.address_index,a.address,a.path,a.label,COALESCE(i.order_id,''),COALESCE(i.id,''),COALESCE(i.user_id,0) FROM crypto_wallet_addresses a LEFT JOIN crypto_invoices i ON i.address_id=a.id WHERE a.wallet_id=? AND a.address_index>? AND a.address_index<=? ORDER BY a.address_index LIMIT ?", wallet, after, high, cryptoPortfolioChunkSize)
+	rows, e := a.store.db.QueryContext(ctx, "SELECT a.id,a.address_index,a.address,a.path,a.label,COALESCE(i.order_id,''),COALESCE(i.id,''),COALESCE(i.user_id,0) FROM crypto_wallet_addresses a LEFT JOIN crypto_invoices i ON i.address_id=a.id WHERE a.wallet_id IN ("+cryptoWalletOwnerScope+") AND a.address_index>? AND a.address_index<=? ORDER BY a.address_index LIMIT ?", wallet, after, high, cryptoPortfolioChunkSize)
 	if e != nil {
 		return nil, e
 	}
@@ -162,7 +162,7 @@ func (a *App) cryptoWalletPortfolio(ctx context.Context, id, chainID string, aft
 	}
 	var count int
 	var high int64
-	if e = a.store.db.QueryRowContext(ctx, "SELECT COUNT(*),COALESCE(MAX(address_index),-1) FROM crypto_wallet_addresses WHERE wallet_id=?", id).Scan(&count, &high); e != nil {
+	if e = a.store.db.QueryRowContext(ctx, "SELECT COUNT(*),COALESCE(MAX(address_index),-1) FROM crypto_wallet_addresses WHERE wallet_id IN ("+cryptoWalletOwnerScope+")", id).Scan(&count, &high); e != nil {
 		return CryptoWalletPortfolio{}, e
 	}
 	assets := []CryptoAsset{}

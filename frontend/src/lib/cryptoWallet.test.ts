@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { canAllocate, changeWalletRemoval, walletFormOperation, walletChains, walletSupportsChain, validateWalletChains, mergeCryptoWallets, CRYPTO_BACKUP_FILE_LIMIT, MAX_WALLET_NEXT_INDEX, parseCryptoBackup, saveGeneratedWallet, validateBackupPassword, type CryptoWallet, type WalletAPI } from './cryptoWallet';
+import { canAllocate, deleteCryptoWallet, saveImportedWallet, walletFormOperation, walletChains, walletSupportsChain, validateWalletChains, mergeCryptoWallets, CRYPTO_BACKUP_FILE_LIMIT, MAX_WALLET_NEXT_INDEX, parseCryptoBackup, saveGeneratedWallet, validateBackupPassword, type CryptoWallet, type WalletAPI } from './cryptoWallet';
 import type { HotWalletMaterial } from './walletCore';
 
 const wallet = { id: 'wallet-test', mode: 'hot', enabled: true, backup_confirmed: false, recovery_required: false, next_index: 0 } as CryptoWallet;
@@ -87,22 +87,21 @@ it('rejects an empty or unsupported network selection before creating keys', asy
 });
 
 
-describe('wallet removal reauthentication',()=>{
- it('sends exactly one acknowledged, revision-scoped removal and drops the password reference',async()=>{
-  const input={kind:'delete' as const,wallet:{id:'wallet/id',revision:8,removed_at:0},password:'admin-test',operation_id:'same-operation',delete_ack:true};let body:Record<string,unknown>|undefined,wire:unknown;
-  const api=vi.fn(async(_route:string,_method:string,payload:Record<string,unknown>)=>{body=payload;wire=JSON.parse(JSON.stringify(payload));return {...wallet,revision:9,removed_at:100,enabled:false}});
-  const result=await changeWalletRemoval(api as WalletAPI,input);expect(api.mock.calls[0]?.[0]).toBe('/wallets/wallet%2Fid/delete');expect(wire).toEqual({password:'admin-test',revision:8,operation_id:'same-operation',delete_ack:true});expect(result.removed_at).toBe(100);expect(input.password).toBe('');expect(body?.password).toBe('');
+describe('permanent wallet deletion reauthentication',()=>{
+ it('sends the exact password/CAS/ack scope and clears password references after confirmed deletion',async()=>{
+  const input={wallet:{id:'wallet/id',revision:8},password:'admin-test',operation_id:'same-operation',delete_ack:true};let retained:Record<string,unknown>|undefined,wire:unknown;
+  const api=vi.fn(async(_route:string,_method:string,payload:Record<string,unknown>)=>{retained=payload;wire=JSON.parse(JSON.stringify(payload));return {id:'wallet/id',deleted:true}});
+  expect(await deleteCryptoWallet(api as WalletAPI,input)).toEqual({id:'wallet/id',deleted:true});expect(api.mock.calls[0]?.[0]).toBe('/wallets/wallet%2Fid/delete');expect(wire).toEqual({password:'admin-test',revision:8,operation_id:'same-operation',delete_ack:true});expect(input.password).toBe('');expect(retained?.password).toBe('');
  });
- it('keeps the same public operation key after a lost response without automatically replaying deletion',async()=>{
-  const input={kind:'delete' as const,wallet:{id:'wallet',revision:8,removed_at:0},password:'admin-test',operation_id:'same-operation',delete_ack:true};let retained:Record<string,unknown>|undefined;
-  const api=vi.fn(async(_route:string,_method:string,payload:Record<string,unknown>)=>{retained=payload;throw new Error('response lost')});await expect(changeWalletRemoval(api as WalletAPI,input)).rejects.toThrow('response lost');expect(api).toHaveBeenCalledTimes(1);expect(input.operation_id).toBe('same-operation');expect(input.password).toBe('');expect(retained?.password).toBe('');
+ it('requires irreversible deletion acknowledgement and does not automatically replay lost replies',async()=>{
+  const api=vi.fn(async()=>{throw new Error('response lost')});const input={wallet:{id:'wallet',revision:8},password:'admin',operation_id:'same-operation',delete_ack:false};await expect(deleteCryptoWallet(api as WalletAPI,input)).rejects.toThrow();expect(api).not.toHaveBeenCalled();input.delete_ack=true;input.password='admin';await expect(deleteCryptoWallet(api as WalletAPI,input)).rejects.toThrow('response lost');expect(api).toHaveBeenCalledTimes(1);expect(input.operation_id).toBe('same-operation');expect(input.password).toBe('');
  });
- it('requires removal acknowledgement and keeps recovered wallets unable to allocate until explicitly enabled',async()=>{
-  const api=vi.fn(async(_route:string,_method:string,_payload:Record<string,unknown>)=>({...wallet,revision:9,removed_at:0,enabled:false}));const missing={kind:'delete' as const,wallet:{id:'wallet',revision:8,removed_at:0},password:'admin-test',operation_id:'operation',delete_ack:false};await expect(changeWalletRemoval(api as WalletAPI,missing)).rejects.toThrow();expect(api).not.toHaveBeenCalled();expect(missing.password).toBe('');
-  const recovered=await changeWalletRemoval(api as WalletAPI,{kind:'undelete',wallet:{id:'wallet',revision:8,removed_at:100},password:'admin-test',operation_id:'restore-operation'});expect(api.mock.calls[0]?.[0]).toBe('/wallets/wallet/undelete');expect(canAllocate(recovered)).toBe(false);expect(canAllocate({...wallet,backup_confirmed:true,enabled:true,removed_at:100})).toBe(false);
+ it('a wrong-wallet or unconfirmed response cannot remove a different record',async()=>{for(const result of [{id:'other',deleted:true},{id:'wallet',deleted:false}]){const api=vi.fn(async()=>result);await expect(deleteCryptoWallet(api as WalletAPI,{wallet:{id:'wallet',revision:1},password:'admin',operation_id:'operation',delete_ack:true})).rejects.toThrow('删除结果与所选钱包不一致')}});
+ it('import sends the explicit fresh-wallet flag and clears phrase/password references on lost response',async()=>{
+  const generated=material(),input={name:'imported',mnemonic:'public test words',password:'admin-test',operation_id:'import-operation',risk_ack:true,supported_chain_ids:[56]};let retained:Record<string,unknown>|undefined,wire:Record<string,unknown>|undefined;
+  const api=vi.fn(async(_route:string,_method:string,payload:Record<string,unknown>)=>{retained=payload;wire=JSON.parse(JSON.stringify(payload));throw new Error('lost')});await expect(saveImportedWallet(api as WalletAPI,input,async()=>generated)).rejects.toThrow('lost');expect(wire?.import).toBe(true);expect(wire?.mnemonic).toBe('public test words');expect(input.mnemonic).toBe('');expect(input.password).toBe('');expect(generated.mnemonic).toBe('');expect(retained?.mnemonic).toBe('');expect(retained?.password).toBe('');expect(api).toHaveBeenCalledTimes(1);
  });
 });
-
 
 describe('wallet dialog intent and CAS',()=>{
  it('a pause dialog does not silently become enable after another admin pauses the live list row',()=>{

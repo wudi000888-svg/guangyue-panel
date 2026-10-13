@@ -1,4 +1,4 @@
-import { clearHotWallet, createHotWallet, type HotWalletMaterial } from './walletCore';
+import { clearHotWallet, createHotWallet, importHotWallet, type HotWalletMaterial } from './walletCore';
 
 export interface CryptoWallet {
   id: string;
@@ -10,7 +10,6 @@ export interface CryptoWallet {
   engine: 'trust-wallet-core' | 'external-xpub';
   engine_version: string;
   enabled: boolean;
-  removed_at: number;
   revision: number;
   next_index: number;
   created: number;
@@ -66,7 +65,7 @@ export function parseCryptoBackup(text: string): CryptoBackup {
 /** Do not pass secrets through useCommerce.run(), whose request fingerprint retains its body. */
 export async function saveGeneratedWallet(
   api: WalletAPI,
-  input: { name: string; password: string; operation_id: string; risk_ack: boolean; supported_chain_ids: number[] },
+  input: { name: string; password: string; operation_id: string; risk_ack: boolean; supported_chain_ids: number[]; import?:boolean },
   generate: () => Promise<HotWalletMaterial> = createHotWallet,
 ): Promise<CryptoWallet> {
   let material: HotWalletMaterial | undefined;
@@ -91,7 +90,7 @@ export function validateBackupPassword(password: string, confirmation: string, a
 }
 
 export function canAllocate(wallet: CryptoWallet): boolean {
-  return !wallet.removed_at && wallet.enabled && wallet.next_index < MAX_WALLET_NEXT_INDEX && !wallet.recovery_required && (wallet.mode === 'watch_only' || wallet.backup_confirmed);
+  return wallet.enabled && wallet.next_index < MAX_WALLET_NEXT_INDEX && !wallet.recovery_required && (wallet.mode === 'watch_only' || wallet.backup_confirmed);
 }
 
 export interface WalletFormOperation {publicKey:string;id:string;revision:number;enabled:boolean}
@@ -103,13 +102,20 @@ export function walletFormOperation(publicKey:string,target:Pick<CryptoWallet,'r
 }
 
 
-/** Removal changes custody visibility, not key material. Reuse one operation key after uncertain replies. */
-export async function changeWalletRemoval(api:WalletAPI,input:{kind:'delete'|'undelete';wallet:Pick<CryptoWallet,'id'|'revision'|'removed_at'>;password:string;operation_id:string;delete_ack?:boolean}):Promise<CryptoWallet>{
+export interface CryptoWalletDeletion {id:string;deleted:true}
+/** Permanent deletion never sends keys and reuses one public operation ID after uncertainty. */
+export async function deleteCryptoWallet(api:WalletAPI,input:{wallet:Pick<CryptoWallet,'id'|'revision'>;password:string;operation_id:string;delete_ack:boolean}):Promise<CryptoWalletDeletion>{
  let payload:Record<string,unknown>|undefined;
  try{
   if(!input.password||!input.operation_id||!Number.isSafeInteger(input.wallet.revision)||input.wallet.revision<0)throw new Error('请刷新钱包并输入管理员密码');
-  if(input.kind==='delete'&&!input.delete_ack)throw new Error('请确认删除只停止新收款，历史资产与密钥仍保留');
-  payload={password:input.password,revision:input.wallet.revision,operation_id:input.operation_id,...(input.kind==='delete'?{delete_ack:true}:{})};
-  return await api<CryptoWallet>('/wallets/'+encodeURIComponent(input.wallet.id)+'/'+input.kind,'POST',payload);
+  if(!input.delete_ack)throw new Error('请确认永久删除将清除面板中的钱包和加密密钥');
+  payload={password:input.password,revision:input.wallet.revision,operation_id:input.operation_id,delete_ack:true};
+  const result=await api<CryptoWalletDeletion>('/wallets/'+encodeURIComponent(input.wallet.id)+'/delete','POST',payload);
+  if(result.id!==input.wallet.id||result.deleted!==true)throw new Error('删除结果与所选钱包不一致，请刷新核对');
+  return result;
  }finally{input.password='';if(payload)payload.password=''}
+}
+
+export async function saveImportedWallet(api:WalletAPI,input:{name:string;password:string;operation_id:string;risk_ack:boolean;supported_chain_ids:number[];mnemonic:string},derive:(value:string)=>Promise<HotWalletMaterial>=importHotWallet):Promise<CryptoWallet>{
+ try{return await saveGeneratedWallet(api,{name:input.name,password:input.password,operation_id:input.operation_id,risk_ack:input.risk_ack,supported_chain_ids:input.supported_chain_ids,import:true},()=>derive(input.mnemonic))}finally{input.mnemonic='';input.password=''}
 }
