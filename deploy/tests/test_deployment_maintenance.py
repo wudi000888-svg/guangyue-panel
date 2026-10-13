@@ -6,6 +6,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import types
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -58,6 +59,26 @@ class MaintenanceTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, '前一次版本事务'):
                 upgrade.transaction(lambda _: None, '0.41.1', {})
             write.assert_not_called(); begin.assert_not_called(); command.assert_not_called()
+
+    def test_docker_recovery_is_serialized_and_closes_interrupted_operation(self):
+        events = []
+        from contextlib import contextmanager
+        @contextmanager
+        def locked():
+            events.append('lock'); yield; events.append('unlock')
+        adapter = types.SimpleNamespace(recover=lambda: events.append('recover'))
+        with patch.object(deployment_mode, 'docker', return_value=True), patch.dict(sys.modules, {'docker_deploy': adapter}), patch.object(update_agent, 'deployment_lock', locked), patch.object(update_agent.state, 'read', return_value={'stage': 'installing'}), patch.object(update_agent.state, 'write') as write:
+            update_agent.recover()
+            self.assertEqual(events, ['lock', 'recover', 'unlock'])
+            self.assertEqual(write.call_args.args[1]['stage'], 'failed')
+        adapter.recover = lambda: self.fail('Concurrent recovery must not run')
+        @contextmanager
+        def busy():
+            raise ValueError('another install, upgrade or certificate deployment is running')
+            yield
+        with patch.object(deployment_mode, 'docker', return_value=True), patch.dict(sys.modules, {'docker_deploy': adapter}), patch.object(update_agent, 'deployment_lock', busy), patch.object(update_agent.state, 'write') as write:
+            update_agent.recover()
+            write.assert_not_called()
 
     def cert_fixture(self):
         base = self.root / 'tls'; (base / 'generation').mkdir(parents=True)

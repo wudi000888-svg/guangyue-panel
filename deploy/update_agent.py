@@ -281,7 +281,16 @@ def submit(request, launch=True):
 def recover():
     if deployment_mode.docker():
         import docker_deploy
-        docker_deploy.recover()
+        try:
+            with deployment_lock():
+                docker_deploy.recover()
+                op = state.read('operation.json')
+                if op and op['stage'] in ACTIVE:
+                    op.update(stage='failed', error='上次版本操作被中断，已完成恢复，请核对当前版本后重试', updated_at=int(time.time()))
+                    state.write('operation.json', op)
+        except ValueError as exc:
+            if 'another install' in str(exc): return
+            raise
         return
     journal = state.read('transaction.json'); op = state.read('operation.json')
     if not journal and not (op and op['stage'] in ACTIVE): return
