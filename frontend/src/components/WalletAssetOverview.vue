@@ -1,17 +1,21 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import { ArrowDownLeft, ArrowUpRight, ChevronRight, Fuel, RefreshCw, ShieldCheck } from 'lucide-vue-next';
-import type {CryptoGasSnapshot} from '../lib/cryptoGas';
+import {gasReferenceDisplay,type CryptoGasSnapshot} from '../lib/cryptoGas';
+import {nativeDecimals} from '../lib/cryptoNetworks';
 import type { CryptoChain, CryptoConfiguredAsset } from '../lib/cryptoPayments';
 import { portfolioAmount, portfolioStatus, type PortfolioSnapshot } from '../lib/cryptoPortfolio';
 import { selectedWalletAsset, walletAmountParts, walletAssetRows } from '../lib/walletPresentation';
 import { stamp } from '../lib/commerce';
 import { t } from '../i18n';
 import WalletAssetMark from './WalletAssetMark.vue';
+import WalletFeeFiat from './WalletFeeFiat.vue';
 const props = defineProps<{ chains: CryptoChain[]; assets: CryptoConfiguredAsset[]; summaries: Record<string, PortfolioSnapshot>; errors: Record<string, string>; selectedChain: string; selectedAsset: string; walletName: string; loading: boolean; writable: boolean; busy: boolean; gas?:CryptoGasSnapshot; gasError?:string; gasLoading?:boolean; now?:number }>();
 const emit = defineEmits<{ chain: [id: string]; asset: [value: { chainID: string; assetID: string }]; gas: []; withdraw: []; receive: [] }>();
 const allNetworks = ref(false);
 const currentGas=computed(()=>props.gas?.chain_id===props.selectedChain?props.gas:undefined);
+const selectedNetwork=computed(()=>props.chains.find(chain=>chain.id===props.selectedChain));
+const reference=computed(()=>gasReferenceDisplay(currentGas.value,selectedNetwork.value));
 const gasExpired=computed(()=>!currentGas.value||currentGas.value.expires_at<=(props.now??Date.now()/1000));
 const gasProblem=computed(()=>props.gasError||currentGas.value?.gas_error||currentGas.value?.funding_error||'');
 const rows = computed(() => walletAssetRows(props.chains, props.summaries, props.assets));
@@ -34,7 +38,7 @@ const statusLabels = { loading: '等待链上查询', refreshing: '正在更新'
    <aside class="wallet-network-detail">
     <div class="wallet-network-detail-title"><WalletAssetMark :chain-id="primary?.chain.chain_id" network :size="27"/><strong>{{primary?.chain.name || t('当前网络')}}</strong><span class="wallet-live-dot" :class="status"/></div>
     <div class="wallet-detail-state" :class="status"><RefreshCw v-if="status==='refreshing'||status==='loading'" :size="13" class="spin"/><ShieldCheck v-else-if="status==='ready'" :size="13"/>{{t(statusLabels[status])}}</div>
-    <dl><div><dt>{{t('有余额地址')}}</dt><dd>{{snapshot?.funded_addresses ?? '—'}}<small> / {{snapshot?.total_addresses ?? '—'}}</small></dd></div><div><dt>{{t('手续费资金')}}</dt><dd>{{portfolioAmount(currentGas?.funding_balance_atoms)}} <small>{{primary?.chain.native_symbol}}</small></dd></div><div><dt>{{t('Gas 实时参考单价')}}</dt><dd>{{portfolioAmount(currentGas?.gas_price_atoms,9)}} <small>Gwei</small></dd></div></dl>
+    <dl><div><dt>{{t('有余额地址')}}</dt><dd>{{snapshot?.funded_addresses ?? '—'}}<small> / {{snapshot?.total_addresses ?? '—'}}</small></dd></div><div><dt>{{t('手续费资金')}}</dt><dd>{{portfolioAmount(currentGas?.funding_balance_atoms,nativeDecimals(selectedNetwork))}} <small>{{selectedNetwork?.native_symbol}}</small></dd></div><div v-if="!reference.solana"><dt>{{t('Gas 实时参考单价')}}</dt><dd>{{reference.amount}} <small>{{reference.unit}}</small></dd></div><div><dt>{{t('原生币转账参考费')}}</dt><dd>{{portfolioAmount(currentGas?.reference_native_transfer_fee_atoms,nativeDecimals(selectedNetwork))}} <small>{{selectedNetwork?.native_symbol}}</small><WalletFeeFiat :atoms="currentGas?.reference_native_transfer_fee_atoms" :decimals="nativeDecimals(selectedNetwork)" :quote="currentGas" :now="now"/></dd></div></dl>
     <p v-if="!currentGas&&gasProblem" class="wallet-data-warning" role="alert">{{t('Gas 查询失败，当前费用未知。')}} {{t(gasProblem)}}</p><p v-if="gasLoading" class="wallet-gas-live-note" role="status">{{t('正在更新 Gas…')}}</p><p v-if="currentGas&&(gasProblem||gasExpired)" class="wallet-data-warning" role="status">{{t('上次估计')}} · {{stamp(currentGas.gas_checked_at)}} · {{gasExpired?t('Gas 报价已过期，请刷新后再核对费用。'):t('Gas 查询失败，保留最近成功估计。')}}</p>
     <button class="wallet-network-detail-link" type="button" @click="emit('gas')">{{t('查看手续费与充值地址')}}<ChevronRight :size="15"/></button>
     <p v-if="errors[selectedChain] || snapshot?.errors?.length || snapshot && !snapshot.complete" class="wallet-data-warning" role="status">{{t('查询未完成，未知余额不会显示为零。')}}</p>

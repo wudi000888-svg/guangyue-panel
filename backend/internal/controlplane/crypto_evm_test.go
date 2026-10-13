@@ -128,7 +128,7 @@ func TestCryptoEstimateFallbackAndPriceCap(t *testing.T) {
 		t.Fatal(e)
 	}
 	gas, e := c.estimateGas(context.Background(), "0x1111111111111111111111111111111111111111", "0x2222222222222222222222222222222222222222", "0xdead", big.NewInt(0))
-	if e != nil || gas != 60000 {
+	if e != nil || gas != 55000 {
 		t.Fatal(gas, e)
 	}
 	if _, e = c.gasPrice(context.Background()); e == nil {
@@ -146,14 +146,26 @@ func TestCryptoSweepPriceIncreaseWaitsWithoutSigning(t *testing.T) {
 		t.Fatal("signed above quote", e)
 	}
 	out, e := a.store.cryptoSweepJob(j.ID)
-	if e != nil || out.State != "waiting" || !out.CanCancel {
+	if e != nil || out.State != "fee_review_required" || !out.CanCancel || !out.CanRetry {
 		t.Fatal(out, e)
+	}
+	if e = a.cryptoRetrySweep(context.Background(), owner, j.ID, cryptoSweepInput{OperationID: randomToken(24), Password: commerceTestPassword}); e == nil {
+		t.Fatal("manual approval accepted a fee still above the immutable budget")
 	}
 	f.mu.Lock()
 	f.price = 100
 	f.mu.Unlock()
+	if e = a.cryptoSweepWork(context.Background()); e != nil || cryptoSweepTestCount(t, a) != 0 {
+		t.Fatal("price drop automatically resumed a manually paused task", e)
+	}
+	if e = a.cryptoRetrySweep(context.Background(), owner, j.ID, cryptoSweepInput{OperationID: randomToken(24), Password: "wrong-password"}); e == nil {
+		t.Fatal("manual fee pause resumed without administrator password")
+	}
+	if e = a.cryptoRetrySweep(context.Background(), owner, j.ID, cryptoSweepInput{OperationID: randomToken(24), Password: commerceTestPassword}); e != nil {
+		t.Fatal(e)
+	}
 	if e = a.cryptoSweepWork(context.Background()); e != nil || cryptoSweepTestCount(t, a) != 1 {
-		t.Fatal("failed to resume original budget", e)
+		t.Fatal("manual approval did not resume original budget", e)
 	}
 }
 

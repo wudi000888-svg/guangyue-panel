@@ -16,10 +16,16 @@ import (
 // Sources: https://mevblocker.io/ https://bsc.publicnode.com/
 // https://drpc.org/chainlist/ethereum-mainnet-rpc
 // https://docs.blockrazor.io/transaction-submission/rpc/bsc/bsc-rpc-endpoint
+// https://docs.plasma.org/docs/plasma-chain/network-information/connect-to-plasma
+// https://thirdweb.com/plasma-9745
+// https://solana.com/docs/references/clusters
+// https://solana.publicnode.com/
 func cryptoBuiltinRPCs() map[int64][2]string {
 	return map[int64][2]string{
-		1:  {"https://eth.drpc.org", "https://rpc.mevblocker.io"},
-		56: {"https://bsc-rpc.publicnode.com", "https://bsc.blockrazor.xyz"},
+		1:                   {"https://eth.drpc.org", "https://rpc.mevblocker.io"},
+		56:                  {"https://bsc-rpc.publicnode.com", "https://bsc.blockrazor.xyz"},
+		cryptoPlasmaChainID: {"https://rpc.plasma.to", "https://9745.rpc.thirdweb.com"},
+		101:                 {"https://api.mainnet-beta.solana.com", "https://docs-demo.solana-mainnet.quiknode.pro/"},
 	}
 }
 
@@ -65,7 +71,7 @@ func (a *App) setupCryptoPayments(ctx context.Context, actor Record, in cryptoSe
 	if e := a.requirePaymentModule(); e != nil {
 		return out, e
 	}
-	if !operationPattern.MatchString(in.OperationID) || in.WalletID == "" || len(in.ChainIDs) == 0 || len(in.ChainIDs) > 2 || len(in.AssetIDs) == 0 || len(in.AssetIDs) > 4 {
+	if !operationPattern.MatchString(in.OperationID) || in.WalletID == "" || len(in.ChainIDs) == 0 || len(in.ChainIDs) > len(cryptoBuiltinRPCs()) || len(in.AssetIDs) == 0 || len(in.AssetIDs) > len(cryptoDefaultSettings().Assets) {
 		return out, commerceFail(400, "请选择钱包、网络和收款币种")
 	}
 	in.ChainIDs = append([]int64(nil), in.ChainIDs...)
@@ -110,8 +116,8 @@ func (a *App) setupCryptoPayments(ctx context.Context, actor Record, in cryptoSe
 	}
 	selected := map[int64]bool{}
 	for _, id := range in.ChainIDs {
-		if selected[id] || (id != 1 && id != 56) {
-			return out, commerceFail(400, "一键启用目前只支持 Ethereum 和 BNB Smart Chain")
+		if selected[id] || !cryptoChainAutomatic(id) {
+			return out, commerceFail(400, "一键启用支持 Ethereum、BNB Smart Chain、Plasma 和 Solana")
 		}
 		if !cryptoWalletSupports(wallet, id) {
 			return out, commerceFail(400, "所选钱包未启用该收款网络")
@@ -163,7 +169,13 @@ func (a *App) setupCryptoPayments(ctx context.Context, actor Record, in cryptoSe
 		if !chain.Enabled {
 			continue
 		}
-		go func(chain CryptoChain) { checks <- a.cryptoSetupPreflight(ctx, chain, out.Assets, wallet.FirstAddress) }(chain)
+		go func(chain CryptoChain) {
+			if chain.Family == "solana" {
+				checks <- a.cryptoSolanaSetupPreflight(ctx, chain, out.Assets, wallet)
+				return
+			}
+			checks <- a.cryptoSetupPreflight(ctx, chain, out.Assets, wallet.FirstAddress)
+		}(chain)
 	}
 	var checkError error
 	for range selected {

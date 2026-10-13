@@ -1,9 +1,10 @@
 import type {CryptoBalance} from './cryptoTreasury';
 import {tokenAmount} from './cryptoPayments';
+import {cryptoAddress,solanaAddress,SOLANA_CHAIN_ID,PLASMA_CHAIN_ID} from './cryptoNetworks';
 export type PortfolioFilter='all'|'funded'|'empty'|'failed';
 export interface PortfolioBalance extends CryptoBalance {label:string;checked_at:number;last_success_at:number;block_number:number;error:string;stale:boolean;funded:boolean}
 export interface PortfolioSnapshot {
- wallet_id:string;chain_id:string;native_symbol:string;watch_only:boolean;operations_supported:boolean;unavailable_reason:string;
+ wallet_id:string;chain_id:string;native_symbol:string;native_decimals?:number;watch_only:boolean;operations_supported:boolean;unavailable_reason:string;
  funding_address:string;funding_path:string;funding_balance_atoms:string;funding_checked_at:number;funding_error:string;
  native_balance_atoms:string;tokens:Array<{asset_id:string;symbol:string;decimals:number;balance_atoms:string}>;
  total_addresses:number;checked_addresses:number;funded_addresses:number;empty_addresses:number;failed_addresses:number;
@@ -30,12 +31,14 @@ export function portfolioStatus(snapshot?:PortfolioSnapshot,error=''):'loading'|
  return 'ready';
 }
 /** Explorer domains and EIP-681 network IDs come from a known chain, never from RPC response content. */
-const explorers:Record<number,string>={1:'https://etherscan.io',56:'https://bscscan.com',8453:'https://basescan.org',42161:'https://arbiscan.io',10:'https://optimistic.etherscan.io'};
+const explorers:Record<number,string>={1:'https://etherscan.io',56:'https://bscscan.com',8453:'https://basescan.org',42161:'https://arbiscan.io',10:'https://optimistic.etherscan.io',[PLASMA_CHAIN_ID]:'https://plasmascan.to',[SOLANA_CHAIN_ID]:'https://solscan.io'};
 export function chainExplorer(chainID:number,address:string,kind:'address'|'tx'='address'):string {
+ if(chainID===SOLANA_CHAIN_ID){const valid=kind==='address'?solanaAddress(address):/^[1-9A-HJ-NP-Za-km-z]{87,88}$/.test(address);return valid?explorers[chainID]+'/'+(kind==='address'?'account':'tx')+'/'+address:''}
  return explorers[chainID]&&new RegExp(kind==='address'?'^0x[0-9a-fA-F]{40}$':'^0x[0-9a-fA-F]{64}$').test(address)?explorers[chainID]+'/'+kind+'/'+address:'';
 }
 export function gasReceiveURI(chainID:number,address:string):string {
- return Number.isSafeInteger(chainID)&&chainID>0&&/^0x[0-9a-fA-F]{40}$/.test(address)?'ethereum:'+address+'@'+chainID:'';
+ if(chainID===SOLANA_CHAIN_ID)return solanaAddress(address)?'solana:'+address:'';
+ return Number.isSafeInteger(chainID)&&chainID>0&&cryptoAddress(chainID,address)?'ethereum:'+address+'@'+chainID:'';
 }
 export function addressHasAsset(row:PortfolioBalance,assetID:string):boolean {
  if(!assetID)return true;

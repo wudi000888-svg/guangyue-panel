@@ -12,7 +12,7 @@ import (
 
 func cryptoTestRates() cryptoMarketRates {
 	now := time.Now().Unix()
-	return cryptoMarketRates{Source: "CoinGecko + Coinbase", Updated: now, Expires: now + 300, CNY: map[string]string{"USDT": "7.12345678", "USDC": "7.1"}}
+	return cryptoMarketRates{Source: "CoinGecko + Coinbase", Updated: now, Expires: now + 300, CNY: map[string]string{"USDT": "7.12345678", "USDC": "7.1", "USDT0": "7.11"}, AssetSources: map[string]string{"USDT0": "CoinGecko"}}
 }
 
 func TestCryptoRatesSourcesBoundsFreshnessAndFallback(t *testing.T) {
@@ -68,6 +68,50 @@ func TestCryptoRatesSourcesBoundsFreshnessAndFallback(t *testing.T) {
 				t.Fatalf("decimal quote changed: %s", v.CNY["USDT"])
 			}
 		})
+	}
+}
+
+func TestCryptoRatesUSDT0HasOwnPriceAndTruthfulSource(t *testing.T) {
+	now := time.Now().Unix()
+	gecko := fmt.Sprintf(`{"tether":{"cny":7.12,"usd":0.9999,"last_updated_at":%d},"usd-coin":{"cny":7.12,"usd":1,"last_updated_at":%d},"usdt0":{"cny":7.08,"usd":0.999,"last_updated_at":%d}}`, now, now, now)
+	coinbase := `{"data":{"currency":"USD","rates":{"CNY":"7.12","USDT":"1.00010001","USDC":"1"}}}`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/gecko" {
+			_, _ = w.Write([]byte(gecko))
+		} else {
+			w.Header().Set("Date", time.Unix(now, 0).UTC().Format(http.TimeFormat))
+			_, _ = w.Write([]byte(coinbase))
+		}
+	}))
+	defer server.Close()
+	rates, e := cryptoFetchMarketRates(context.Background(), server.Client(), server.URL+"/gecko", server.URL+"/coinbase", now)
+	if e != nil || rates.CNY["USDT0"] != "7.08" || rates.CNY["USDT0"] == rates.CNY["USDT"] || rates.AssetSources["USDT0"] != "CoinGecko" {
+		t.Fatal("USDT0 must not inherit USDT's value or claim a second provider", rates, e)
+	}
+	settings := cryptoDefaultSettings()
+	for i := range settings.Assets {
+		if settings.Assets[i].ID == "plasma-usdt0" {
+			settings.Assets[i].Enabled = true
+		}
+	}
+	if e = cryptoApplyMarketRates(&settings, rates); e != nil {
+		t.Fatal(e)
+	}
+	asset, ok := settings.asset("plasma-usdt0")
+	if !ok || asset.CNYPerToken != "7.08" || asset.RateSource != "CoinGecko" {
+		t.Fatal("invoice source does not match USDT0's actual provider", asset)
+	}
+	delete(rates.CNY, "USDT0")
+	if e = cryptoApplyMarketRates(&settings, rates); e == nil {
+		t.Fatal("enabled USDT0 accepted a missing market quote")
+	}
+	settings = cryptoDefaultSettings()
+	if e = cryptoApplyMarketRates(&settings, rates); e != nil {
+		t.Fatal("a disabled USDT0 option must not stop existing USDT/USDC", e)
+	}
+	depeg := fmt.Sprintf(`{"tether":{"cny":7.12,"usd":1,"last_updated_at":%d},"usd-coin":{"cny":7.12,"usd":1,"last_updated_at":%d},"usdt0":{"cny":5,"usd":0.8,"last_updated_at":%d}}`, now, now, now)
+	if _, e = cryptoCoinGeckoRates([]byte(depeg), now); !errors.Is(e, errCryptoRateUnsafe) {
+		t.Fatal("USDT0 depeg was ignored", e)
 	}
 }
 

@@ -78,6 +78,7 @@ func (s *Store) validateCryptoSweeps(_ bool) error {
 	for _, query := range []string{
 		"SELECT COUNT(*) FROM crypto_funding_addresses f LEFT JOIN crypto_wallet_history w ON w.id=f.wallet_id WHERE w.id IS NULL",
 		"SELECT COUNT(*) FROM crypto_sweep_items i LEFT JOIN crypto_sweep_jobs j ON j.id=i.job_id WHERE j.id IS NULL",
+		"SELECT COUNT(*) FROM crypto_solana_transactions t LEFT JOIN crypto_sweep_items i ON i.id=t.item_id LEFT JOIN crypto_sweep_jobs j ON j.id=t.job_id WHERE i.id IS NULL OR j.id IS NULL OR i.job_id<>t.job_id OR j.chain_id<>101 OR t.chain_id<>101",
 		"SELECT COUNT(*) FROM crypto_chain_transactions t LEFT JOIN crypto_sweep_items i ON i.id=t.item_id WHERE i.id IS NULL OR i.job_id<>t.job_id OR t.nonce<0",
 		"SELECT COUNT(*) FROM (SELECT chain_id,LOWER(from_address),nonce FROM crypto_chain_transactions GROUP BY chain_id,LOWER(from_address),nonce HAVING COUNT(*)<>1) duplicates",
 	} {
@@ -142,7 +143,15 @@ func (s *Store) validateCryptoSweeps(_ bool) error {
 		return e
 	}
 	for _, j := range jobs {
-		if e = s.validateCryptoSweepJob(tx, j, funding[j.wallet]); e != nil {
+		fund := funding[j.wallet]
+		if j.chain == cryptoSolanaChainID {
+			public, err := s.cryptoSolanaPublicByID(tx, j.wallet)
+			if err != nil {
+				return err
+			}
+			fund = public.Funding
+		}
+		if e = s.validateCryptoSweepJob(tx, j, fund); e != nil {
 			return fmt.Errorf("%w: job %s", e, j.id)
 		}
 	}
@@ -160,7 +169,7 @@ func (s *Store) validateCryptoSweepJob(tx *persistence.Tx, j cryptoIntegrityJob,
 		return errCryptoSweepIntegrity
 	}
 	switch j.state {
-	case "queued", "waiting", "complete", "failed", "review_required", "cancelled":
+	case "queued", "waiting", "complete", "failed", "review_required", "fee_review_required", "cancelled":
 		if j.lease != "" || j.leaseUntil != 0 {
 			return errCryptoSweepIntegrity
 		}
@@ -188,6 +197,9 @@ func (s *Store) validateCryptoSweepJob(tx *persistence.Tx, j cryptoIntegrityJob,
 			return errCryptoSweepIntegrity
 		}
 		plans[plan.AddressID] = plan
+	}
+	if j.chain == cryptoSolanaChainID {
+		return s.validateCryptoSolanaJob(tx, quote, j.id, j.state)
 	}
 	rows, e := tx.Query("SELECT id,job_id,address_id,address,path,amount_atoms,gas_needed_atoms,state FROM crypto_sweep_items WHERE job_id=?", j.id)
 	if e != nil {

@@ -3,8 +3,11 @@ export const WALLET_GAS_POLL_MS = 5000;
 export interface SweepEstimateContext { walletID: string; input: SweepInput }
 export interface SweepEstimateState { preview?: SweepPreview; loading: boolean; error: string }
 export type SweepEstimateAPI = (path: string, method?: string, body?: unknown, options?: RequestInit) => Promise<SweepPreview>;
+function sweepEstimateDisplayCurrent(value: SweepPreview | undefined, walletID: string, input: SweepInput, now: number): value is SweepPreview {
+ return !!value && Number.isFinite(value.checked_at) && value.checked_at <= now + 5 && Number.isFinite(value.expires_at) && value.expires_at > now && treasuryPreviewMatches(value, walletID, input);
+}
 export function sweepEstimateCurrent(value: SweepPreview | undefined, walletID: string, input: SweepInput, now: number): value is SweepPreview {
- return !!value && !!value.quote && Number.isFinite(value.checked_at) && value.checked_at <= now + 5 && Number.isFinite(value.expires_at) && value.expires_at > now && treasuryPreviewMatches(value, walletID, input);
+ return sweepEstimateDisplayCurrent(value, walletID, input, now) && value.can_submit === true && !!value.quote;
 }
 /** Estimates only. There is no nonce allocation, task creation, transfer or funding endpoint here. */
 export function createSweepEstimator(api: SweepEstimateAPI, publish: (state: SweepEstimateState) => void, clock = () => Date.now() / 1000) {
@@ -26,7 +29,7 @@ export function createSweepEstimator(api: SweepEstimateAPI, publish: (state: Swe
    try {
     const value = await api('/wallets/' + encodeURIComponent(captured.walletID) + '/sweeps/preview', 'POST', captured.input, { signal: request.signal });
     if (current !== generation || request.signal.aborted) return;
-    if (!sweepEstimateCurrent(value, captured.walletID, captured.input, clock())) throw new Error('提取预估与当前选择不一致或已过期，请重新预估');
+    if (!sweepEstimateDisplayCurrent(value, captured.walletID, captured.input, clock())) throw new Error('提取预估与当前选择不一致或已过期，请重新预估');
     invalidated = false; update({ preview: value, error: '' });
    } catch (reason) { if (current === generation && !request.signal.aborted) update({ error: reason instanceof Error ? reason.message : String(reason) }); }
    finally { if (current === generation) { controller = undefined; flight = undefined; update({ loading: false }); } }

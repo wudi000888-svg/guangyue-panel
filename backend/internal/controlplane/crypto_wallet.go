@@ -28,23 +28,26 @@ const cryptoBackupMaxBytes = 8 << 20
 var cryptoWalletBackupSlots = make(chan struct{}, 1)
 
 type CryptoWallet struct {
-	ID                string  `json:"id"`
-	Name              string  `json:"name"`
-	Mode              string  `json:"mode"`
-	XPub              string  `json:"xpub"`
-	Path              string  `json:"path"`
-	FirstAddress      string  `json:"first_address"`
-	Engine            string  `json:"engine"`
-	EngineVersion     string  `json:"engine_version"`
-	Enabled           bool    `json:"enabled"`
-	Revision          int64   `json:"revision"`
-	NextIndex         int64   `json:"next_index"`
-	Created           int64   `json:"created"`
-	BackupConfirmed   bool    `json:"backup_confirmed"`
-	RecoveryRequired  bool    `json:"recovery_required"`
-	SupportedChainIDs []int64 `json:"supported_chain_ids"`
-	FundingAddress    string  `json:"funding_address"`
-	FundingPath       string  `json:"funding_path"`
+	ID                   string  `json:"id"`
+	Name                 string  `json:"name"`
+	Mode                 string  `json:"mode"`
+	XPub                 string  `json:"xpub"`
+	Path                 string  `json:"path"`
+	FirstAddress         string  `json:"first_address"`
+	Engine               string  `json:"engine"`
+	EngineVersion        string  `json:"engine_version"`
+	Enabled              bool    `json:"enabled"`
+	Revision             int64   `json:"revision"`
+	NextIndex            int64   `json:"next_index"`
+	Created              int64   `json:"created"`
+	BackupConfirmed      bool    `json:"backup_confirmed"`
+	RecoveryRequired     bool    `json:"recovery_required"`
+	SupportedChainIDs    []int64 `json:"supported_chain_ids"`
+	FundingAddress       string  `json:"funding_address"`
+	FundingPath          string  `json:"funding_path"`
+	SolanaFirstAddress   string  `json:"solana_first_address,omitempty"`
+	SolanaFundingAddress string  `json:"solana_funding_address,omitempty"`
+	SolanaFundingPath    string  `json:"solana_funding_path,omitempty"`
 }
 
 type CryptoWalletAddress struct {
@@ -84,6 +87,7 @@ type cryptoWalletInput struct {
 	DeleteAck          bool               `json:"delete_ack"`
 	PermanentDeleteAck bool               `json:"permanent_delete_ack,omitempty"`
 	Import             bool               `json:"import,omitempty"`
+	ChainID            string             `json:"chain_id,omitempty"`
 }
 
 type cryptoWalletQuery interface {
@@ -292,6 +296,15 @@ func (a *App) cryptoWalletGet(w http.ResponseWriter, r *http.Request, route stri
 		if e = rows.Err(); e != nil {
 			return e
 		}
+		if e = rows.Close(); e != nil {
+			return e
+		}
+		for i := range items {
+			items[i], e = a.store.cryptoWalletSolanaDTO(a.store.db, items[i])
+			if e != nil {
+				return e
+			}
+		}
 		jsonResponse(w, 200, object{"items": items})
 		return nil
 	}
@@ -311,7 +324,26 @@ func (a *App) cryptoWalletGet(w http.ResponseWriter, r *http.Request, route stri
 			return commerceFail(400, "地址游标无效")
 		}
 	}
-	rows, e := a.store.db.Query("SELECT id,wallet_id,address_index,path,address,label,created FROM crypto_wallet_addresses WHERE wallet_id IN ("+cryptoWalletOwnerScope+") AND address_index>? ORDER BY address_index LIMIT 201", v.ID, after)
+	familyFilter := ""
+	if selected := r.URL.Query().Get("chain_id"); selected != "" {
+		settings, err := a.store.cryptoPaymentSettings()
+		if err != nil {
+			return err
+		}
+		chain, err := cryptoSweepChain(settings, selected)
+		if err != nil {
+			return err
+		}
+		if !cryptoWalletSupports(v, chain.ChainID) {
+			return commerceFail(409, "此钱包未选择该网络")
+		}
+		familyFilter = " AND " + cryptoWalletPathSQL("", chain.ChainID == cryptoSolanaChainID)
+	}
+	v, e = a.store.cryptoWalletSolanaDTO(a.store.db, v)
+	if e != nil {
+		return e
+	}
+	rows, e := a.store.db.Query("SELECT id,wallet_id,address_index,path,address,label,created FROM crypto_wallet_addresses WHERE wallet_id IN ("+cryptoWalletOwnerScope+")"+familyFilter+" AND address_index>? ORDER BY address_index LIMIT 201", v.ID, after)
 	if e != nil {
 		return e
 	}
@@ -494,16 +526,36 @@ func (a *App) cryptoWalletPost(w http.ResponseWriter, r *http.Request, actor Rec
 			if utf8.RuneCountInString(in.Label) > 120 {
 				return commerceFail(400, "地址备注不能超过120字")
 			}
-			addr, e := cryptoDeriveAddress(v.XPub, v.Path, uint32(v.NextIndex))
+			sol := len(v.SupportedChainIDs) == 1 && v.SupportedChainIDs[0] == cryptoSolanaChainID
+			if in.ChainID != "" {
+				settings, err := a.store.cryptoPaymentSettingsFrom(tx)
+				if err != nil {
+					return err
+				}
+				chain, err := cryptoSweepChain(settings, in.ChainID)
+				if err != nil {
+					return err
+				}
+				if !cryptoWalletSupports(v, chain.ChainID) {
+					return commerceFail(409, "此钱包未选择该网络")
+				}
+				sol = chain.ChainID == cryptoSolanaChainID
+			}
+			addr, allocationPath, e := a.store.cryptoWalletDerive(tx, v, v.NextIndex, sol)
 			if e != nil {
 				return e
 			}
-			allocation := CryptoWalletAddress{ID: serial("GYA"), WalletID: v.ID, Index: v.NextIndex, Path: cryptoFullPath(v.Path, v.NextIndex), Address: addr, Label: in.Label, Created: time.Now().Unix()}
+			allocation := CryptoWalletAddress{ID: serial("GYA"), WalletID: v.ID, Index: v.NextIndex, Path: allocationPath, Address: addr, Label: in.Label, Created: time.Now().Unix()}
 			if _, e = tx.Exec("INSERT INTO crypto_wallet_addresses(id,wallet_id,address_index,path,address,label,created) VALUES(?,?,?,?,?,?,?)", allocation.ID, v.ID, allocation.Index, allocation.Path, allocation.Address, allocation.Label, allocation.Created); e != nil {
 				return e
 			}
 			v.NextIndex++
 			v.Revision++
+			if cryptoIsSolanaPath(allocation.Path) {
+				if e = a.store.cryptoSealSolanaAddress(tx, v, allocation); e != nil {
+					return e
+				}
+			}
 			if _, e = tx.Exec("UPDATE crypto_wallets SET next_index=?,revision=? WHERE id=?", v.NextIndex, v.Revision, v.ID); e != nil {
 				return e
 			}
@@ -532,6 +584,37 @@ func (a *App) cryptoWalletPost(w http.ResponseWriter, r *http.Request, actor Rec
 			if *in.Enabled && v.RecoveryRequired {
 				return commerceFail(409, "请先核对并确认历史地址高水位，再启用导入的钱包")
 			}
+			if in.SupportedChainIDs != nil {
+				newChains, chainErr := cryptoWalletChainIDs(in.SupportedChainIDs)
+				if chainErr != nil {
+					return chainErr
+				}
+				for _, previous := range v.SupportedChainIDs {
+					present := false
+					for _, current := range newChains {
+						present = present || previous == current
+					}
+					if !present {
+						return commerceFail(400, "已支持网络不能移除，请添加所需网络")
+					}
+				}
+				v.SupportedChainIDs = newChains
+				if cryptoWalletSupports(v, cryptoSolanaChainID) {
+					if v.Mode != "hot" {
+						return commerceFail(400, "Solana 需要热钱包，外部 EVM 公钥无法派生")
+					}
+					if _, e = a.store.cryptoEnsureSolanaPublic(tx, v); e != nil {
+						return e
+					}
+				}
+				if _, e = tx.Exec("UPDATE crypto_wallets SET supported_chain_ids=? WHERE id=?", string(jsonBytes(v.SupportedChainIDs)), v.ID); e != nil {
+					return e
+				}
+			}
+			v, e = a.store.cryptoWalletSolanaDTO(tx, v)
+			if e != nil {
+				return e
+			}
 			v.Enabled = *in.Enabled
 			v.Revision++
 			if _, e = tx.Exec("UPDATE crypto_wallets SET enabled=?,revision=? WHERE id=?", cryptoBool(v.Enabled), v.Revision, v.ID); e != nil {
@@ -554,6 +637,22 @@ func (a *App) cryptoWalletPost(w http.ResponseWriter, r *http.Request, actor Rec
 			response = v
 		default:
 			return commerceFail(404, "功能不存在")
+		}
+	}
+	switch value := response.(type) {
+	case CryptoWallet:
+		value, e = a.store.cryptoWalletSolanaDTO(tx, value)
+		if e != nil {
+			return e
+		}
+		response = value
+	case object:
+		if wallet, ok := value["wallet"].(CryptoWallet); ok {
+			wallet, e = a.store.cryptoWalletSolanaDTO(tx, wallet)
+			if e != nil {
+				return e
+			}
+			value["wallet"] = wallet
 		}
 	}
 	if e = cryptoSaveOperation(tx, actor.ID, in, hash, response); e != nil {
@@ -627,6 +726,9 @@ func (a *App) cryptoWalletCreate(tx *persistence.Tx, route string, in cryptoWall
 			return v, commerceFail(400, "观察钱包只能导入扩展公钥")
 		}
 		v.Mode, v.Engine, v.BackupConfirmed = "watch_only", "external-xpub", true
+		if cryptoWalletSupports(v, cryptoSolanaChainID) {
+			return v, commerceFail(400, "Solana 需要热钱包，外部 EVM 公钥无法派生")
+		}
 	}
 	if e = cryptoInsertWallet(tx, v, receive, secret, 0); e != nil {
 		return v, e
@@ -635,6 +737,12 @@ func (a *App) cryptoWalletCreate(tx *persistence.Tx, route string, in cryptoWall
 		var f cryptoFundingAddress
 		f, e = a.store.cryptoEnsureFunding(tx, v)
 		v.FundingAddress, v.FundingPath = f.Address, f.Path
+		if e == nil && cryptoWalletSupports(v, cryptoSolanaChainID) {
+			_, e = a.store.cryptoEnsureSolanaPublic(tx, v)
+			if e == nil {
+				v, e = a.store.cryptoWalletSolanaDTO(tx, v)
+			}
+		}
 	}
 	return v, e
 }

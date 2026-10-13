@@ -15,6 +15,13 @@ it('restores an uncertain invoice operation after reload without storing passwor
 
 const setupWallet={id:'bnb',mode:'hot',enabled:true,backup_confirmed:true,recovery_required:false,next_index:0,supported_chain_ids:[56]} as CryptoWallet;
 const setupSettings={enabled:false,wallet_id:'',chains:[{chain_id:1},{chain_id:56},{chain_id:8453}],assets:[{id:'ethereum-usdt',chain_id:1,symbol:'USDT'},{id:'bsc-usdt',chain_id:56,symbol:'USDT'},{id:'bsc-usdc',chain_id:56,symbol:'USDC'},{id:'base-usdc',chain_id:8453,symbol:'USDC'}]} as CryptoSettings;
+it('offers official Plasma USDT0 and native USDC with the selected Solana network without broadening external xpub wallets',()=>{
+ const settings={...setupSettings,chains:[{chain_id:101},{chain_id:9745}],assets:[{id:'solana-usdt',chain_id:101,symbol:'USDT'},{id:'solana-usdc',chain_id:101,symbol:'USDC'},{id:'plasma-usdt0',chain_id:9745,symbol:'USDT0'},{id:'plasma-usdc',chain_id:9745,symbol:'USDC'}]} as CryptoSettings;
+ const wallet={...setupWallet,supported_chain_ids:[101,9745]};expect(cryptoSetupDefaults(wallet,settings)).toEqual({chain_ids:[101],asset_ids:['solana-usdt','solana-usdc']});
+ expect(cryptoSetupDefaults({...wallet,supported_chain_ids:[9745]},settings)).toEqual({chain_ids:[9745],asset_ids:['plasma-usdt0','plasma-usdc']});
+ expect(cryptoSetupSelection(wallet,settings,[101,9745],['solana-usdc','plasma-usdt0'])).toEqual({wallet_id:'bnb',chain_ids:[101,9745],asset_ids:['solana-usdc','plasma-usdt0']});
+ expect(()=>cryptoSetupSelection({...wallet,mode:'watch_only'},settings,[101],['solana-usdc'])).toThrow();
+});
 it('defaults setup to BNB and stablecoins without showing unsupported networks',()=>{
  expect(cryptoSetupDefaults(setupWallet,setupSettings)).toEqual({chain_ids:[56],asset_ids:['bsc-usdt','bsc-usdc']});
  expect(cryptoSetupDefaults({...setupWallet,supported_chain_ids:[1]},setupSettings)).toEqual({chain_ids:[1],asset_ids:['ethereum-usdt']});

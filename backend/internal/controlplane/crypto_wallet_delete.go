@@ -45,6 +45,29 @@ func cryptoWalletReceiveAddresses(q cryptoWalletQuery, id string, limit int) ([]
 	return out, rows.Err()
 }
 
+func cryptoWalletNetworkAddresses(q cryptoWalletQuery, id string, sol bool, limit int) ([]CryptoWalletAddress, error) {
+	query := "SELECT id,wallet_id,address_index,path,address,label,created FROM crypto_wallet_addresses WHERE wallet_id IN (" + cryptoWalletOwnerScope + ") AND " + cryptoWalletPathSQL("", sol) + " ORDER BY address_index"
+	args := []any{id}
+	if limit > 0 {
+		query += " LIMIT ?"
+		args = append(args, limit)
+	}
+	rows, e := q.Query(query, args...)
+	if e != nil {
+		return nil, e
+	}
+	defer rows.Close()
+	out := []CryptoWalletAddress{}
+	for rows.Next() {
+		var x CryptoWalletAddress
+		if e = rows.Scan(&x.ID, &x.WalletID, &x.Index, &x.Path, &x.Address, &x.Label, &x.Created); e != nil {
+			return nil, e
+		}
+		out = append(out, x)
+	}
+	return out, rows.Err()
+}
+
 func cryptoWalletDeleted(q cryptoWalletQuery, id string) (bool, error) {
 	var n int
 	e := q.QueryRow("SELECT COUNT(*) FROM crypto_wallet_history WHERE id=? AND deleted_at>0", id).Scan(&n)
@@ -75,6 +98,12 @@ func (s *Store) permanentlyDeleteCryptoWallet(tx *persistence.Tx, v CryptoWallet
 	}
 	if pending > 0 {
 		return commerceFail(409, "钱包仍有已签名交易等待核验，请先确认交易结果再永久删除")
+	}
+	if e := tx.QueryRow("SELECT COUNT(*) FROM crypto_solana_transactions t JOIN crypto_sweep_jobs j ON j.id=t.job_id WHERE j.wallet_id=? AND t.state NOT IN ('confirmed','reverted')", v.ID).Scan(&pending); e != nil {
+		return e
+	}
+	if pending > 0 {
+		return commerceFail(409, "钱包仍有已签名 Solana 交易等待核验，请先确认交易结果再永久删除")
 	}
 	settings, e := s.cryptoPaymentSettingsFrom(tx)
 	if e != nil {

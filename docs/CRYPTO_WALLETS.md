@@ -20,7 +20,7 @@
 3. 将备份文件和口令分别妥善保存，然后确认已保存备份。未确认备份的热钱包不能继续分配地址。
 4. 在链上支付设置中选择钱包、网络及 USDT/USDC，输入管理员密码后“一键启用”。面板内置双独立公共 RPC 和自动报价，完整预检通过才启用；高级配置仍可手动覆盖。用户选择加密付款时自动分配地址，地址和订单记录不会因刷新、到期、取消或停用而回收。原有手动地址工具作为管理员可选工具保留。
 
-创建成功立即返回固定 Gas 地址及派生路径，不依赖 RPC 查询或第一笔订单。只显示创建时选择的网络；BNB-only 钱包只提示在 BNB Smart Chain 充 BNB，不能用其他链 ETH 支付其手续费。各 EVM 网络地址字符串可能相同，但余额独立，界面选链不能阻止他人向其他网络误转。新钱包不提供后续编辑支持网络的入口；历史钱包迁移默认保留 Ethereum/BNB。
+创建成功立即返回固定 Gas 地址及派生路径，不依赖 RPC 查询或第一笔订单。只显示创建时选择的网络；BNB-only 钱包只提示在 BNB Smart Chain 充 BNB，不能用其他链 ETH 支付其手续费。各 EVM 网络地址字符串可能相同，但余额独立，界面选链不能阻止他人向其他网络误转。钱包管理提供“管理支持网络”，用管理员密码、当前版本和幂等操作编号新增支持链，保留原启停状态。已支持网络不能从此入口移除，关闭新收款在收款设置中操作。历史钱包升级保留原选项，新链默认不自动启用支付。Solana 仅支持持有加密助记词的热钱包，EVM xpub 不能派生全硬化 ed25519 子地址。
 
 备份采用 `guangyue-crypto-wallet-v1` 格式，包含钱包身份、助记词、分支、支持网络、固定 Gas 描述、索引高水位及地址分配记录；使用 scrypt（N=32768、r=8、p=1）和 AES-256-GCM，以随机盐和 nonce 加密。该文件可用独立备份口令恢复，不依赖原服务器的 `master.key`。服务端不能找回丢失的独立备份口令。
 
@@ -57,3 +57,13 @@
 敏感 API 仅限本站 owner，验证当前管理员密码，拒绝子站代理身份；响应 `no-store`。助记词不进入 URL、浏览器 localStorage/sessionStorage、普通幂等缓存或日志。前端页面能正确运行 WASM、后端能派生地址和备份能解密，分别是钱包管理验证，不是主网收款或资金转出验收。
 
 已实现的自动支付和资金提取见[订单与归集](CRYPTO_TREASURY.md)；完整网络、Token 合约、链最终性、去重与后续链上退款要求见[加密支付设计](CRYPTO_PAYMENTS.md)，当前接口与后续施工划分见[项目文档](projects/crypto-payments/README.md)。
+
+## Solana 与 Plasma
+
+Solana 收款路径为 `m/44'/501'/index'/0'`，固定 SOL 资金路径为 `m/44'/501'/2147483647'/0'`，资金路径不会分配给订单。内部数值标识 101 仅用于账本，主网身份以完整 genesis hash 校验；base58 公钥、mint、签名区分大小写。地址与凭据封存绑定钱包身份、接收分支和索引；Ethereum 描述及全局地址高水位继续保留。助记词导入不能代替原订单数据库或签名交易的恢复。
+
+Plasma 主网编号 9745，XPL 为普通交易手续费币；只接受官方 USDT0 与 Circle 原生 USDC，不能用桥接币的同名符号替换。其 EVM 地址可复用原热钱包描述，但链上余额独立。RPC 启用前验证官方 genesis pin、两个供应商及 finalized 区块。
+
+内置 Solana RPC 为 Labs 与 [QuickNode 官方公开演示接口](https://www.quicknode.com/docs/solana/getTokenAccountsByOwner)，两者独立核验；共享公开服务可能限流，高量运营可在高级设置填写自有 RPC。Solana 自动扫描支持 legacy / v0 / v1，未知交易版本明确进入待核对。
+
+官方依据：[Solana 入账与交易版本](https://solana.com/docs/defi/exchange)、[Solana 费用](https://solana.com/docs/core/fees)、[Circle 合约与 mint](https://developers.circle.com/stablecoins/usdc-contract-addresses)、[Plasma 网络](https://docs.plasma.org/docs/plasma-chain/network-information/connect-to-plasma)、[USDT0 部署](https://docs.usdt0.to/technical-documentation/deployments)。

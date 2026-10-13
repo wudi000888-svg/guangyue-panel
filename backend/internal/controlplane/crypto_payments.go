@@ -20,6 +20,8 @@ type CryptoChain struct {
 	HasRPC           bool   `json:"has_rpc"`
 	HasRPCBackup     bool   `json:"has_rpc_backup"`
 	NativeSymbol     string `json:"native_symbol"`
+	Family           string `json:"family,omitempty"`
+	NativeDecimals   int    `json:"native_decimals,omitempty"`
 	Enabled          bool   `json:"enabled"`
 	FinalityVerified bool   `json:"finality_verified"`
 	RPCSource        string `json:"rpc_source"`
@@ -59,9 +61,11 @@ func cryptoDefaultSettings() CryptoPaymentSettings {
 		{ID: "arbitrum", Name: "Arbitrum One", ChainID: 42161, NativeSymbol: "ETH"},
 		{ID: "op", Name: "OP Mainnet", ChainID: 10, NativeSymbol: "ETH"},
 		{ID: "base", Name: "Base", ChainID: 8453, NativeSymbol: "ETH"},
+		{ID: "plasma", Name: "Plasma", ChainID: cryptoPlasmaChainID, NativeSymbol: "XPL", Family: "evm", NativeDecimals: 18},
+		{ID: "solana", Name: "Solana", ChainID: 101, NativeSymbol: "SOL", Family: "solana", NativeDecimals: 9},
 	}}
 	add := func(id string, c int64, symbol, name, contract string, decimals int) {
-		s.Assets = append(s.Assets, CryptoAsset{ID: id, ChainID: c, Symbol: symbol, Name: name, Contract: strings.ToLower(contract), Decimals: decimals, PaymentDecimals: 2})
+		s.Assets = append(s.Assets, CryptoAsset{ID: id, ChainID: c, Symbol: symbol, Name: name, Contract: cryptoNormalizeContract(c, contract), Decimals: decimals, PaymentDecimals: 2})
 	}
 	add("ethereum-usdt", 1, "USDT", "USDT · Ethereum", "0xdAC17F958D2ee523a2206206994597C13D831ec7", 6)
 	add("ethereum-usdc", 1, "USDC", "USDC · Ethereum", "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", 6)
@@ -72,6 +76,15 @@ func cryptoDefaultSettings() CryptoPaymentSettings {
 	add("op-usdc", 10, "USDC", "USDC · OP Mainnet", "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85", 6)
 	add("op-usdt0", 10, "USDT0", "USDT0 · OP Mainnet", "0x01bFF41798a0BcF287b996046Ca68b395DbC1071", 6)
 	add("base-usdc", 8453, "USDC", "USDC · Base", "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", 6)
+	// Issuer-published contracts/mints; Plasma USD₮0 is distinct from legacy
+	// USDT and Circle's native USDC must never be replaced with bridged USDC.
+	// https://docs.usdt0.to/technical-documentation/deployments
+	// https://developers.circle.com/stablecoins/usdc-contract-addresses
+	// https://tether.to/en/supported-protocols/
+	add("plasma-usdt0", cryptoPlasmaChainID, "USDT0", "USDT0 · Plasma", "0xB8CE59FC3717ada4C02eaDF9682A9e934F625ebb", 6)
+	add("plasma-usdc", cryptoPlasmaChainID, "USDC", "USDC · Plasma · Circle Native", "0x2d661C89D812261039AF9764eceaAee884f5F67F", 6)
+	add("solana-usdt", 101, "USDT", "USDT · Solana", "Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB", 6)
+	add("solana-usdc", 101, "USDC", "USDC · Solana", "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", 6)
 	return s
 }
 func (s *Store) cryptoPaymentSettings() (CryptoPaymentSettings, error) {
@@ -88,6 +101,9 @@ func (s *Store) cryptoPaymentSettingsFrom(q cryptoWalletQuery) (CryptoPaymentSet
 		return v, e
 	}
 	e = s.vault.open(body, &v)
+	if e == nil {
+		v = cryptoMergeNewDefaults(v)
+	}
 	return v, e
 }
 func cryptoPublicSettings(v CryptoPaymentSettings) CryptoPaymentSettings {
@@ -101,7 +117,7 @@ func cryptoPublicSettings(v CryptoPaymentSettings) CryptoPaymentSettings {
 		c.HasRPCBackup = c.RPCBackupURL != ""
 		c.RPCURL = ""
 		c.RPCBackupURL = ""
-		c.FinalityVerified = c.ChainID == 1 || c.ChainID == 56
+		c.FinalityVerified = cryptoChainAutomatic(c.ChainID)
 		if c.RPCSource == "" && c.HasRPC {
 			c.RPCSource = "custom"
 		}
@@ -145,7 +161,7 @@ func cryptoQuote(cents int64, v CryptoAsset) (string, error) {
 	return numerator.String(), nil
 }
 func cryptoChainReason(c CryptoChain) string {
-	if c.ChainID != 1 && c.ChainID != 56 {
+	if !cryptoChainAutomatic(c.ChainID) {
 		return "此网络尚未完成 L1 最终性核验，暂不接受新付款"
 	}
 	if !c.Enabled {
@@ -226,10 +242,10 @@ func (a *App) saveCryptoPaymentSettings(w http.ResponseWriter, r *http.Request, 
 	} else {
 		v.RateSource, v.RateCheckedAt, v.RateError = "管理员手动汇率", 0, ""
 	}
-	if v.InvoiceMinutes < 15 || v.InvoiceMinutes > 120 || len(v.Chains) != 5 || len(v.Assets) != 9 {
+	defs := cryptoDefaultSettings()
+	if v.InvoiceMinutes < 15 || v.InvoiceMinutes > 120 || len(v.Chains) != len(defs.Chains) || len(v.Assets) != len(defs.Assets) {
 		return commerceFail(400, "支付设置无效")
 	}
-	defs := cryptoDefaultSettings()
 	seen := map[string]bool{}
 	for i := range v.Chains {
 		c := &v.Chains[i]
@@ -239,7 +255,7 @@ func (a *App) saveCryptoPaymentSettings(w http.ResponseWriter, r *http.Request, 
 			return commerceFail(400, "网络不在受支持清单")
 		}
 		seen[c.ID] = true
-		c.Name, c.NativeSymbol, c.FinalityVerified = d.Name, d.NativeSymbol, c.ChainID == 1 || c.ChainID == 56
+		c.Name, c.NativeSymbol, c.Family, c.NativeDecimals, c.FinalityVerified = d.Name, d.NativeSymbol, d.Family, d.NativeDecimals, cryptoChainAutomatic(c.ChainID)
 		c.RPCURL = strings.TrimSpace(c.RPCURL)
 		c.RPCBackupURL = strings.TrimSpace(c.RPCBackupURL)
 		if c.RPCURL == "" {
@@ -271,7 +287,7 @@ func (a *App) saveCryptoPaymentSettings(w http.ResponseWriter, r *http.Request, 
 	for i := range v.Assets {
 		p := &v.Assets[i]
 		d, ok := defs.asset(p.ID)
-		if !ok || seen[p.ID] || p.ChainID != d.ChainID || !strings.EqualFold(p.Contract, d.Contract) || p.Decimals != d.Decimals {
+		if !ok || seen[p.ID] || p.ChainID != d.ChainID || cryptoNormalizeContract(p.ChainID, p.Contract) != d.Contract || p.Decimals != d.Decimals {
 			return commerceFail(400, "资产合约或精度不在白名单")
 		}
 		seen[p.ID] = true

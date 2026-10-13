@@ -3,6 +3,10 @@ title = "Guangyue source and history scanning"
 useDefault = true
 
 [allowlist]
-description = "Exact public Xray binary SHA256, misclassified as a JFrog identity token"
+description = "Exact public Xray binary SHA256 and Circle Solana USDC mint; neither is a credential"
 regexTarget = "secret"
-regexes = ['''^8255dd939c34cf966cc91517b6324dd3c8d0bcf49ffac8beca049a38c46845ed$''']
+regexes = [
+  '''^8255dd939c34cf966cc91517b6324dd3c8d0bcf49ffac8beca049a38c46845ed$''',
+  # https://developers.circle.com/stablecoins/usdc-contract-addresses
+  '''^EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v$''',
+]

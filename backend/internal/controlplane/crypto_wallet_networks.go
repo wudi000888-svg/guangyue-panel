@@ -10,13 +10,13 @@ func cryptoWalletChainIDs(ids []int64) ([]int64, error) {
 	if ids == nil {
 		return []int64{1, 56}, nil
 	}
-	if len(ids) == 0 || len(ids) > 5 {
+	if len(ids) == 0 || len(ids) > 7 {
 		return nil, commerceFail(400, "请选择钱包支持的网络")
 	}
 	out := slices.Clone(ids)
 	slices.Sort(out)
 	for i, id := range out {
-		if id != 1 && id != 56 && id != 10 && id != 42161 && id != 8453 || i > 0 && out[i-1] == id {
+		if id != 1 && id != 56 && id != 10 && id != 42161 && id != 8453 && id != 9745 && id != cryptoSolanaChainID || i > 0 && out[i-1] == id {
 			return nil, commerceFail(400, "钱包网络不在支持清单中或重复")
 		}
 	}

@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-const cryptoCoinGeckoURL = "https://api.coingecko.com/api/v3/simple/price?ids=tether,usd-coin&vs_currencies=cny,usd&include_last_updated_at=true&precision=8"
+const cryptoCoinGeckoURL = "https://api.coingecko.com/api/v3/simple/price?ids=tether,usd-coin,usdt0&vs_currencies=cny,usd&include_last_updated_at=true&precision=8"
 const cryptoCoinbaseURL = "https://api.coinbase.com/v2/exchange-rates?currency=USD"
 
 var errCryptoRateUnsafe = errors.New("行情超出稳定币安全范围或两个来源分歧过大，暂停新报价")
@@ -22,6 +22,7 @@ type cryptoMarketRates struct {
 	Source           string
 	Updated, Expires int64
 	CNY              map[string]string
+	AssetSources     map[string]string
 }
 
 func cryptoRateNumber(raw string) (*big.Rat, error) {
@@ -90,10 +91,12 @@ func cryptoCoinGeckoRates(raw []byte, now int64) (cryptoMarketRates, error) {
 		return out, errors.New("自动行情响应无效")
 	}
 	var incomplete error
-	for _, coin := range []struct{ id, symbol string }{{"tether", "USDT"}, {"usd-coin", "USDC"}} {
+	for _, coin := range []struct{ id, symbol string }{{"tether", "USDT"}, {"usd-coin", "USDC"}, {"usdt0", "USDT0"}} {
 		v, ok := body[coin.id]
 		if !ok || !cryptoRateFresh(v.Updated, now) {
-			incomplete = errors.New("自动行情已过期")
+			if coin.symbol != "USDT0" {
+				incomplete = errors.New("自动行情已过期")
+			}
 			continue
 		}
 		cny, e := cryptoRateNumber(v.CNY.String())
@@ -138,7 +141,10 @@ func cryptoCoinbaseRates(raw []byte, headers http.Header, now int64) (cryptoMark
 	if e != nil || !cryptoRateBound(cny, "3", "20") {
 		return out, errCryptoRateUnsafe
 	}
-	for _, symbol := range []string{"USDT", "USDC"} {
+	for _, symbol := range []string{"USDT", "USDC", "USDT0"} {
+		if symbol == "USDT0" && body.Data.Rates[symbol] == "" {
+			continue
+		}
 		perUSD, e := cryptoRateNumber(body.Data.Rates[symbol])
 		if e != nil {
 			return out, e
@@ -188,8 +194,18 @@ func cryptoFetchMarketRates(ctx context.Context, client *http.Client, geckoURL, 
 	if y.err != nil {
 		return x.rates, nil
 	}
-	out := cryptoMarketRates{Source: "CoinGecko + Coinbase", Updated: min(x.rates.Updated, y.rates.Updated), Expires: min(x.rates.Expires, y.rates.Expires), CNY: map[string]string{}}
-	for _, symbol := range []string{"USDT", "USDC"} {
+	out := cryptoMarketRates{Source: "CoinGecko + Coinbase", Updated: min(x.rates.Updated, y.rates.Updated), Expires: min(x.rates.Expires, y.rates.Expires), CNY: map[string]string{}, AssetSources: map[string]string{}}
+	for _, symbol := range []string{"USDT", "USDC", "USDT0"} {
+		if symbol == "USDT0" && (x.rates.CNY[symbol] == "" || y.rates.CNY[symbol] == "") {
+			// USDT0 has its own market value. Do not silently price the bridged
+			// asset as USDT or claim two providers when only one publishes it.
+			for _, provider := range []cryptoMarketRates{x.rates, y.rates} {
+				if provider.CNY[symbol] != "" {
+					out.CNY[symbol], out.AssetSources[symbol] = provider.CNY[symbol], provider.Source
+				}
+			}
+			continue
+		}
 		a, _ := cryptoRateNumber(x.rates.CNY[symbol])
 		b, _ := cryptoRateNumber(y.rates.CNY[symbol])
 		low, high := a, b
@@ -217,14 +233,23 @@ func cryptoApplyMarketRates(settings *CryptoPaymentSettings, rates cryptoMarketR
 	}
 	for i := range settings.Assets {
 		asset := &settings.Assets[i]
-		if asset.ChainID != 1 && asset.ChainID != 56 {
+		if !cryptoChainAutomatic(asset.ChainID) {
 			continue
+		}
+		if asset.Symbol == "USDT0" && rates.CNY[asset.Symbol] == "" {
+			if !asset.Enabled {
+				continue
+			}
+			return errors.New("USDT0 自动行情暂不可用，请重新刷新报价")
 		}
 		rate, e := cryptoRateNumber(rates.CNY[asset.Symbol])
 		if e != nil || !cryptoRateBound(rate, "3", "20") {
 			return errCryptoRateUnsafe
 		}
 		asset.CNYPerToken, asset.RateSource, asset.RateUpdatedAt, asset.RateExpiresAt = cryptoRateDecimal(rate), rates.Source, rates.Updated, rates.Expires
+		if source := rates.AssetSources[asset.Symbol]; source != "" {
+			asset.RateSource = source
+		}
 	}
 	settings.RateMode, settings.RateSource, settings.RateCheckedAt, settings.RateError = "automatic", rates.Source, now, ""
 	return nil

@@ -1,6 +1,6 @@
 # 加密货币支付与提取接口契约
 
-适用版本：**0.39.18** · 2026-10-13。以下为本版实际接口；未列出的 OKX 绑定、成员 crypto 充值、链上退款和外部签名器接口均未实现。
+适用版本：**0.40.0** · 2026-10-13。以下为本版实际接口；未列出的 OKX 绑定、成员 crypto 充值、链上退款和外部签名器接口均未实现。
 
 ## 请求域、权限与金额
 
@@ -21,8 +21,8 @@
 | `POST /wallets/hot` | `name,mnemonic,xpub,path,first_address,engine_version,supported_chain_ids,password,operation_id,risk_ack:true`；官方 Wallet Core 4.8.4 生成或使用 `import:true` 明确导入 12/24 词助记词，服务器独立核对后加密 |
 | `POST /wallets/xpub` | `name,xpub,path,supported_chain_ids,password,operation_id`；返回只读钱包，不保存外部私钥 |
 | `GET /wallets/{id}/addresses?after=N` | `{wallet,items,next_after}`，按索引每页最多 200 条；GET 不分配地址 |
-| `POST /wallets/{id}/addresses` | `password,operation_id,revision,label`；手动分配，返回 `{wallet,address}`；不创建订单 |
-| `POST /wallets/{id}/status` | `password,operation_id,revision,enabled`；停用仅停止新地址分配，不删除历史 |
+| `POST /wallets/{id}/addresses` | `password,operation_id,revision,label,chain_id`；手动分配，返回 `{wallet,address}`；不创建订单，`chain_id` 为配置字符串 ID |
+| `POST /wallets/{id}/status` | `password,operation_id,revision,enabled`，可附 `supported_chain_ids` 增加支持网络；停用仅停止新地址分配，不删除历史；已有网络不能移除 |
 | `POST /wallets/{id}/backup` | `password,backup_password`；返回可移植加密备份，不缓存敏感响应 |
 | `POST /wallets/{id}/backup/confirm` | `password,operation_id,revision`；确认已导出并保存备份 |
 | `POST /wallets/{id}/reveal` | `password`；仅热钱包临时返回助记词，前端限时并在离开时清除 |
@@ -30,7 +30,9 @@
 | `POST /wallets/{id}/recovery` | `password,operation_id,revision,next_index,recovery_ack:true`；索引不得低于已知高水位，核对后仍需启用 |
 | `POST /wallets/{id}/delete` | `password,operation_id,revision,delete_ack:true,permanent_delete_ack:true`；永久删除，返回 `{id,deleted:true}`；没有撤销或恢复删除入口，旧页面缺少永久删除确认会被拒绝 |
 
-钱包 DTO 新增 `supported_chain_ids`、`funding_address`、`funding_path`。新界面默认 `[56]`，可选 `[1,56]`；显式空列表、重复链或未知链拒绝。历史迁移/旧备份缺失字段默认 `[1,56]`。热钱包固定 Gas 描述可离线派生，xpub 返回空资金地址。新付款、余额查询及新归集任务校验支持链；既有付款单和已批准任务仍继续核对冻结网络。
+钱包 DTO 包含 `supported_chain_ids`、`funding_address`、`funding_path`，支持 Solana 的热钱包还包含 `solana_first_address,solana_funding_address,solana_funding_path`。新界面默认 `[56]`，可选 Ethereum / BSC / Solana / Plasma 的 `[1,56,101,9745]`；101 是面板内部 Solana 标识，不是 EVM chain ID。显式空列表、重复链或未知链拒绝。历史迁移/旧备份缺失字段默认 `[1,56]`。热钱包固定 Gas 描述可离线派生，xpub 返回空资金地址且不能启用 Solana 的硬化派生。新付款、余额查询及新归集任务校验支持链；既有付款单和已批准任务仍继续核对冻结网络。
+
+Solana 收款路径为 `m/44'/501'/index'/0'`，固定手续费地址为 `m/44'/501'/2147483647'/0'`，不复用普通地址索引。地址、mint 和交易签名区分大小写；不能做 EVM 的小写归一化。全站快照包含 Solana 公共派生证明和已签交易记录；钱包便携备份从助记词重新生成并认证公共证明，恢复时仍须核对地址索引。
 
 备份 `format` 为 `guangyue-crypto-wallet-v1`，使用独立口令加密。新站恢复必须核对备份之后的实际分配记录；同一分支不能交给多个独立部署同时分配。地址接口现在同时可读取手动地址和订单分配地址，invoice 的地址不能再用于其他订单。
 
@@ -60,7 +62,7 @@
 
 `GET /admin/setup/status` 返回公共设置及 `readiness:{ready,checked_at,message}`。它是上次成功预检加当前本地设置/报价状态，不宣称实时网络健康。`rpc_source` 为 `built_in/custom`，`rate_mode` 为 `automatic/manual`。自动行情到期前刷新；双来源中一个暂不可用可使用另一个安全有效来源，脱锚/过大分歧停止新报价，旧 invoice 保留快照。高级 `POST /admin/settings` 可关闭或自定义，不能靠提交 `automatic` 从无预检状态绕过 setup。
 
-只有 Ethereum（`ethereum`/1）和 BSC（`bsc`/56）能启用自动收款/提取。Arbitrum（`arbitrum`/42161）、OP（`op`/10）、Base（`base`/8453）仅 API 可配置查询 RPC（钱包须显式包含该链，当前 UI 无入口），但 L2 自动资金操作有服务器硬限制，不能由 `finality_verified` 手工覆盖。
+Ethereum（`ethereum`/1）、BSC（`bsc`/56）、Solana（`solana`/101）和 Plasma（`plasma`/9745）可启用自动收款/提取。Solana 按固定主网 genesis 和 SPL Token mint 校验，Plasma 按 chain ID 与固定主网 genesis 校验，预检包含完整资金操作所需的双 RPC 查询。Arbitrum（`arbitrum`/42161）、OP（`op`/10）、Base（`base`/8453）仅 API 可配置查询 RPC（钱包须显式包含该链，当前 UI 无入口），但 L2 自动资金操作有服务器硬限制，不能由 `finality_verified` 手工覆盖。
 
 `GET /options` 返回 `{enabled, assets:[...]}`。只列配置中已启用的资产；每项包含上面的资产公开字段以及 `chain_name,available,unavailable_reason`。可用性受钱包、链、RPC、最终性与汇率有效期约束。读取选项不创建 invoice、不消耗地址。
 
@@ -70,6 +72,8 @@
 | `ethereum-usdc` | 原生 USDC · Ethereum | 6 | 可启用 |
 | `bsc-usdt` | Binance-Peg USDT · BNB Smart Chain | 18 | 可启用 |
 | `bsc-usdc` | Binance-Peg USDC · BNB Smart Chain | 18 | 可启用 |
+| `solana-usdt` / `solana-usdc` | SPL USDT / 原生 USDC · Solana | 6 | 热钱包可启用 |
+| `plasma-usdt0` / `plasma-usdc` | USDT0 / 原生 USDC · Plasma | 6 | 可启用 |
 | `arbitrum-usdt0` / `arbitrum-usdc` | USDT0 / 原生 USDC · Arbitrum | 6 | 禁止 |
 | `op-usdt0` / `op-usdc` | USDT0 / 原生 USDC · OP | 6 | 禁止 |
 | `base-usdc` | 原生 USDC · Base | 6 | 禁止 |
@@ -118,7 +122,7 @@ qr_uri, order_state, receipt_state, scan_error, last_scan, finalized_block
 
 `transfers` 每条含 `chain_id,tx_hash,log_index,contract,atoms,block_number,block_time,state,reason`，区分 `observed/confirmed/review_required/orphaned`。不在当前可识别资产清单内的转账显示原子数量和实际合约/链，不能套用 invoice 的精度。
 
-交易所 QR 仅包含收款地址；钱包 QR 使用服务端 ERC-681 `qr_uri`。显示、复制和扫码不能在前端重新计算人民币汇率。网络错误保留已知付款状态；刷新用 GET 恢复，只有显式点击才 POST。前端仅将待定请求的公共操作标识保存在 sessionStorage，密码和密钥不进入该记录。
+交易所 QR 仅包含收款地址；EVM 钱包 QR 使用服务端 ERC-681 `qr_uri`，Solana 使用绑定 mint 的 Solana Pay URI。显示、复制和扫码不能在前端重新计算人民币汇率。Solana 转账唯一键为链标识、交易签名和稳定的收款人净增事件位置；同一证据不能确认两笔订单。只有真实收款人/mint 净增与解析入账相符、canonical ATA 无外部 delegate/closeAuthority 时才自动认单；被捕获的失败 CPI、内部调拨、缺失 meta、错误 mint、非最终确认或过期支付均不自动开通。自动扫描支持 legacy/v0/v1，未知交易版本保留待核对。网络错误保留已知付款状态；刷新用 GET 恢复，只有显式点击才 POST。前端仅将待定请求的公共操作标识保存在 sessionStorage，密码和密钥不进入该记录。
 
 ## 分页余额与固定 Gas 地址
 
@@ -137,7 +141,7 @@ qr_uri, order_state, receipt_state, scan_error, last_scan, finalized_block
 
 此处 `chain_id` 是配置字符串 ID，如 `ethereum`；不是 invoice 中的数字 1。失败不能转换成零余额。分页未结束时只能说“已查询地址暂无余额”，不能冒称全部历史地址为空。
 
-热钱包固定资金地址与订单地址分支不同。`funding_balance_atoms` 和 `native_atoms` 使用 18 位原生币精度：Ethereum 用本链 ETH，BSC 用本链 BNB，L2 查询的 ETH 也各自独立。外部 xpub 只提供只读余额，不显示后台可提取。
+热钱包固定资金地址与订单地址分支不同。`funding_balance_atoms` 和 `native_atoms` 在 Ethereum / BSC / Plasma 使用 18 位精度，在 Solana 使用 9 位 lamport 精度：Ethereum 用 ETH、BSC 用 BNB、Plasma 用 XPL、Solana 用 SOL，L2 查询的 ETH 也各自独立。外部 xpub 只提供只读 EVM 余额，不显示后台可提取。
 
 ## 提取预览、批准与后台任务
 
@@ -145,11 +149,14 @@ qr_uri, order_state, receipt_state, scan_error, last_scan, finalized_block
 
 可见的当前钱包每 5 秒尝试刷新该接口。有效转账输入另行串行刷新只读预览；前一次扫描尚未结束时等待，切换钱包/网络、隐藏页面或离开会取消旧请求。确认窗口固定原始密封报价，不随后台刷新改写目的地址、来源或金额；报价过期或费用未知时不能批准。
 
+Gas 与提取预览还可包含 `native_decimals,fee_model,native_price_usd,native_price_cny,price_checked_at,price_expires_at,fiat_source,fiat_error`。价格为十进制字符串，来自独立的原生币行情缓存（约一分钟刷新，最长五分钟有效）。约 USD/CNY 值仅供显示；行情失败或过期显示未知/过期状态，不改变链上数量、付款汇率、批准预算或密封 quote。Solana `fee_model=solana`，参考费来自实际 `getFeeForMessage`，不显示 Gwei，也不将 ATA 租金当作交易手续费。
+
 `POST /admin/wallets/{id}/sweeps/preview` 是不需密码的估算：
 
 ```json
 {
   "chain_id": "ethereum",
+  "fee_mode": "standard",
   "asset_id": "ethereum-usdt",
   "destination": "<对应网络的 EVM 收款地址>",
   "min_atoms": "1000000",
@@ -158,7 +165,11 @@ qr_uri, order_state, receipt_state, scan_error, last_scan, finalized_block
 }
 ```
 
-`min_atoms` 是每个地址的该 Token 最低余额，不是任务总额；`max_gas_atoms` 留空时按有限缓冲估算自动设置本任务手续费上限，并在返回字段和密封 quote 中冻结；非空时为明确有限上限。单位为 18 位原生币原子数量。未提供 `address_ids` 时扫描全部历史地址，但超过 1000 个会明确拒绝并要求缩小选择，不能默默取前 1000 个。
+`min_atoms` 是每个地址的该 Token 最低余额，不是任务总额；`max_gas_atoms` 留空时按有限缓冲估算自动设置本任务手续费上限，并在返回字段和密封 quote 中冻结；非空时为明确有限上限，Solana 还包含必要的新 ATA 租金。单位为对应网络的原生币原子数量（EVM 18 位，Solana 9 位）。未提供 `address_ids` 时扫描全部历史地址，但超过 1000 个会明确拒绝并要求缩小选择，不能默默取前 1000 个。
+
+`fee_mode`（EVM）为 `economy/standard/priority/custom`，默认标准档；自定义另传十进制整数 `gas_price_atoms`，范围为当前双来源较高原始报价至其 1.25 倍。固定档分别为原始单价、加 10%、加 20%，实际 Gas 用量增加 10% 有限缓冲。预览返回 `fee_mode,gas_price_atoms,fee_options:[{id,gas_price_atoms,total_gas_atoms}]`，其中总费用包含必要的补 Gas 交易费；服务端冻结选择，前端不能在确认时换档。Solana 请求省略这些 EVM 字段，按实际消息报价。
+
+只有确认的归集任务可补 Gas；订单支付、余额和预估均为只读。稳定币自动手续费只用于真实订单地址、同钱包同网络且当前所选币种余额严格大于 0.1 的地址；执行前再次核对门槛及已批准金额。手动 EVM 地址仅在自行准备足够 Gas 时可提取，不自动补款。
 
 预览返回输入快照及 `checked_at,expires_at,block_number,native_symbol,funding_address,funding_balance_atoms,items,quote,can_submit,unavailable_reason`，金额含义如下：
 
@@ -169,6 +180,9 @@ qr_uri, order_state, receipt_state, scan_error, last_scan, finalized_block
 | `total_gas_atoms` | 来源 Token 转账费用上限与 funding 补款交易手续费的总和；不另加补款本金 |
 | `required_funding_atoms` | 固定 Gas 地址本次需要具备的总余额：补差额 + 补款交易自身费用 |
 | `funding_shortfall_atoms` | 尚需向固定 Gas 地址充值的数量：`max(required_funding_atoms - funding_balance_atoms, 0)` |
+| `total_rent_atoms` | Solana 新建目标关联代币账户所需租金；与 `total_gas_atoms` 分开，界面总成本为费用与租金之和 |
+
+Solana 固定手续费地址直接作为 fee payer，不向每个来源地址先转 SOL；`total_topup_atoms=0`，`total_gas_atoms` 为交易手续费，`required_funding_atoms` 为手续费与必要租金之和。冻结预览必须绑定具体 fee payer、来源、目标 mint、指令、金额、blockhash 与有效高度。已确认无需租金的预览不能在执行时擅自增加建账户成本。
 
 每项 `items` 包含 `address_id,address,path,amount_atoms,gas_limit,gas_price_atoms,gas_fee_atoms,topup_atoms,funding_gas_atoms,funding_gas_limit`。Gas limit 也通过字符串返回。预览不进行链上广播。
 
@@ -178,14 +192,18 @@ qr_uri, order_state, receipt_state, scan_error, last_scan, finalized_block
 | --- | --- |
 | `POST /admin/wallets/{id}/sweeps` | **仅** `{quote,password,operation_id}`；返回持久 `CryptoSweepJob` |
 | `GET /admin/sweeps?wallet_id=...` | `{items: CryptoSweepJob[]}`；当前最多返回最近 50 个任务，数据库保留历史 |
-| `POST /admin/sweeps/{id}/retry` | `{password,operation_id}`；接续原任务、原签名交易；`failed/review_required` 不自动重新补款 |
+| `POST /admin/sweeps/{id}/retry` | `{password,operation_id}`；接续原任务、原签名交易；`failed/review_required` 拒绝重试；`fee_review_required` 仅经管理员核对原预算后可重试，不扩大授权 |
 | `POST /admin/sweeps/{id}/cancel` | `{password,operation_id}`；以 `can_cancel` 和服务端即时检查为准，不能丢弃未确认交易或活跃执行租约 |
 
-任务含 `id,wallet_id,chain_id,asset_id,destination,state,error,created,updated,can_cancel,items`。**任务的 `chain_id` 是数字网络 ID**；前端需用配置的数字 ID 映射名称。任务项含 `id,address,amount_atoms,state,error,gas_tx_hash,sweep_tx_hash`。
+任务含 `id,wallet_id,chain_id,asset_id,destination,state,error,created,updated,can_cancel,can_retry,items`。**任务的 `chain_id` 是数字网络 ID**；前端需用配置的数字 ID 映射名称。费用上涨暂停使用独立 `fee_review_required`，费用回落不自动恢复。`can_retry` 由服务器给出，仅允许可恢复任务，不能借此重试证据冲突；当前密码与原报价/交易完整性仍需校验。更高预算要安全结束剩余任务后重新预估和批准。
 
-任务状态为 `queued/running/waiting/complete/failed/review_required/cancelled`；项状态包含 `queued/gas_pending/sweep_pending/complete/failed`。广播哈希、已补 Gas 或成功提交任务都不表示 Token 已最终到账。只有规范 receipt、资产/金额/来源/目标和最终性验证完成后才显示完成。
+任务项含 `id,address,amount_atoms,state,error,gas_tx_hash,sweep_tx_hash`。
+
+任务状态为 `queued/running/waiting/fee_review_required/complete/failed/review_required/cancelled`；项状态包含 `queued/gas_pending/sweep_pending/complete/failed`。广播哈希、已补 Gas 或成功提交任务都不表示 Token 已最终到账。只有规范 receipt、资产/金额/来源/目标和最终性验证完成后才显示完成。
 
 同一钱包、同一链只允许一个尚未完成或结束的任务；nonce 和签名交易先落库再广播。不确定的广播结果复查原哈希或重播原 raw，不能新建 nonce 再转一次。安全结束只停止尚未执行的后续步骤，已产生手续费和历史记录保留。当前不支持后台归集外部 xpub，也不把此提取接口作为用户退款接口。
+
+Solana 没有 EVM nonce：完整已签交易、指令意图、原 blockhash 和有效高度先落库。未知广播结果只核对或重播原始交易；blockhash 过期也不自动换 hash 重签。完成需要校验成功 meta、签名、来源/目标代币变化及 fee payer 实际费用和租金，恢复广播前重新核对主网 genesis。
 
 ## 支付模块总开关与接管默认值
 

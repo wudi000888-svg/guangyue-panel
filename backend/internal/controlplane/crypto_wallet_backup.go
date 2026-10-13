@@ -132,6 +132,14 @@ func cryptoValidateDump(v cryptoWalletDump) error {
 		if e != nil || xpub != w.XPub || path != w.Path || address != w.FirstAddress {
 			return cryptoInvalidDump()
 		}
+		if cryptoWalletSupports(w, cryptoSolanaChainID) {
+			first, e := cryptoSolanaDerive(v.Mnemonic, 0)
+			fund, e2 := cryptoSolanaDerive(v.Mnemonic, cryptoSolanaFundingIndex)
+			if e != nil || e2 != nil || w.SolanaFirstAddress != first || w.SolanaFundingAddress != fund || w.SolanaFundingPath != cryptoSolanaPath(cryptoSolanaFundingIndex) {
+				return cryptoInvalidDump()
+			}
+		}
+
 	case "watch_only":
 		if v.Mnemonic != "" || w.Engine != "external-xpub" {
 			return cryptoInvalidDump()
@@ -142,10 +150,16 @@ func cryptoValidateDump(v cryptoWalletDump) error {
 	seen := make(map[string]bool, len(v.Addresses))
 	previous := int64(-1)
 	for _, row := range v.Addresses {
-		if row.ID == "" || seen[row.ID] || row.WalletID != w.ID || row.Index <= previous || row.Index >= w.NextIndex || row.Path != cryptoFullPath(w.Path, row.Index) || row.Created <= 0 || len(row.Label) > 480 {
+		if row.ID == "" || seen[row.ID] || row.WalletID != w.ID || row.Index <= previous || row.Index >= w.NextIndex || (!cryptoIsSolanaPath(row.Path) && row.Path != cryptoFullPath(w.Path, row.Index)) || row.Created <= 0 || len(row.Label) > 480 {
 			return cryptoInvalidDump()
 		}
 		address, e := cryptoDeriveAddress(w.XPub, w.Path, uint32(row.Index))
+		if cryptoIsSolanaPath(row.Path) {
+			if w.Mode != "hot" || row.Path != cryptoSolanaPath(uint32(row.Index)) {
+				return cryptoInvalidDump()
+			}
+			address, e = cryptoSolanaDerive(v.Mnemonic, uint32(row.Index))
+		}
 		if e != nil || address != row.Address {
 			return cryptoInvalidDump()
 		}
@@ -171,6 +185,10 @@ func (a *App) cryptoWalletExport(w http.ResponseWriter, r *http.Request, route s
 	}
 	defer tx.Rollback()
 	v, e := cryptoWalletByID(tx, p[1])
+	if e != nil {
+		return e
+	}
+	v, e = a.store.cryptoWalletSolanaDTO(tx, v)
 	if e != nil {
 		return e
 	}
@@ -289,11 +307,19 @@ func (a *App) cryptoWalletRestore(tx *persistence.Tx, dump cryptoWalletDump) (Cr
 	}
 	for _, row := range dump.Addresses {
 		canonicalPath := cryptoFullPath(v.Path, row.Index)
-		var address, path string
-		e = tx.QueryRow("SELECT address,path FROM crypto_wallet_addresses WHERE wallet_id=? AND address_index=?", v.ID, row.Index).Scan(&address, &path)
+		if cryptoIsSolanaPath(row.Path) {
+			canonicalPath = cryptoSolanaPath(uint32(row.Index))
+		}
+		existing := CryptoWalletAddress{Index: row.Index}
+		e = tx.QueryRow("SELECT id,wallet_id,path,address,label,created FROM crypto_wallet_addresses WHERE wallet_id=? AND address_index=?", v.ID, row.Index).Scan(&existing.ID, &existing.WalletID, &existing.Path, &existing.Address, &existing.Label, &existing.Created)
 		if e == nil {
-			if address != row.Address || path != canonicalPath {
+			if existing.Address != row.Address || existing.Path != canonicalPath {
 				return v, cryptoInvalidDump()
+			}
+			if cryptoIsSolanaPath(canonicalPath) {
+				if e = a.store.cryptoSealSolanaAddress(tx, v, existing); e != nil {
+					return v, e
+				}
 			}
 			continue
 		}
@@ -303,9 +329,24 @@ func (a *App) cryptoWalletRestore(tx *persistence.Tx, dump cryptoWalletDump) (Cr
 		if _, e = tx.Exec("INSERT INTO crypto_wallet_addresses(id,wallet_id,address_index,path,address,label,created) VALUES(?,?,?,?,?,?,?)", row.ID, v.ID, row.Index, canonicalPath, row.Address, row.Label, row.Created); e != nil {
 			return v, e
 		}
+		if cryptoIsSolanaPath(canonicalPath) {
+			row.WalletID = v.ID
+			if e = a.store.cryptoSealSolanaAddress(tx, v, row); e != nil {
+				return v, e
+			}
+		}
 	}
 	if _, e = tx.Exec("UPDATE crypto_wallets SET reserved_indices=next_index-(SELECT COUNT(*) FROM crypto_wallet_addresses WHERE wallet_id=?) WHERE id=?", v.ID, v.ID); e != nil {
 		return v, e
+	}
+	if cryptoWalletSupports(v, cryptoSolanaChainID) {
+		if _, e = a.store.cryptoEnsureSolanaPublic(tx, v); e != nil {
+			return v, e
+		}
+		v, e = a.store.cryptoWalletSolanaDTO(tx, v)
+		if e != nil {
+			return v, e
+		}
 	}
 	return cryptoWalletFundingDTO(v)
 }
