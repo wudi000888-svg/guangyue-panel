@@ -1,11 +1,98 @@
 package controlplane
 
 import (
+	"bytes"
 	"context"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestCryptoGasDefaultsAreReadOnlyAndPreserveExplicitSources(t *testing.T) {
+	for _, id := range []int64{cryptoSolanaChainID, cryptoPlasmaChainID} {
+		chain, _ := cryptoDefaultSettings().chain(id)
+		before := jsonBytes(chain)
+		read := cryptoGasReadChain(chain)
+		pair := cryptoBuiltinRPCs()[id]
+		if read.RPCURL != pair[0] || read.RPCBackupURL != pair[1] || read.Enabled || !read.FinalityVerified {
+			t.Fatal("unconfigured wallet network has no authenticated read-only pair", read)
+		}
+		if !bytes.Equal(before, jsonBytes(chain)) || chain.FinalityVerified || chain.RPCURL != "" || chain.RPCBackupURL != "" {
+			t.Fatal("a Gas read changed payment configuration", chain)
+		}
+		if id == cryptoSolanaChainID {
+			if _, err := newCryptoSolana(read, false); err != nil {
+				t.Fatal("built-in read-only Solana pair rejected", err)
+			}
+		} else if _, err := newCryptoEVM(read, false); err != nil {
+			t.Fatal("built-in read-only Plasma pair rejected", err)
+		}
+		for _, explicit := range [][2]string{{"https://primary.example", "https://backup.example"}, {"https://primary.example", ""}, {"", "https://backup.example"}, {"https://same.example", "https://same.example"}} {
+			custom := chain
+			custom.RPCURL, custom.RPCBackupURL = explicit[0], explicit[1]
+			resolved := cryptoGasReadChain(custom)
+			if !bytes.Equal(jsonBytes(resolved), jsonBytes(custom)) {
+				t.Fatal("explicit or partial RPC pair silently overwritten", explicit)
+			}
+			_, err := newCryptoRPCClient(resolved, false)
+			if explicit[0] == "" || explicit[1] == "" || explicit[0] == explicit[1] {
+				if err == nil {
+					t.Fatal("missing/duplicate RPC pair was accepted", explicit)
+				}
+			} else if err != nil {
+				t.Fatal("independent custom RPC pair rejected", err)
+			}
+		}
+	}
+	chain, _ := cryptoDefaultSettings().chain(8453)
+	if got := cryptoGasReadChain(chain); got.RPCURL != "" || got.RPCBackupURL != "" || got.FinalityVerified {
+		t.Fatal("Gas fallback opened an unsupported automatic chain", got)
+	}
+}
+
+func TestCryptoGasNetworkWithoutPaymentSetupDoesNotWriteSettings(t *testing.T) {
+	a, owner, _, wallet, _ := cryptoSolanaTestFixture(t)
+	settings, err := a.store.cryptoPaymentSettings()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range settings.Chains {
+		if settings.Chains[i].ChainID == cryptoSolanaChainID {
+			settings.Chains[i].RPCURL, settings.Chains[i].RPCBackupURL = "", ""
+			settings.Chains[i].Enabled, settings.Chains[i].FinalityVerified = false, false
+		}
+	}
+	sealed, err := a.store.vault.seal(settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = a.store.db.Exec("UPDATE crypto_payment_settings SET doc=? WHERE id=1", sealed); err != nil {
+		t.Fatal(err)
+	}
+	// A canceled context proves source resolution reaches RPC without any
+	// outgoing network call in normal CI. Live probes below test successful fees.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	gas, err := a.cryptoWalletGas(ctx, wallet.ID, "solana")
+	if err != nil || gas.GasError == "" || strings.Contains(gas.GasError, "请配置") {
+		t.Fatal("wallet network incorrectly requires opening payments before a Gas read", gas.GasError, err)
+	}
+	var after []byte
+	if err = a.store.db.QueryRow("SELECT doc FROM crypto_payment_settings WHERE id=1").Scan(&after); err != nil || !bytes.Equal(sealed, after) {
+		t.Fatal("Gas query wrote payment settings", err)
+	}
+	// A successful source resolution on the Gas path must not make an
+	// unconfigured network eligible for a sealed, signable collection quote.
+	if _, err = a.cryptoPreviewSweep(context.Background(), owner, wallet.ID, cryptoSweepInput{ChainID: "solana", AssetID: "solana-usdc", MinAtoms: "1", Destination: wallet.SolanaFirstAddress}); err == nil || !strings.Contains(err.Error(), "尚未完成链最终性验证") {
+		t.Fatal("read-only default pair leaked into financial authorization", err)
+	}
+	for _, table := range []string{"crypto_sweep_jobs", "crypto_solana_transactions", "crypto_chain_transactions"} {
+		var count int
+		if err = a.store.db.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&count); err != nil || count != 0 {
+			t.Fatal("read-only Gas query created financial work", table, count, err)
+		}
+	}
+}
 
 func cryptoGasRead(t *testing.T, a *App, owner Record, wallet CryptoWallet) CryptoGasSnapshot {
 	t.Helper()
