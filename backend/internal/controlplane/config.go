@@ -18,7 +18,7 @@ import (
 	"strings"
 )
 
-const version = "0.39.15"
+const version = "0.39.16"
 
 const businessAdoptionFile = "business-adoption.json"
 

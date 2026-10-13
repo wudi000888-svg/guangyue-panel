@@ -109,7 +109,7 @@ func cryptoValidateDump(v cryptoWalletDump) error {
 	if _, e := cryptoWalletChainIDs(w.SupportedChainIDs); e != nil {
 		return cryptoInvalidDump()
 	}
-	if v.Version != 1 || v.Exported <= 0 || w.ID == "" || len(w.ID) > 100 || !validText(w.Name, 80) || w.Created <= 0 || w.Revision < 1 || w.NextIndex < 0 || w.NextIndex > cryptoMaxIndex || v.Addresses == nil || v.ReservedIndices < 0 || v.ReservedIndices > cryptoMaxIndex || int64(len(v.Addresses))+v.ReservedIndices != w.NextIndex {
+	if v.Version != 1 || v.Exported <= 0 || w.ID == "" || len(w.ID) > 100 || !validText(w.Name, 80) || w.Created <= 0 || w.Revision < 1 || w.NextIndex < 0 || w.NextIndex > cryptoMaxIndex || w.RemovedAt < 0 || w.RemovedAt > 0 && w.Enabled || v.Addresses == nil || v.ReservedIndices < 0 || v.ReservedIndices > cryptoMaxIndex || int64(len(v.Addresses))+v.ReservedIndices != w.NextIndex {
 		return cryptoInvalidDump()
 	}
 	if e := cryptoValidateXPub(w.XPub, w.Path); e != nil {
@@ -173,6 +173,9 @@ func (a *App) cryptoWalletExport(w http.ResponseWriter, r *http.Request, route s
 	v, e := cryptoWalletByID(tx, p[1])
 	if e != nil {
 		return e
+	}
+	if v.RemovedAt > 0 {
+		return commerceFail(409, "请先恢复已删除的钱包再导出备份")
 	}
 	addresses, e := cryptoWalletAddresses(tx, v.ID, 30001)
 	if e != nil {

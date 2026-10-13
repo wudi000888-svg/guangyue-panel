@@ -3,7 +3,7 @@ import { cryptoWorkspaceReadiness, cryptoWorkspaceSections } from './cryptoModul
 
 describe('standalone crypto payment workspace', () => {
   it('keeps wallet, payment setup, and treasury as separate operator sections', () => {
-    expect(cryptoWorkspaceSections.map(section => section.id)).toEqual(['payments', 'wallets', 'treasury']);
+    expect(cryptoWorkspaceSections.map(section => section.id)).toEqual(['treasury', 'wallets', 'payments']);
     expect(new Set(cryptoWorkspaceSections.map(section => section.label)).size).toBe(3);
   });
 

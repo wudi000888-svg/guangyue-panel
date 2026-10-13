@@ -142,6 +142,9 @@ func cryptoSweepChain(s CryptoPaymentSettings, id string) (CryptoChain, error) {
 	return CryptoChain{}, commerceFail(400, "请选择已配置的网络")
 }
 func cryptoSweepWallet(v CryptoWallet) error {
+	if v.RemovedAt > 0 {
+		return commerceFail(409, "钱包已删除，请先恢复钱包再归集")
+	}
 	if v.Mode != "hot" {
 		return commerceFail(409, "外部 xpub 钱包只能查看余额，请使用原钱包手动转出")
 	}
@@ -210,6 +213,10 @@ func (a *App) cryptoWalletBalance(ctx context.Context, id, chainID string, after
 		out.UnavailableReason = x.Error()
 	} else if out.WatchOnly {
 		out.UnavailableReason = "外部 xpub 仅可查看余额，请使用原钱包提取"
+	}
+	if v.RemovedAt > 0 {
+		out.OperationsSupported = false
+		out.UnavailableReason = "钱包已删除，请先恢复钱包再归集"
 	}
 	if e := a.store.cryptoChainAvailable(a.store.db, chain.ChainID); e != nil {
 		out.OperationsSupported = false

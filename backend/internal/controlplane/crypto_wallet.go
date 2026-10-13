@@ -45,6 +45,7 @@ type CryptoWallet struct {
 	SupportedChainIDs []int64 `json:"supported_chain_ids"`
 	FundingAddress    string  `json:"funding_address"`
 	FundingPath       string  `json:"funding_path"`
+	RemovedAt         int64   `json:"removed_at"`
 }
 
 type CryptoWalletAddress struct {
@@ -81,6 +82,7 @@ type cryptoWalletInput struct {
 	RecoveryAck       bool               `json:"recovery_ack"`
 	Backup            cryptoWalletBackup `json:"backup"`
 	SupportedChainIDs []int64            `json:"supported_chain_ids"`
+	DeleteAck         bool               `json:"delete_ack"`
 }
 
 type cryptoWalletQuery interface {
@@ -88,14 +90,14 @@ type cryptoWalletQuery interface {
 	QueryRow(string, ...any) *sql.Row
 }
 
-const cryptoWalletColumns = "id,name,mode,xpub,path,first_address,engine,engine_version,enabled,revision,next_index,created,backup_confirmed,recovery_required,supported_chain_ids"
+const cryptoWalletColumns = "id,name,mode,xpub,path,first_address,engine,engine_version,enabled,revision,next_index,created,backup_confirmed,recovery_required,supported_chain_ids,removed_at"
 
 type cryptoScanner interface{ Scan(...any) error }
 
 func scanCryptoWallet(row cryptoScanner) (v CryptoWallet, err error) {
 	var enabled, confirmed, recovery int
 	var chains []byte
-	err = row.Scan(&v.ID, &v.Name, &v.Mode, &v.XPub, &v.Path, &v.FirstAddress, &v.Engine, &v.EngineVersion, &enabled, &v.Revision, &v.NextIndex, &v.Created, &confirmed, &recovery, &chains)
+	err = row.Scan(&v.ID, &v.Name, &v.Mode, &v.XPub, &v.Path, &v.FirstAddress, &v.Engine, &v.EngineVersion, &enabled, &v.Revision, &v.NextIndex, &v.Created, &confirmed, &recovery, &chains, &v.RemovedAt)
 	v.Enabled, v.BackupConfirmed, v.RecoveryRequired = enabled == 1, confirmed == 1, recovery == 1
 	if err != nil {
 		return
@@ -269,7 +271,19 @@ func (a *App) cryptoWalletAPIRoute(w http.ResponseWriter, r *http.Request, actor
 }
 func (a *App) cryptoWalletGet(w http.ResponseWriter, r *http.Request, route string) error {
 	if route == "wallets" {
-		rows, e := a.store.db.Query("SELECT " + cryptoWalletColumns + " FROM crypto_wallets ORDER BY created DESC,id DESC")
+		removed := false
+		if raw := r.URL.Query().Get("deleted"); raw != "" {
+			var e error
+			removed, e = strconv.ParseBool(raw)
+			if e != nil {
+				return commerceFail(400, "钱包删除状态筛选无效")
+			}
+		}
+		condition := "removed_at=0"
+		if removed {
+			condition = "removed_at>0"
+		}
+		rows, e := a.store.db.Query("SELECT " + cryptoWalletColumns + " FROM crypto_wallets WHERE " + condition + " ORDER BY created DESC,id DESC")
 		if e != nil {
 			return e
 		}
@@ -374,12 +388,23 @@ func (a *App) cryptoWalletPost(w http.ResponseWriter, r *http.Request, actor Rec
 		if len(p) != 3 || p[0] != "wallets" {
 			return commerceFail(404, "功能不存在")
 		}
-		v, e := cryptoWalletByID(a.store.db, p[1])
+		tx, e := a.store.cryptoWalletTx(r.Context())
 		if e != nil {
 			return e
 		}
-		secret, e := a.store.cryptoSecret(a.store.db, v)
+		defer tx.Rollback()
+		v, e := cryptoWalletByID(tx, p[1])
 		if e != nil {
+			return e
+		}
+		if v.RemovedAt > 0 {
+			return commerceFail(409, "请先恢复已删除的钱包再查看助记词")
+		}
+		secret, e := a.store.cryptoSecret(tx, v)
+		if e != nil {
+			return e
+		}
+		if e = tx.Commit(); e != nil {
 			return e
 		}
 		a.store.audit(actor.Username, "crypto_wallet_reveal", v.ID)
@@ -448,7 +473,53 @@ func (a *App) cryptoWalletPost(w http.ResponseWriter, r *http.Request, actor Rec
 			return commerceFail(409, "钱包已变化，请刷新后重试")
 		}
 		switch strings.Join(p[2:], "/") {
+		case "delete", "undelete":
+			if p[2] == "delete" {
+				if !in.DeleteAck {
+					return commerceFail(400, "请确认已删除钱包保留加密密钥、永久地址和历史订单，可在已删除列表恢复")
+				}
+				if v.RemovedAt > 0 {
+					return commerceFail(409, "钱包已删除，请刷新已删除列表")
+				}
+				var pending int
+				if e = tx.QueryRow("SELECT COUNT(*) FROM crypto_sweep_jobs WHERE wallet_id=? AND state NOT IN ('complete','cancelled')", v.ID).Scan(&pending); e != nil {
+					return e
+				}
+				if pending > 0 {
+					return commerceFail(409, "钱包仍有未结束的归集任务，请先完成或取消任务再删除")
+				}
+				v.RemovedAt = time.Now().Unix()
+				settings, e := a.store.cryptoPaymentSettingsFrom(tx)
+				if e != nil {
+					return e
+				}
+				if settings.WalletID == v.ID && settings.Enabled {
+					settings.Enabled = false
+					settings.Revision++
+					sealed, e := a.store.vault.seal(settings)
+					if e != nil {
+						return e
+					}
+					if _, e = tx.Exec("UPDATE crypto_payment_settings SET revision=?,doc=? WHERE id=1", settings.Revision, sealed); e != nil {
+						return e
+					}
+				}
+			} else {
+				if v.RemovedAt == 0 {
+					return commerceFail(409, "钱包尚未删除，无需恢复")
+				}
+				v.RemovedAt = 0
+			}
+			v.Enabled = false
+			v.Revision++
+			if _, e = tx.Exec("UPDATE crypto_wallets SET removed_at=?,enabled=0,revision=? WHERE id=?", v.RemovedAt, v.Revision, v.ID); e != nil {
+				return e
+			}
+			response = v
 		case "addresses":
+			if v.RemovedAt > 0 {
+				return commerceFail(409, "请先恢复已删除的钱包再分配地址")
+			}
 			if v.RecoveryRequired {
 				return commerceFail(409, "请先核对并确认恢复钱包的地址高水位")
 			}
@@ -498,6 +569,9 @@ func (a *App) cryptoWalletPost(w http.ResponseWriter, r *http.Request, actor Rec
 		case "status":
 			if in.Enabled == nil {
 				return commerceFail(400, "请选择钱包启用状态")
+			}
+			if v.RemovedAt > 0 {
+				return commerceFail(409, "请先恢复已删除的钱包再修改启用状态")
 			}
 			v.Enabled = *in.Enabled
 			v.Revision++
@@ -598,7 +672,7 @@ func cryptoInsertWallet(tx *persistence.Tx, v CryptoWallet, receive string, secr
 	if e != nil {
 		return e
 	}
-	_, e = tx.Exec("INSERT INTO crypto_wallets("+cryptoWalletColumns+",receive_key,secret,backup_exported) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", v.ID, v.Name, v.Mode, v.XPub, v.Path, v.FirstAddress, v.Engine, v.EngineVersion, cryptoBool(v.Enabled), v.Revision, v.NextIndex, v.Created, cryptoBool(v.BackupConfirmed), cryptoBool(v.RecoveryRequired), string(jsonBytes(ids)), receive, secret, exported)
+	_, e = tx.Exec("INSERT INTO crypto_wallets("+cryptoWalletColumns+",receive_key,secret,backup_exported) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", v.ID, v.Name, v.Mode, v.XPub, v.Path, v.FirstAddress, v.Engine, v.EngineVersion, cryptoBool(v.Enabled), v.Revision, v.NextIndex, v.Created, cryptoBool(v.BackupConfirmed), cryptoBool(v.RecoveryRequired), string(jsonBytes(ids)), v.RemovedAt, receive, secret, exported)
 	return e
 }
 
