@@ -5,13 +5,16 @@ LABEL org.opencontainers.image.title="Guangyue Panel" \
       org.opencontainers.image.source="https://github.com/wudi000888-svg/guangyue-panel" \
       org.opencontainers.image.version="${PANEL_VERSION}" \
       org.opencontainers.image.licenses="NOASSERTION"
+# The gateway mounts private child directories and uses a host-assigned UID.
+# Its image parent stays traversable; bound state directories remain 0700.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates \
  && rm -rf /var/lib/apt/lists/* \
  && groupadd --system --gid 65532 guangyue \
  && useradd --system --uid 65532 --gid 65532 --home-dir /nonexistent --shell /usr/sbin/nologin guangyue \
  && mkdir -p /opt/guangyue-personal/bin /var/lib/guangyue /run/guangyue-runtime /run/guangyue-reality /var/lib/guangyue-maintenance \
- && chmod 0700 /var/lib/guangyue /run/guangyue-runtime \
+ && chmod 0755 /var/lib/guangyue \
+ && chmod 0700 /run/guangyue-runtime \
  && chown 65532:65532 /var/lib/guangyue /run/guangyue-runtime /run/guangyue-reality \
  && ln -s /var/lib/guangyue-maintenance/update.sock /run/guangyue-update.sock
 COPY --chmod=0755 bin/guangyue-linux-amd64 /opt/guangyue-personal/bin/guangyue

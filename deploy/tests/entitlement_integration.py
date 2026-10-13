@@ -5,13 +5,27 @@ import socket
 import socketserver
 import struct
 import subprocess
+import sys
 import threading
 import time
 from urllib.parse import urlparse, parse_qs, unquote
 
 
+def proxy_diagnostic(stage, protocol, port, rate, received, expected, client, error):
+    # Never serialize exception messages, URI credentials, process arguments,
+    # log contents or config. Only fixture identity and transport progress help
+    # distinguish a local SOCKS failure from a real upstream/echo timeout.
+    exited = client.poll() if client is not None else 'not_started'
+    row = {'stage': stage, 'protocol': protocol if protocol in ('vless', 'hy2') else 'unknown', 'port': port, 'rate_milli': rate, 'received_bytes': received, 'expected_bytes': expected, 'client_exit': 'running' if exited is None else exited, 'exception': type(error).__name__}
+    print('CI proxy failure ' + json.dumps(row, sort_keys=True), file=sys.stderr, flush=True)
+
+
 def verify_entitlements(bundle, temp, cert, api, cookie, admin_password):
+    current_rate = None
     def call(path, data=None):
+        nonlocal current_rate
+        if path == '/nodes/policy' and data is not None and 'rate_milli' in data:
+            current_rate = data['rate_milli']
         return api('/api' + path, data, cookie)[0]
 
     class Echo(socketserver.BaseRequestHandler):
@@ -34,14 +48,17 @@ def verify_entitlements(bundle, temp, cert, api, cookie, admin_password):
     for server in [tcp, udp]:
         threading.Thread(target=server.serve_forever, daemon=True).start()
     processes, files, held = [], [], []
+    protocols, clients = {}, {}
 
-    def receive(sock, count):
+    def receive(sock, count, progress=None):
         data = b''
         while len(data) < count:
             part = sock.recv(count - len(data))
             if not part:
                 raise OSError('proxy stream closed')
             data += part
+            if progress is not None:
+                progress(len(data))
         return data
 
     def socks(port, command, target_port=0):
@@ -68,10 +85,20 @@ def verify_entitlements(bundle, temp, cert, api, cookie, admin_password):
 
     def roundtrip(port):
         payload = secrets.token_bytes(65536)
-        sock, _ = socks(port, 1, tcp.server_address[1])
-        with sock:
-            sock.sendall(payload)
-            assert receive(sock, len(payload)) == payload
+        stage, received = 'socks_tcp_connect', 0
+        def progress(count):
+            nonlocal received
+            received = count
+        try:
+            sock, _ = socks(port, 1, tcp.server_address[1])
+            with sock:
+                stage = 'tcp_send'
+                sock.sendall(payload)
+                stage = 'tcp_echo'
+                assert receive(sock, len(payload), progress) == payload
+        except (OSError, AssertionError) as error:
+            proxy_diagnostic(stage, protocols.get(port), port, current_rate, received, len(payload), clients.get(port), error)
+            raise
         control, address = socks(port, 3)
         with control, socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as datagram:
             datagram.settimeout(5)
@@ -118,7 +145,9 @@ def verify_entitlements(bundle, temp, cert, api, cookie, admin_password):
             path.chmod(0o600)
             log = (temp / ('entitlement-client-' + str(port) + '.log')).open('wb')
             files.append(log)
-            processes.append(subprocess.Popen([*args, str(path)], stdout=log, stderr=log))
+            process = subprocess.Popen([*args, str(path)], stdout=log, stderr=log)
+            processes.append(process)
+            protocols[port], clients[port] = node['protocol'], process
 
     groups = call('/node-groups')['groups']
     assert {g['id'] for g in groups} == {'legacy-private', 'default-subsite', 'legacy-public'}

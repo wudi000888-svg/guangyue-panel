@@ -185,6 +185,15 @@ def recovery_diagnostic(stage, error):
     print('CI recovery failure during ' + stage + ': ' + type(error).__name__ + ' at ' + frames, file=sys.stderr, flush=True)
 
 
+def legacy_cache_fixture(helper):
+    cache = Path(helper) / '__pycache__'; cache.mkdir(mode=0o700, exist_ok=True)
+    cache.chmod(0o700)
+    item = cache / 'common.cpython-312.pyc'
+    item.write_bytes(b'CI-only invalid legacy cache; never executable source')
+    item.chmod(0o600)
+    return cache
+
+
 def execute(request, bundle=None, expect='succeeded', certificate=None):
     state.write('operation.json', dict(request, stage='queued', queued_at=int(time.time())))
     windows = []
@@ -381,8 +390,7 @@ def main():
         (fault / 'VERSION').write_text(fault_version + '\n')
         (fault / 'bin/guangyue-linux-amd64').write_text('#!/bin/sh\nexit 42\n')
         (fault / 'bin/guangyue-linux-amd64').chmod(0o755); rewrite_manifest(fault)
-        legacy_cache = state.HELPER / '__pycache__'; legacy_cache.mkdir(mode=0o700, exist_ok=True)
-        (legacy_cache / 'common.cpython-312.pyc').write_bytes(b'CI-only invalid legacy cache; never executable source')
+        legacy_cache = legacy_cache_fixture(state.HELPER)
         original_backup = upgrade.backup_current
         def legacy_checked_backup(config):
             backup = original_backup(config)

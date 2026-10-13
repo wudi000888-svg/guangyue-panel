@@ -1,8 +1,10 @@
 import importlib.util
 import hashlib
+import io
 import json
 import os
 import shutil
+import runpy
 import stat
 import subprocess
 import sys
@@ -51,6 +53,34 @@ class MaintenanceTests(unittest.TestCase):
         result = subprocess.run([sys.executable, '-I', '-c', code, str(helper / 'gateway_certificate.py')], capture_output=True, env=dict(os.environ, PYTHONDONTWRITEBYTECODE='1'), timeout=15)
         self.assertEqual(result.returncode, 0)
         self.assertFalse((helper / '__pycache__').exists())
+
+    def test_native_legacy_cache_fixture_is_protected_even_with_group_writable_umask(self):
+        fixture = Path(upgrade.__file__).parent / 'tests/native_oneclick_integration.py'
+        with patch.object(os, 'geteuid', return_value=0), patch.dict(os.environ, {'GITHUB_ACTIONS': 'true', 'GY_ONECLICK_INTEGRATION': '1'}):
+            functions = runpy.run_path(str(fixture), run_name='native_fixture_unit')
+        helper = self.root / 'native-cache-fixture'; helper.mkdir(mode=0o755)
+        previous = os.umask(0o002)
+        try:
+            cache = functions['legacy_cache_fixture'](helper)
+        finally:
+            os.umask(previous)
+        self.assertEqual(stat.S_IMODE(cache.stat().st_mode), 0o700)
+        self.assertEqual(stat.S_IMODE((cache / 'common.cpython-312.pyc').stat().st_mode), 0o600)
+        self.assertEqual(upgrade._helper_source_files(helper), [])
+
+    def test_proxy_fixture_diagnostic_has_transport_context_without_credentials(self):
+        source = Path(upgrade.__file__).parent / 'tests/entitlement_integration.py'
+        module_spec = importlib.util.spec_from_file_location('entitlement_fixture_diagnostic', source)
+        fixture = importlib.util.module_from_spec(module_spec); module_spec.loader.exec_module(fixture)
+        with patch('sys.stderr', new_callable=io.StringIO) as output:
+            fixture.proxy_diagnostic('tcp_echo', 'vless', 19891, 0, 32768, 65536, types.SimpleNamespace(poll=lambda: None), TimeoutError('password=private-secret uri=private-link'))
+            text = output.getvalue()
+        row = json.loads(text.removeprefix('CI proxy failure '))
+        self.assertEqual(row['protocol'], 'vless')
+        self.assertEqual(row['received_bytes'], 32768)
+        self.assertEqual(row['client_exit'], 'running')
+        self.assertEqual(row['exception'], 'TimeoutError')
+        self.assertNotIn('private-secret', text); self.assertNotIn('private-link', text)
 
     def helper_restore_fixture(self):
         app, data, helper, units = (self.root / name for name in ['app', 'state', 'helper', 'units'])

@@ -14,6 +14,7 @@ import shutil
 import socket
 import socketserver
 import ssl
+import stat
 import struct
 import subprocess
 import sys
@@ -208,18 +209,38 @@ def main():
     oneclick.validate_plan(plan)
     install_arguments = dict(test_assets_dir=docker_assets, cert_file=cert, key_file=key)
     original_health = docker_deploy.health
+    original_image_check = docker_deploy.image_check
+    parent_traversal_verified = False
+    def verify_dynamic_uid_image_parent(manifest):
+        nonlocal parent_traversal_verified
+        original_image_check(manifest)
+        if not parent_traversal_verified:
+            # The gateway binds only child directories below this image-owned
+            # parent. An arbitrary host UID must search it, without making the
+            # placeholder writable or exposing bound private child contents.
+            run('docker', 'run', '--rm', '--network', 'none', '--read-only',
+                '--user', '12345:12345', '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges',
+                '--tmpfs', '/var/lib/postgresql/data:rw,noexec,nosuid,size=1m',
+                '--entrypoint', '/bin/sh', manifest['images']['app']['id'], '-c',
+                'test -x /var/lib/guangyue && ! test -w /var/lib/guangyue')
+            parent_traversal_verified = True
+    activation_failure_injected = False
     def fail_after_real_activation(*args, **kwargs):
+        nonlocal activation_failure_injected
         original_health(*args, **kwargs)
+        activation_failure_injected = True
         raise ValueError('CI activation reply interrupted')
     try:
-        with patch.object(docker_deploy, 'health', side_effect=fail_after_real_activation):
+        with patch.object(docker_deploy, 'image_check', side_effect=verify_dynamic_uid_image_parent), patch.object(docker_deploy, 'health', side_effect=fail_after_real_activation):
             docker_deploy.install(plan, bundle, **install_arguments)
     except ValueError:
-        pass
+        if not activation_failure_injected:
+            raise
     else:
         raise AssertionError('Interrupted activation fixture did not reach failure recovery')
     state = Path('/var/lib/guangyue')
     seed_before, owner_before = fingerprint(state / 'master.key'), fingerprint(state / 'initial-owner.json')
+    assert parent_traversal_verified
     result = docker_deploy.install(plan, bundle, **install_arguments)
     assert result['stage'] == 'installed' and result['version'] == version
     assert fingerprint(state / 'master.key') == seed_before and fingerprint(state / 'initial-owner.json') == owner_before
@@ -228,6 +249,9 @@ def main():
     docker_deploy.install(plan, bundle, **install_arguments)
     marker = docker_deploy.load()
     assert marker['uid'] > 0 and marker['gid'] > 0
+    for private in (state, state / 'gateway', state / 'tls', docker_deploy.ROOT / 'reality'):
+        info = private.stat()
+        assert info.st_uid == marker['uid'] and stat.S_IMODE(info.st_mode) == 0o700, 'bound secret directory lost its private host ownership/mode'
     assert not marker['public_udp_verified'], 'local-only health must not claim external reachability'
     print('PASS real ' + edition + ' Docker install and failed-activation resume preserve private identity', flush=True)
 
