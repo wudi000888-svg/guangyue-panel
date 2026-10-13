@@ -1,6 +1,6 @@
 # 加密货币支付与提取接口契约
 
-适用版本：**0.38.0** · 2026-10-09。以下为本版实际接口；未列出的 OKX 绑定、成员 crypto 充值、链上退款和外部签名器接口均未实现。
+适用版本：**0.39.18** · 2026-10-13。以下为本版实际接口；未列出的 OKX 绑定、成员 crypto 充值、链上退款和外部签名器接口均未实现。
 
 ## 请求域、权限与金额
 
@@ -18,7 +18,7 @@
 | 方法与后缀 | 请求要点 / 返回 |
 | --- | --- |
 | `GET /wallets` | `{items: CryptoWallet[]}`，含模式、启停、备份/恢复状态、revision、`next_index` 等公开元数据 |
-| `POST /wallets/hot` | `name,mnemonic,xpub,path,first_address,engine_version,supported_chain_ids,password,operation_id,risk_ack:true`；官方 Wallet Core 4.8.4 生成，服务器独立核对后加密 |
+| `POST /wallets/hot` | `name,mnemonic,xpub,path,first_address,engine_version,supported_chain_ids,password,operation_id,risk_ack:true`；官方 Wallet Core 4.8.4 生成或使用 `import:true` 明确导入 12/24 词助记词，服务器独立核对后加密 |
 | `POST /wallets/xpub` | `name,xpub,path,supported_chain_ids,password,operation_id`；返回只读钱包，不保存外部私钥 |
 | `GET /wallets/{id}/addresses?after=N` | `{wallet,items,next_after}`，按索引每页最多 200 条；GET 不分配地址 |
 | `POST /wallets/{id}/addresses` | `password,operation_id,revision,label`；手动分配，返回 `{wallet,address}`；不创建订单 |
@@ -28,10 +28,15 @@
 | `POST /wallets/{id}/reveal` | `password`；仅热钱包临时返回助记词，前端限时并在离开时清除 |
 | `POST /wallets/restore` | `password,backup_password,backup:{format,data},operation_id`；新恢复分支暂停并要求核对索引 |
 | `POST /wallets/{id}/recovery` | `password,operation_id,revision,next_index,recovery_ack:true`；索引不得低于已知高水位，核对后仍需启用 |
+| `POST /wallets/{id}/delete` | `password,operation_id,revision,delete_ack:true,permanent_delete_ack:true`；永久删除，返回 `{id,deleted:true}`；没有撤销或恢复删除入口，旧页面缺少永久删除确认会被拒绝 |
 
 钱包 DTO 新增 `supported_chain_ids`、`funding_address`、`funding_path`。新界面默认 `[56]`，可选 `[1,56]`；显式空列表、重复链或未知链拒绝。历史迁移/旧备份缺失字段默认 `[1,56]`。热钱包固定 Gas 描述可离线派生，xpub 返回空资金地址。新付款、余额查询及新归集任务校验支持链；既有付款单和已批准任务仍继续核对冻结网络。
 
 备份 `format` 为 `guangyue-crypto-wallet-v1`，使用独立口令加密。新站恢复必须核对备份之后的实际分配记录；同一分支不能交给多个独立部署同时分配。地址接口现在同时可读取手动地址和订单分配地址，invoice 的地址不能再用于其他订单。
+
+永久删除在同一事务中停用并解绑当前收款配置、保存公共地址归属及索引高水位，再删除钱包实体和加密种子。未结束任务或待核验签名交易返回 409。删除本身可幂等重试；已删除钱包的旧创建/分配/状态操作重放返回 410，旧钱包 ID 的备份恢复被拒绝。升级也清理旧版 `removed_at` 钱包。订单、付款证据、交易唯一键、nonce 和公共地址历史保留，防止对账中断或重复入账。删除不会转走链上资产，也不能擦除管理员持有的外部助记词、旧文件或机器快照。
+
+外部助记词或公钥可以明确导入为新 ID；同分支沿用历史高水位，暂停分配并要求核对索引，核对之前启用返回 409。当前面板可读同分支历史地址和预览/归集资产，历史订单地址归属不改写。新钱包的便携备份只包含新 ID 的地址记录和完整高水位；迁移到全新面板时，旧 ID 的地址展示还需要原公共历史或原备份，不能把新钱包备份宣称为完整面板历史备份。
 
 ## 收款配置与可选资产
 
@@ -135,6 +140,10 @@ qr_uri, order_state, receipt_state, scan_error, last_scan, finalized_block
 热钱包固定资金地址与订单地址分支不同。`funding_balance_atoms` 和 `native_atoms` 使用 18 位原生币精度：Ethereum 用本链 ETH，BSC 用本链 BNB，L2 查询的 ETH 也各自独立。外部 xpub 只提供只读余额，不显示后台可提取。
 
 ## 提取预览、批准与后台任务
+
+`GET /admin/wallets/{id}/gas?chain_id=bsc` 返回独立的只读 Gas 快照。这里的 `chain_id` 是配置字符串 ID；响应含 `wallet_id,chain_id,native_symbol,gas_price_atoms,reference_native_transfer_fee_atoms,gas_checked_at,expires_at,last_attempt_at,gas_error,funding_address,funding_balance_atoms,funding_checked_at,funding_error,block_number,finality`。当前权限、钱包存在性和所选链在缓存读取前检查，缓存最长 4 秒、同查询合并，RPC 有 8 秒超时。不扫描订单地址，也不写入任务、nonce 或转账。失败保留已知值及原时间，未知值不显示为零。
+
+可见的当前钱包每 5 秒尝试刷新该接口。有效转账输入另行串行刷新只读预览；前一次扫描尚未结束时等待，切换钱包/网络、隐藏页面或离开会取消旧请求。确认窗口固定原始密封报价，不随后台刷新改写目的地址、来源或金额；报价过期或费用未知时不能批准。
 
 `POST /admin/wallets/{id}/sweeps/preview` 是不需密码的估算：
 

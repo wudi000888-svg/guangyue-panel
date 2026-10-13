@@ -258,7 +258,10 @@ func TestCryptoWalletRestoreHighWaterAndRecoveryGate(t *testing.T) {
 	if !restored.RecoveryRequired || restored.Enabled || !restored.BackupConfirmed || restored.NextIndex != 1 {
 		t.Fatal(restored)
 	}
-	enabled := decoded[CryptoWallet](t, req(t, b, ownerB, "POST", cryptoWalletPrefix+"wallets/"+restored.ID+"/status", object{"password": commerceTestPassword, "revision": restored.Revision, "operation_id": randomToken(24), "enabled": true}), 200)
+	if w := req(t, b, ownerB, "POST", cryptoWalletPrefix+"wallets/"+restored.ID+"/status", object{"password": commerceTestPassword, "revision": restored.Revision, "operation_id": randomToken(24), "enabled": true}); w.Code != 409 {
+		t.Fatal("unreviewed import enabled", w.Code)
+	}
+	enabled := restored
 	if w := req(t, b, ownerB, "POST", cryptoWalletPrefix+"wallets/"+restored.ID+"/addresses", object{"password": commerceTestPassword, "revision": enabled.Revision, "operation_id": randomToken(24)}); w.Code != 409 {
 		t.Fatal("recovery gate bypass", w.Code)
 	}

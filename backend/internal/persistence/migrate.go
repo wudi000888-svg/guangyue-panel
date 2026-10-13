@@ -101,6 +101,11 @@ func (d *DB) Migrate(ctx context.Context) error {
 				return fmt.Errorf("migration %s: %w", name, err)
 			}
 		}
+		if name == "020_crypto_wallet_permanent_delete.sql" {
+			if err = d.migrateCryptoWalletHistory(ctx, tx); err != nil {
+				return fmt.Errorf("migration %s ownership: %w", name, err)
+			}
+		}
 		if _, err = tx.ExecContext(ctx, "INSERT INTO schema_migrations(version,checksum,applied_at) VALUES(?,?,?)", name, checksum, nowUnix()); err != nil {
 			return err
 		}

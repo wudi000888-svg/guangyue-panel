@@ -1,6 +1,6 @@
 import { beforeAll, expect, it } from 'vitest';
 import { initWasm, type WalletCore } from '@trustwallet/wallet-core';
-import { describeCoreWallet } from './walletCore';
+import { describeCoreWallet,importHotWallet } from './walletCore';
 
 let core: WalletCore;
 // Public BIP-39 fixture only: never use these widely known words to hold funds.
@@ -25,3 +25,5 @@ it('the same public account xpub derives receiving addresses without mnemonic ac
     finally { publicKey.delete(); }
   }
 });
+
+it('explicit mnemonic import uses official Wallet Core validation and the known public derivation vector',async()=>{const imported=await importHotWallet('  '+mnemonic+'  ',async()=>core);expect(imported.xpub).toBe(xpub);expect(imported.first_address).toBe('0x9858EfFD232B4033E47d90003D41EC34EcaEda94');expect(imported.mnemonic).toBe(mnemonic);imported.mnemonic='';await expect(importHotWallet('abandon '.repeat(12).trim(),async()=>core)).rejects.toThrow('助记词校验失败');const load=()=>{throw new Error('must not load')};await expect(importHotWallet('too few words',load)).rejects.toThrow('请输入12或24');});

@@ -142,9 +142,6 @@ func cryptoSweepChain(s CryptoPaymentSettings, id string) (CryptoChain, error) {
 	return CryptoChain{}, commerceFail(400, "请选择已配置的网络")
 }
 func cryptoSweepWallet(v CryptoWallet) error {
-	if v.RemovedAt > 0 {
-		return commerceFail(409, "钱包已删除，请先恢复钱包再归集")
-	}
 	if v.Mode != "hot" {
 		return commerceFail(409, "外部 xpub 钱包只能查看余额，请使用原钱包手动转出")
 	}
@@ -214,10 +211,6 @@ func (a *App) cryptoWalletBalance(ctx context.Context, id, chainID string, after
 	} else if out.WatchOnly {
 		out.UnavailableReason = "外部 xpub 仅可查看余额，请使用原钱包提取"
 	}
-	if v.RemovedAt > 0 {
-		out.OperationsSupported = false
-		out.UnavailableReason = "钱包已删除，请先恢复钱包再归集"
-	}
 	if e := a.store.cryptoChainAvailable(a.store.db, chain.ChainID); e != nil {
 		out.OperationsSupported = false
 		out.UnavailableReason = e.Error()
@@ -234,7 +227,7 @@ func (a *App) cryptoWalletBalance(ctx context.Context, id, chainID string, after
 		}
 		out.FundingBalanceAtoms = balance.String()
 	}
-	rows, e := a.store.db.Query("SELECT a.id,a.address_index,a.address,a.path,COALESCE(i.order_id,''),COALESCE(i.id,''),COALESCE(i.user_id,0) FROM crypto_wallet_addresses a LEFT JOIN crypto_invoices i ON i.address_id=a.id WHERE a.wallet_id=? AND a.address_index>? ORDER BY a.address_index LIMIT 11", id, after)
+	rows, e := a.store.db.Query("SELECT a.id,a.address_index,a.address,a.path,COALESCE(i.order_id,''),COALESCE(i.id,''),COALESCE(i.user_id,0) FROM crypto_wallet_addresses a LEFT JOIN crypto_invoices i ON i.address_id=a.id WHERE a.wallet_id IN ("+cryptoWalletOwnerScope+") AND a.address_index>? ORDER BY a.address_index LIMIT 11", id, after)
 	if e != nil {
 		return out, e
 	}
@@ -361,7 +354,7 @@ func (a *App) cryptoPreviewSweep(ctx context.Context, actor Record, id string, i
 	}
 	var addresses []CryptoWalletAddress
 	if len(selected) == 0 {
-		addresses, e = cryptoWalletAddresses(a.store.db, id, 1001)
+		addresses, e = cryptoWalletReceiveAddresses(a.store.db, id, 1001)
 	} else {
 		args := []any{id}
 		marks := []string{}
@@ -369,7 +362,7 @@ func (a *App) cryptoPreviewSweep(ctx context.Context, actor Record, id string, i
 			args = append(args, x)
 			marks = append(marks, "?")
 		}
-		rows, err := a.store.db.Query("SELECT id,wallet_id,address_index,path,address,label,created FROM crypto_wallet_addresses WHERE wallet_id=? AND id IN ("+strings.Join(marks, ",")+") ORDER BY address_index", args...)
+		rows, err := a.store.db.Query("SELECT id,wallet_id,address_index,path,address,label,created FROM crypto_wallet_addresses WHERE wallet_id IN ("+cryptoWalletOwnerScope+") AND id IN ("+strings.Join(marks, ",")+") ORDER BY address_index", args...)
 		if err != nil {
 			return out, err
 		}
@@ -393,6 +386,10 @@ func (a *App) cryptoPreviewSweep(ctx context.Context, actor Record, id string, i
 		return out, commerceFail(400, "地址较多，请在余额列表选择本次提取地址，每次最多1000个")
 	}
 	for _, x := range addresses {
+		derived, deriveErr := cryptoDeriveAddress(v.XPub, v.Path, uint32(x.Index))
+		if deriveErr != nil || derived != x.Address || x.Path != cryptoFullPath(v.Path, x.Index) {
+			return out, commerceFail(422, "历史收款地址与钱包派生记录不一致，已阻止补 Gas 和归集")
+		}
 		if strings.EqualFold(x.Address, dest) {
 			return out, commerceFail(400, "提取目标不能是本次来源地址")
 		}
@@ -677,7 +674,7 @@ func (a *App) cryptoSweepAPIRoute(w http.ResponseWriter, r *http.Request, actor 
 	}
 	path := strings.TrimPrefix(r.URL.Path, cryptoWalletPrefix)
 	p := strings.Split(path, "/")
-	matched := path == "sweeps" || (len(p) == 3 && p[0] == "sweeps" && (p[2] == "retry" || p[2] == "cancel")) || (len(p) >= 3 && p[0] == "wallets" && (p[2] == "balances" || p[2] == "portfolio" || p[2] == "sweeps"))
+	matched := path == "sweeps" || (len(p) == 3 && p[0] == "sweeps" && (p[2] == "retry" || p[2] == "cancel")) || (len(p) >= 3 && p[0] == "wallets" && (p[2] == "balances" || p[2] == "portfolio" || p[2] == "gas" || p[2] == "sweeps"))
 	if !matched {
 		return false
 	}
@@ -701,6 +698,12 @@ func (a *App) cryptoSweepAPIRoute(w http.ResponseWriter, r *http.Request, actor 
 	defer cancel()
 	if r.Method == "GET" {
 		switch {
+		case len(p) == 3 && p[0] == "wallets" && p[2] == "gas":
+			var v CryptoGasSnapshot
+			v, e = a.cryptoWalletGas(ctx, p[1], r.URL.Query().Get("chain_id"))
+			if e == nil {
+				jsonResponse(w, 200, v)
+			}
 		case path == "sweeps":
 			e = a.cryptoListSweeps(w, r.URL.Query().Get("wallet_id"))
 		case len(p) == 3 && p[2] == "portfolio":

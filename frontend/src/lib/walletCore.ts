@@ -60,3 +60,13 @@ export async function createHotWallet(): Promise<HotWalletMaterial> {
 export function clearHotWallet(material: HotWalletMaterial | undefined): void {
   if (material) material.mnemonic = '';
 }
+
+/** Imported phrases stay in memory and use the same official derivation as generated wallets. */
+export async function importHotWallet(mnemonic:string,load:()=>Promise<WalletCore>=loadWalletCore):Promise<HotWalletMaterial>{
+ mnemonic=mnemonic.trim().replace(/\s+/g,' ');
+ if(mnemonic.length>400||![12,24].includes(mnemonic.split(' ').length))throw new Error('请输入12或24个英文助记词，不支持附加密码');
+ const core=await load();
+ if(!core.Mnemonic.isValid(mnemonic))throw new Error('助记词校验失败，请核对单词和顺序');
+ const wallet=core.HDWallet.createWithMnemonic(mnemonic,'');
+ try{return describeCoreWallet(core,wallet)}finally{wallet.delete();mnemonic=''}
+}

@@ -364,9 +364,6 @@ func (a *App) saveCryptoPaymentSettings(w http.ResponseWriter, r *http.Request, 
 	return nil
 }
 func cryptoWalletReady(v CryptoWallet) error {
-	if v.RemovedAt > 0 {
-		return commerceFail(409, "收款钱包已删除，请先恢复钱包并重新启用收款")
-	}
 	if !v.Enabled || v.RecoveryRequired {
 		return commerceFail(409, "收款钱包已暂停或需要核对恢复索引")
 	}

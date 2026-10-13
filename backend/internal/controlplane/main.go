@@ -20,6 +20,9 @@ import (
 )
 
 type App struct {
+	cryptoGasMu            sync.Mutex
+	cryptoGasSnapshots     map[string]*cryptoGasCacheEntry
+	cryptoGasSlots         chan struct{}
 	cryptoPortfolioMu      sync.Mutex
 	cryptoPortfolios       map[string]*cryptoPortfolioCacheEntry
 	cryptoPortfolioSlots   chan struct{}
