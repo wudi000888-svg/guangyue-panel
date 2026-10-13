@@ -22,6 +22,7 @@ type cryptoSweepRPCFixture struct {
 	native, tokens                    map[string]*big.Int
 	txs                               map[string]*types.Transaction
 	receipts                          map[string]object
+	blockTimes                        map[uint64]uint64
 	latest, final                     uint64
 	chain                             int64
 	price                             int64
@@ -65,7 +66,17 @@ func (f *cryptoSweepRPCFixture) serve(w http.ResponseWriter, r *http.Request) {
 		} else {
 			n, _ = cryptoHexU64(tag)
 		}
-		result = object{"number": cryptoHex(n), "hash": cryptoFixtureHash(n), "timestamp": cryptoHex(uint64(time.Now().Unix()))}
+		// A canonical block's timestamp is immutable. Both RPC servers share
+		// this fixture and its lock, including after the fixture mines a block.
+		if f.blockTimes == nil {
+			f.blockTimes = map[uint64]uint64{}
+		}
+		timestamp, known := f.blockTimes[n]
+		if !known {
+			timestamp = uint64(time.Now().Unix())
+			f.blockTimes[n] = timestamp
+		}
+		result = object{"number": cryptoHex(n), "hash": cryptoFixtureHash(n), "timestamp": cryptoHex(timestamp)}
 	case "eth_getCode":
 		result = "0x60016000"
 	case "eth_call":
