@@ -102,6 +102,36 @@ class MaintenanceTests(unittest.TestCase):
                 with self.assertRaises(ValueError): functions['checked_loopback_target'](target)
         self.assertEqual(original['reality_target'], 'www.cloudflare.com:443')
 
+    def test_certificate_wait_does_not_treat_activating_unapplied_or_unready_child_as_done(self):
+        functions = self.native_fixture_functions(); wait = functions['wait_certificate_reconciled']
+        configuration = self.root/'native-config.json'; configuration.write_text(json.dumps({'stats_secret': 'private-fixture'}))
+        working = {'ActiveState': 'activating', 'SubState': 'start', 'MainPID': '99'}
+        finished = {'ActiveState': 'inactive', 'SubState': 'dead', 'MainPID': '0'}
+        child = {'ActiveState': 'active', 'SubState': 'running', 'MainPID': '42'}
+        workers = iter([working, finished, finished, finished])
+        def service(unit):
+            return next(workers) if unit == 'guangyue-gateway-cert.service' else child
+        systems = [{'status': 'applied', 'configuration': {'state': 'applied'}}, {'status': 'starting', 'configuration': {'state': 'pending'}}, {'status': 'applied', 'configuration': {'state': 'applied'}}, {'status': 'applied', 'configuration': {'state': 'applied'}}]
+        import native_gateway
+        with patch.object(native_gateway, 'CONFIG', configuration), patch.object(update_agent.state, 'read', return_value={'digest': 'generation'}) as read, patch.dict(wait.__globals__, {'service_state': service, 'api': unittest.mock.Mock(side_effect=[(dict(system=value), '') for value in systems]), 'hy2_tls_cache_ready': unittest.mock.Mock(side_effect=[False, True])}), patch.object(wait.__globals__['time'], 'monotonic', side_effect=[0, 1, 2, 3, 4]), patch.object(wait.__globals__['time'], 'sleep') as pause:
+            wait('generation', b'41', cookie='private-fixture-cookie')
+            self.assertEqual(read.call_count, 4)
+            self.assertEqual(pause.call_count, 3)
+            self.assertEqual(wait.__globals__['hy2_tls_cache_ready'].call_count, 2)
+
+    def test_certificate_wait_rechecks_same_child_pid_after_authenticated_stats(self):
+        functions = self.native_fixture_functions(); wait = functions['wait_certificate_reconciled']
+        configuration = self.root/'native-config.json'; configuration.write_text(json.dumps({'stats_secret': 'private-fixture'}))
+        finished = {'ActiveState': 'inactive', 'SubState': 'dead', 'MainPID': '0'}
+        generations = iter(['42', '43', '43', '43'])
+        def service(unit):
+            return finished if unit == 'guangyue-gateway-cert.service' else {'ActiveState': 'active', 'SubState': 'running', 'MainPID': next(generations)}
+        import native_gateway
+        with patch.object(native_gateway, 'CONFIG', configuration), patch.object(update_agent.state, 'read', return_value={'digest': 'generation'}) as read, patch.dict(wait.__globals__, {'service_state': service, 'api': unittest.mock.Mock(return_value=(dict(system={'status': 'applied', 'configuration': {'state': 'applied'}}), '')), 'hy2_tls_cache_ready': unittest.mock.Mock(return_value=True)}), patch.object(wait.__globals__['time'], 'monotonic', side_effect=[0, 1, 2]), patch.object(wait.__globals__['time'], 'sleep') as pause:
+            wait('generation', b'41', cookie='private-fixture-cookie')
+            self.assertEqual(read.call_count, 2)
+            self.assertEqual(pause.call_count, 1)
+
     def test_proxy_fixture_diagnostic_has_transport_context_without_credentials(self):
         source = Path(upgrade.__file__).parent / 'tests/entitlement_integration.py'
         module_spec = importlib.util.spec_from_file_location('entitlement_fixture_diagnostic', source)

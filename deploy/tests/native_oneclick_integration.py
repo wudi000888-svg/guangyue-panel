@@ -198,18 +198,50 @@ def published_certificate_digest():
     return hashlib.sha256((base / 'fullchain.pem').read_bytes() + b'\0' + (base / 'privkey.pem').read_bytes()).hexdigest()
 
 
-def wait_certificate_reconciled(digest, previous_pid=None):
+def service_state(unit):
+    output = run('systemctl', 'show', unit, '--property=ActiveState,SubState,MainPID,ExecMainStatus,NRestarts').stdout.decode()
+    return dict(line.split('=', 1) for line in output.splitlines() if '=' in line)
+
+
+def oneshot_finished(state):
+    # Type=oneshot is "activating" while its command runs, which is-active
+    # does not count as active. Nonzero is-active is not an idle proof.
+    return state.get('ActiveState') in {'inactive', 'failed'} and state.get('SubState') in {'dead', 'failed'} and state.get('MainPID') == '0'
+
+
+def hy2_tls_cache_ready(configuration):
+    # In the fixed Hysteria source, fillTLSConfig.InitializeCache loads and
+    # validates the pair before fillTrafficLogger starts this HTTP server.
+    # A successful authenticated query of the same new wrapper generation is
+    # therefore a child-readiness proof, rather than Type=exec activation.
+    request = urllib.request.Request('http://127.0.0.1:19199/online', headers={'Authorization': configuration['stats_secret']})
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    try:
+        with opener.open(request, timeout=2) as response:
+            return response.status == 200 and isinstance(json.loads(response.read(2 << 20)), dict)
+    except (OSError, ValueError):
+        return False
+
+
+def wait_certificate_reconciled(digest, previous_pid=None, cookie=''):
     # A timer's first initial reconciliation must not be mistaken for handling
     # the replacement certificate. Check both the exact generation digest and
     # service completion; the timer also makes deployment-lock races retryable.
     deadline = time.monotonic() + 100
+    configuration = json.loads(native.CONFIG.read_text())
+    worker, child, applied = {}, {}, False
     while time.monotonic() < deadline:
         record = state.read('gateway-certificate.json') or {}
-        worker_idle = run('systemctl', 'is-active', '--quiet', 'guangyue-gateway-cert.service', success=False).returncode != 0
-        pid = run('systemctl', 'show', 'guangyue-hy2', '--property=MainPID', '--value').stdout.strip()
-        if record.get('digest') == digest and worker_idle and pid not in (b'', b'0') and (previous_pid is None or pid != previous_pid):
-            return
+        worker = service_state('guangyue-gateway-cert.service')
+        system = api('/api/operations', cookie=cookie)[0]['system']
+        applied = system['status'] == 'applied' and system['configuration']['state'] == 'applied'
+        child = service_state('guangyue-hy2')
+        pid = child.get('MainPID', '').encode()
+        if record.get('digest') == digest and oneshot_finished(worker) and applied and child.get('ActiveState') == 'active' and child.get('SubState') == 'running' and pid not in (b'', b'0') and (previous_pid is None or pid != previous_pid):
+            if hy2_tls_cache_ready(configuration) and service_state('guangyue-hy2').get('MainPID', '').encode() == pid:
+                return
         time.sleep(1)
+    print('CI certificate readiness failure: ' + json.dumps({'worker': worker, 'hy2': child, 'applied': applied}), file=sys.stderr, flush=True)
     raise AssertionError('certificate generation was not reconciled by the fixed path/timer worker')
 
 
@@ -384,7 +416,7 @@ def main():
         initial = json.loads((native.STATE / 'initial-owner.json').read_text())
         _, cookie = api('/api/login', initial)
         assert updater_state()['current_version'] == base_version
-        wait_certificate_reconciled(published_certificate_digest())
+        wait_certificate_reconciled(published_certificate_digest(), cookie=cookie)
         # Rotate the fixture source through the real private gateway and fixed
         # certificate path worker; no production CA flag is introduced.
         new_certificate, new_key = new_cert(work, 'rotation')
@@ -394,7 +426,7 @@ def main():
             shutil.copyfile(source_file, fixture / name); shutil.chown(fixture / name, user='guangyue', group='guangyue'); (fixture / name).chmod(0o600)
         run('systemctl', 'restart', 'guangyue-gateway')
         run(str(native.APP / 'bin/guangyue-gateway'), '-config', str(native.GATEWAY_CONFIG), '-wait-ready', '45s', timeout=55)
-        wait_certificate_reconciled(published_certificate_digest(), old_pid)
+        wait_certificate_reconciled(published_certificate_digest(), old_pid, cookie=cookie)
         native.native_health(base_version); https_health(new_certificate, base_version)
         published_key = native.STATE / 'tls/current/privkey.pem'; saved_key = published_key.read_bytes()
         shutil.copyfile(key, published_key)
@@ -408,7 +440,10 @@ def main():
             assert 'certificate and private key do not match' in str(error)
         else:
             raise AssertionError('mismatched pair was not rejected by the actual fixed reconciler')
-        assert run('systemctl', 'show', 'guangyue-hy2', '--property=MainPID', '--value').stdout == mismatch_pid
+        mismatch_after = run('systemctl', 'show', 'guangyue-hy2', '--property=MainPID', '--value').stdout
+        if mismatch_after != mismatch_pid:
+            print('CI invalid-pair PID changed: ' + json.dumps({'before_pid': mismatch_pid.decode().strip(), 'after_pid': mismatch_after.decode().strip(), 'worker': service_state('guangyue-gateway-cert.service'), 'hy2': service_state('guangyue-hy2')}), file=sys.stderr, flush=True)
+        assert mismatch_after == mismatch_pid
         published_key.write_bytes(saved_key); published_key.chmod(0o600); shutil.chown(published_key, user='guangyue', group='guangyue')
         same_nginx(baseline)
         print('PASS real gateway certificate rotation, HY2 restart and mismatched pair rejection preserve host Nginx', flush=True)
