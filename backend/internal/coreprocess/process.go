@@ -18,6 +18,9 @@ func Command(timeout time.Duration, name string, args ...string) ([]byte, error)
 	return exec.CommandContext(ctx, name, args...).Output()
 }
 func PID(unit string) int {
+	if ContainerMode() {
+		return containerPID(unit)
+	}
 	b, err := Command(3*time.Second, "systemctl", "show", "--property=MainPID", "--value", unit)
 	if err != nil {
 		return 0
@@ -25,7 +28,28 @@ func PID(unit string) int {
 	id, _ := strconv.Atoi(strings.TrimSpace(string(b)))
 	return id
 }
+
+// Generation includes kernel identity in a container: its PID namespace starts
+// over on every whole-container restart, so a bare PID is not an accounting
+// generation. Native installations retain their existing systemd PID semantics.
+func Generation(unit string) string {
+	if !ContainerMode() {
+		return strconv.Itoa(PID(unit))
+	}
+	v, err := containerTable().generation(unit)
+	if err != nil {
+		return ""
+	}
+	boot, err := os.ReadFile("/proc/sys/kernel/random/boot_id")
+	if err != nil {
+		return ""
+	}
+	return containerAccountingGeneration(v, strings.TrimSpace(string(boot)))
+}
 func Restart(unit string) error {
+	if ContainerMode() {
+		return restartContainer(unit)
+	}
 	pid := PID(unit)
 	if pid < 2 {
 		return errors.New("core is not running; systemd recovery required")

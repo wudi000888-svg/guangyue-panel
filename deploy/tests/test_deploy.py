@@ -211,7 +211,7 @@ class InfrastructureBundleTests(unittest.TestCase):
         import shutil
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp)
-            for name in ['infrastructure.py','common.py']:
+            for name in ['infrastructure.py','common.py','deployment_mode.py']:
                 shutil.copyfile(Path(install.__file__).parent/name,root/name)
             subprocess.run([sys.executable,str(root/'infrastructure.py'),'--help'],check=True,capture_output=True)
             self.assertFalse((root/'__pycache__').exists())

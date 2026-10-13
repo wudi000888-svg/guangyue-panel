@@ -1,174 +1,84 @@
-# 安装指南
+# 一键安装
 
-适用于广月面板 0.23.3。首次部署按本文从上到下执行。已有部署使用[升级流程](OPERATIONS.md)，不要重新运行安装器覆盖数据。
+0.41.0起的新安装默认Docker，也可在同一向导选择原生systemd。程序、代理核心、证书与Pro数据库自动准备，无需填写证书路径或数据库密码。旧Nginx方法见[旧部署指南](LEGACY_INSTALL.md)，已有站点继续使用[更新与回退](UPDATES.md)，不要重新安装覆盖数据。
 
-Release assets 分为 Lite / Pro；包内标记决定默认版本。本文演示独立 Lite（`--role standalone` 可省略）；安装不需要注册文件。安装后在子站生成配对令牌，Pro 直接粘贴导入，详见[子站指南](BUSINESS-SITES.md)。旧 `--connect-token` / `--enrollment-file` 参数仅为已有拉取式部署保留。安装 Pro 或从 Lite 升级，先阅读[双版本部署指南](EDITIONS.md)。
+## 安装前
 
-## 1. 系统、资源与域名
+1. 准备有root/sudo权限的Linux amd64完整服务器，公网TCP **443** 与UDP **443**均空闲。安装器不会停掉其他程序、迁移已有HTTPS站点或改用其他公网端口。
+2. 将一个域名解析到本机，也可分别设置面板域名和节点域名。Cloudflare等服务使用**仅DNS**，关闭CDN/橙云代理。Docker当前仅IPv4公网，域名只能有A记录；需要AAAA/IPv6时选择原生双栈，并修正不可达的AAAA。当前面板网关支持最长63字符的域名，这不是DNS的通用上限。
+3. 在云安全组和主机防火墙放行TCP443、UDP443，保留SSH端口。自动证书使用TLS-ALPN-01，经TCP443申请和续期，不接管HTTP80。
 
-新安装默认启用 BBR 与 HY2 优化，要求宿主机支持并允许修改网络参数。不支持的环境可在安装命令添加 `--no-bbr --no-hy2-optimization`；安装后在 **系统设置 → 网络优化** 调整。参数与恢复行为见[运维指南](OPERATIONS.md#bbr-与-hy2-优化)。
+空白服务器、已有Nginx HTTP80且443空闲的服务器属于本次一键路径。已有Nginx配置声明443、停机Docker容器仍映射443，也会被检测；安装器不会删除配置或停止这些项目。
 
-| 项目 | 要求 |
+| 项目 | 范围 |
 | --- | --- |
-| 系统 | Debian 12/13 或 Ubuntu 22.04/24.04，systemd 作为 PID 1 |
-| 架构 | amd64 / x86_64；当前发布包不支持 ARM64 |
-| 资源建议 | 1 vCPU、1 GiB RAM、至少 2 GiB 可用磁盘；大量导入/测速建议更多内存 |
-| 权限 | root 或 sudo，用于服务、证书与 Nginx 安装 |
-| 公网入口 | TCP 80（ACME）、TCP 443（面板/Reality）、UDP 443（HY2） |
-| 域名 | 最少 1 个，推荐 2 个；若配置 AAAA，IPv6 必须确实可达 |
+| 系统预检查白名单 | Debian12/13、Ubuntu22.04/24.04，systemd完整服务器 |
+| 架构 | amd64/x86_64；当前不提供ARM64安装资产 |
+| Docker内核 | Linux5.4或更新，Docker Engine与Compose插件 |
+| 公网IP | Docker仅IPv4；原生支持IPv4/IPv6双栈 |
+| 内存建议 | Lite1核1GiB；Pro2核2GiB，另为其他程序留余量 |
+| 可用空间预检查 | 原生至少2GiB；Docker至少4GiB，另留数据、镜像、日志与备份空间 |
+| 测试边界 | 发布CI包含Ubuntu真实VM安装与回退验证；实际结果看该Release关联CI。Debian白名单不等同完成Debian原生VM验收 |
 
-推荐 DNS：`panel.example.com` → VPS 公网 IP；`node.example.com` → 同一 IP。两者也可使用同一个域名。**示例域名必须替换**。初次部署使用仅 DNS 解析；普通 CDN 的 HTTP 代理不能直接转发 Reality 和 HY2。
+## 运行向导
 
-Reality SNI 默认 `www.cloudflare.com`，它是 TLS 伪装目标，不要把此域名解析到自己的 VPS。自定义目标必须具备兼容的 TLS 1.3 / HTTP/2 能力，且不能是本站域名或内网地址。
-
-已有 Nginx/Caddy/Apache 或其他服务占用 TCP/UDP 443，先阅读 [Nginx 共存](NGINX.md)。本安装器不会抢占端口、覆盖其他虚拟主机或更改防火墙。
-
-## 2. 安装系统依赖
+将脚本下载到当前用户的私有临时文件，再执行。以下整段可复制到服务器终端：
 
 ```bash
-sudo apt-get update
-sudo apt-get install -y nginx libnginx-mod-stream certbot python3 curl unzip ca-certificates openssl
-sudo systemctl enable --now nginx
+gy_install_file=$(mktemp)
+curl --proto '=https' --proto-redir '=https' -fsSL \
+  https://github.com/wudi000888-svg/guangyue-panel/releases/latest/download/install.sh \
+  -o "$gy_install_file" && sudo bash "$gy_install_file"
+rm -f "$gy_install_file"
 ```
 
-保留发行版的 `www-data` Nginx worker 身份、`modules-enabled` 与 `sites-enabled` 结构。安装器会验证 stream 模块、realip 模块与实际配置语法。安装器提供的 `listen ... http2` 兼容老版本 Nginx；新版本可能显示弃用提示，但仍有效。
+向导询问Lite/Pro、面板域名、节点域名（回车同域）、部署方式（回车Docker），以及是否同意Let’s Encrypt条款。检查系统、资源、时间、APT锁、443、Nginx/Docker配置、DNS和下载通道后展示计划，确认后才准备面板服务。
 
-在云安全组和主机防火墙放行 TCP 80/443、UDP 443。**保留当前 SSH 端口放行**，不要直接套用清空防火墙规则的命令。
+bootstrap缺少完整Python3或CA信任根时，只补齐缺失启动依赖；APT模拟发现需升级或移除既有包则停止。原生后端只安装必要依赖，不全量升级系统。新安装默认不改宿主BBR、qdisc或UDP sysctl，保留已有Nginx配置和HTTP80响应。
 
-## 3. 申请证书
+版本只在开始时选择一次，要求正式Release八项资产完整，不选择draft、预发布或未上传完整版本。验证SHA256、限制官方HTTPS重定向与解包路径；Docker镜像也从本次Release归档加载并固定镜像ID，不需要GitHub或镜像仓库账号。SHA256检测损坏，不替代对发布账号的信任，也不声称有独立离线签名。
 
-### 新 Nginx：使用默认 webroot
+## 固定版本与续装
 
-确认公网访问 `http://panel.example.com/.well-known/acme-challenge/...` 和节点域名能到达本机 `/var/www/html`。默认站点已删除或改过时，应先自行建立只提供 ACME webroot 的临时 HTTP 站点。
+下载同一个脚本后可使用：
 
 ```bash
-sudo install -d -m 0755 /var/www/html/.well-known/acme-challenge
-sudo certbot certonly --webroot -w /var/www/html \
-  --cert-name panel.example.com \
-  -d panel.example.com -d node.example.com \
-  --agree-tos --register-unsafely-without-email
+sudo bash install.sh --version 0.41.0
+sudo bash install.sh --version 0.41.0 --check
+sudo bash install.sh --resume
 ```
 
-使用上述命令表示同意 ACME 服务条款；示例选择不设置邮箱。需要邮件提醒时，用 `--email you@example.com` 代替 `--register-unsafely-without-email`。只有一个域名时只保留一个 `-d`。
+`--check`只做检查，不安装依赖、创建面板配置或准备服务；缺Python/CA时提示后退出。`--resume`读取root私有回执，继续原计划、原版本，保留已经生成的主密钥、初始账号和数据。外部改动的unit/Compose及其他程序占端口时会拒绝覆盖。
 
-证书必须同时覆盖面板和节点域名，剩余有效期超过 24 小时，证书与密钥匹配。可用自有证书代替 Certbot；安装器同样校验，但续期需由你现有证书系统调用部署脚本。
+无人值守入口为`--plan /root/plan.json --yes`，JSON需符合当前schema，明确`acme_agreed:true`，使用新UUID，版别/后端仅允许`lite|pro`与`docker|native`。它没有跳过DNS、端口、证书或下载校验的生产参数；普通部署推荐交互向导。
 
-已有同名临时 HTTP 虚拟主机，申请完成后停用该临时配置，`nginx -t` 再 reload；安装器会创建正式 ACME 路由。不要删除其他站点。详见 [Nginx 指南](NGINX.md)。
+## 首次登录与节点检查
 
-## 4. 获取固定版本
-
-### 从 GitHub Release 获取
-
-正式版本可直接从公开的 GitHub Releases 下载，无需 GitHub 账号。以下命令下载固定版本和校验文件。
+安装完成会显示HTTPS地址和初始账号文件。只在自己的终端读取，不贴到公开工单或截图：
 
 ```bash
-# 在工作电脑或服务器执行。
-release_url=https://github.com/wudi000888-svg/guangyue-panel/releases/download/v0.23.3
-curl -fL --retry 3 -O "$release_url/guangyue-panel-lite-0.23.3-linux-amd64.tar.gz"
-curl -fL --retry 3 -O "$release_url/SHA256SUMS"
-# Linux：
-sha256sum --ignore-missing -c SHA256SUMS
-# macOS 对已下载文件可用 shasum -a 256，并与 SHA256SUMS 对照。
-tar -xzf guangyue-panel-lite-0.23.3-linux-amd64.tar.gz
-cd guangyue-panel-lite-0.23.3-linux-amd64
-```
-
-校验文件来自同一个 Release；SHA256 检测损坏，不替代对发布账号与签名的信任。此版本不声称有独立的离线签名。
-
-### 从源码构建
-
-在开发机安装 Go 1.26.9、Node.js 24 LTS、npm、Git、Python 3、curl、unzip，然后：
-
-```bash
-git clone https://github.com/wudi000888-svg/guangyue-panel.git
-cd guangyue-panel
-git checkout v0.23.3
-bash scripts/check.sh
-bash scripts/build.sh
-bash scripts/build-hy2-core.sh --test
-python3 scripts/third-party.py
-python3 scripts/package.py
-```
-
-输出位于 `build/releases/`。源码构建支持 macOS/Linux 开发机，部署产物固定为 Linux amd64。Go 工具链按 `go.mod` 的 toolchain 指令固定到 1.26.9。编译所需内存显著高于面板运行内存，建议在工作机或 CI 构建。
-
-## 5. 下载代理核心
-
-应用发布包包含广月程序、前端、经过节点路由补丁的 Hysteria 和支持用户会话计数的 Xray（附完整修改源码）。Xray 脚本校验包内核心，不重复下载；Mihomo 脚本从官方 Release 下载固定版本并核验 SHA256。
-
-在已解压的版本包目录执行：
-
-```bash
-GY_BIN_DIR="$PWD/bin" bash scripts/fetch-xray.sh
-GY_BIN_DIR="$PWD/bin" bash scripts/fetch-mihomo.sh
-```
-
-离线主机：在相同版本的解压目录完成下载后，连同完整目录通过 SCP/其他安全方式传入服务器；不要替换为未知来源二进制。Mihomo 是机场订阅节点作为出口的桥接核心；没有桥接资源时不会常驻启动。
-
-## 6. 预检查与安装
-
-```bash
-sudo python3 deploy/install.py --bundle "$PWD" --role standalone \
-  --panel-domain panel.example.com --node-domain node.example.com \
-  --cert /etc/letsencrypt/live/panel.example.com/fullchain.pem \
-  --key /etc/letsencrypt/live/panel.example.com/privkey.pem
-```
-
-预检查是只读操作。它验证系统、端口、文件校验和、证书、Nginx worker 与实际模板。通过后使用同一命令加 `--apply`：
-
-```bash
-sudo python3 deploy/install.py --bundle "$PWD" --role standalone \
-  --panel-domain panel.example.com --node-domain node.example.com \
-  --cert /etc/letsencrypt/live/panel.example.com/fullchain.pem \
-  --key /etc/letsencrypt/live/panel.example.com/privkey.pem --apply
-```
-
-可用 `--reality-sni www.example-target.com` 指定默认伪装目标；先确认目标可达且兼容。已有其他网站时，按 Nginx 文档迁移后，每个网站用 `--web-domain shop.example.com` 显式加入分流表。不要把节点域名用作 Reality 伪装目标。
-
-安装生成随机密钥和初始管理员，将状态存入 `/var/lib/guangyue`，创建三个非 root 服务。失败会尝试恢复 Nginx 与清理本次新建文件，失败状态保存在 root 专有备份目录。不会操作其他项目服务。
-
-## 7. 首次登录与验收
-
-```bash
-sudo systemctl is-active nginx guangyue guangyue-xray guangyue-hy2
-curl -fsS http://127.0.0.1:19100/api/health
-# 只在自己的本地终端查看，不截图公开或提交到 Git。
 sudo cat /var/lib/guangyue/initial-owner.json
 ```
 
-浏览器打开 `https://panel.example.com`。初始用户名 `owner`，密码随机生成；修改密码后初始凭证文件会删除。健康接口返回 200 只证明面板进程可用，**仍要做节点真实连接测试**：
+用户名`owner`，密码随机生成；修改密码后初始凭据文件被删除。新站不自动开放注册、销售、邮件或支付，按管理员设置启用。Lite默认独立站，Pro默认主站；安装后可生成子站令牌并导入主站，不需要注册文件。
 
-1. 创建成员，确认私有订阅里有默认 VLESS 和 HY2 直连节点。
-2. 用支持 Reality/Vision 和 HY2 的客户端分别连接，两次分别查看外部出口 IP。
-3. 测试 TCP 网页、DNS；需要 UDP 的业务再单独测试 UDP。HTTP 出口通常不提供 UDP。
-4. 添加一个你有权限使用的 HTTP/SOCKS5 出口，绑定新节点后核对出口变化。
-5. 核对用户可见节点、质量报告、流量与禁用用户后的连接撤销。
+本机健康只证明本机服务和证书可用，不能单靠`ss`证明云安全组允许UDP。登录后获取管理员套餐的默认本地VLESS/HY2节点，分别验证客户端TCP连接、DNS、UDP业务、出口IP与流量计量，再交给成员使用。普通CDN不转发Reality/HY2。
 
-## 8. 自动续期
+## 更新、备份与排错
 
-```bash
-sudo systemctl enable --now certbot.timer
-sudo certbot renew --dry-run
-```
+新原生和Docker站点沿自己的维护适配器更新/兼容回退，保留数据、密钥、地址历史与当前证书。回退不能低于安装基线；数据库不兼容时会被阻止。旧Nginx站点保留既有高级原生升级路径，无需迁移入口。详见[更新说明](UPDATES.md)及[Docker运行](DOCKER.md)。
 
-安装器创建 `/etc/letsencrypt/renewal-hooks/deploy/guangyue-panel`。续期成功时只处理本面板证书，校验域名与密钥匹配，将完整证书对切换到新目录，再 reload Nginx 并重启 HY2。会短暂重连 HY2。保留一代旧证书；失败回退。
+更新事务未提交时保持维护冻结，只放行健康检查；root持久标记`/var/lib/guangyue-maintenance/pending`会跨重启保留。恢复器验证当前应运行版本健康后才重新放行用户操作与后台任务，不应手动删除标记跳过恢复。
 
-`--dry-run` 默认不会执行部署钩子。确认需要验证完整部署时运行：
+| 路径 | 内容 |
+| --- | --- |
+| `/var/lib/guangyue-installer/receipt.json` | root0600安装计划和阶段 |
+| `/var/lib/guangyue-installer/installer.log` | 脱敏阶段日志，不输出凭据或子进程完整输出 |
+| `/var/lib/guangyue` | 账户、主密钥、钱包加密数据和TLS，需整体备份 |
+| `/etc/guangyue-personal.json` | 受保护配置，可能含数据库凭据 |
+| `/etc/guangyue-deployment.json` | root私有后端身份，不应手动更换backend |
+| `/root/guangyue-backups` | 私有更新快照与回退记录 |
 
-```bash
-sudo python3 /opt/guangyue-personal/deploy/certificates.py
-```
+失败仅停止本次拥有的资源，保留私有现场供`--resume`。不要删除状态目录“重试”、关闭HTTPS校验或注释端口检查。原生可查`journalctl -u guangyue-gateway -u guangyue -u guangyue-hy2`；Docker按[Docker指南](DOCKER.md)检查已登记项目。不要公开完整配置、数据库、钱包备份或未检查的日志。
 
-自有证书：更新 `/etc/guangyue-certificate.json` 指向的源文件，再运行同一脚本。不要直接修改运行中证书的一半。
-
-## 9. 卸载（默认保留数据）
-
-先在面板下载完整备份并离线保存。然后停止面板服务：
-
-```bash
-sudo systemctl disable --now guangyue guangyue-xray guangyue-hy2
-```
-
-从 `/etc/nginx/nginx.conf` 删除 `include /etc/nginx/guangyue-stream.conf;`，移除 `sites-enabled/guangyue-panel.conf`，恢复其他网站原来的监听方式，然后 `sudo nginx -t && sudo systemctl reload nginx`。删除本项目三个 unit、对应 Certbot 钩子和 tmpfiles 配置后 `sudo systemctl daemon-reload`。
-
-确认没有其他网站引用后，可移除 `/opt/guangyue-personal` 和本项目 Nginx 片段。**默认保留** `/var/lib/guangyue`、配置、证书与 `/root/guangyue-backups`，它们包含用户数据和恢复密钥。需要彻底清除时由管理员另行确认并手动删除；本项目不提供自动清空数据命令。
+当前没有一键清空数据的生产参数。停用/移除程序前先保存完整备份，仅停止本项目并保留状态、配置、证书和备份。不卸载共享Docker/数据库包，不对其他项目运行全局`docker prune`。

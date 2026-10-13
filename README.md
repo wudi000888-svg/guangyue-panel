@@ -8,11 +8,11 @@
 
 面向跨境电商团队的网络资源控制台，提供 Lite 独立站/子站版与 Pro 主站版：统一管理成员、节点、私有出口与独立公共代理池。
 
-[English](README_EN.md) · [安装指南](docs/INSTALL.md) · [使用手册](docs/USER_GUIDE.md) · [Nginx 共存](docs/NGINX.md) · [运维与备份](docs/OPERATIONS.md)
+[English](README_EN.md) · [一键安装](docs/INSTALL.md) · [Docker运行](docs/DOCKER.md) · [使用手册](docs/USER_GUIDE.md) · [运维与备份](docs/OPERATIONS.md)
 
 [月庭 Penpot 设计源](docs/designs/penpot/README.md) · [UI UX 施工方案](docs/designs/penpot-courtyard-system.md)
 
-![version](https://img.shields.io/badge/version-0.40.1-2563eb)
+![version](https://img.shields.io/badge/version-0.41.0-2563eb)
 ![license](https://img.shields.io/badge/panel_license-LGPL--3.0-16a34a)
 ![platform](https://img.shields.io/badge/server-Linux_amd64-475569)
 
@@ -44,7 +44,7 @@
 | 任务与群站 | 持久化任务队列、取消与重启恢复、配置版本；Pro 主站＋Lite/Pro 子站、统一订阅、出口分配、站点额度与远程检测 |
 | 工作台 | 中文/English、主题、站内信、品牌与系统设置 |
 | 运行模式 | 常规 / 无日志切换，与统一面板界面独立 |
-| 部署 | Nginx TCP 443 SNI 分流与 HY2 UDP 443；非特权服务、状态备份、升级回滚 |
+| 部署 | 交互一键安装，默认Docker/可选原生；独立TCP443网关、HY2 UDP443、自动证书、私有状态与更新回退 |
 | 版本更新 | 左上角检测并选择正式版本，后台升级、健康检查后 8 秒刷新；安装基线保护与兼容版本回退 |
 
 > 流媒体或 AI 网站的公开页面可达，不等于账号登录、播放、支付或完整业务解锁。质量标签基于可核验的数据；不会把信息缺失强行标为“家宽”或“原生”。
@@ -57,23 +57,21 @@
 
 ## 快速开始
 
-推荐 **Debian 12/13 或 Ubuntu 22.04/24.04、amd64**；Lite 建议 1 核 1 GiB，Pro 建议 2 核 2 GiB 起步。这是部署建议，不是内存占用保证；订阅规模、测速和代理核心会增加资源需求。
+准备 **Linux amd64完整systemd服务器**；预检查白名单为Debian12/13、Ubuntu22.04/24.04，真实VM验证以该Release的CI为准，Debian白名单不等同完成原生VM验收。Lite建议1核1GiB，Pro建议2核2GiB；Docker要求Linux5.4或更新，另为其他程序、镜像和备份留余量。
 
-1. 准备 VPS 与 1～2 个域名，放行 TCP 80/443、UDP 443。最低可只用一个域名；推荐 `panel.example.com` 做面板、`node.example.com` 做节点。
-2. 按[安装指南](docs/INSTALL.md)安装依赖、申请证书、获取固定版本包并校验 SHA256。
-3. 运行只读预检查，通过后添加 `--apply` 安装。已有 Nginx 443 网站先完成[共存配置](docs/NGINX.md)。
-4. 在服务器本地读取初始 `owner` 账号信息，登录后立即修改密码。创建成员、添加私有出口、绑定新节点、导入客户端订阅。
+1. 将1～2个域名解析到本机，关闭CDN代理；Docker当前仅IPv4，使用A记录，需要AAAA/IPv6时选择原生双栈。确认TCP443和UDP443空闲并放行，保留SSH。已有Nginx的HTTP80无需迁移。
+2. 运行下面脚本，选择Lite/Pro、域名和部署方式（默认Docker、可选原生）。检测后确认计划，自动准备组件和证书。
+3. 读取`/var/lib/guangyue/initial-owner.json`，以随机初始密码登录`owner`并修改密码，再验证VLESS/HY2真实连接。
 
 ```bash
-# 在已解压并校验的 release 目录执行；先按安装文档准备证书和核心。
-sudo python3 deploy/install.py --bundle "$PWD" \
-  --panel-domain panel.example.com --node-domain node.example.com \
-  --cert /etc/letsencrypt/live/panel.example.com/fullchain.pem \
-  --key /etc/letsencrypt/live/panel.example.com/privkey.pem
-# 预检查通过后，使用相同参数加 --apply。
+gy_install_file=$(mktemp)
+curl --proto '=https' --proto-redir '=https' -fsSL \
+  https://github.com/wudi000888-svg/guangyue-panel/releases/latest/download/install.sh \
+  -o "$gy_install_file" && sudo bash "$gy_install_file"
+rm -f "$gy_install_file"
 ```
 
-不提供未经检查的远程 `curl | bash`。安装器不会安装到已存在的广月状态目录，也不会自动停止其他项目。
+脚本锁定完整正式Release并校验组件及Docker镜像归档，无需GitHub/镜像仓库账号。`--check`只读检测，`--resume`按原计划续装。443占用时停止，保留其他程序与Nginx配置，默认不改宿主网络优化。详见[安装指南](docs/INSTALL.md)，旧Nginx高级路径见[旧部署指南](docs/LEGACY_INSTALL.md)。
 
 ## 邮箱与在线支付
 
@@ -89,7 +87,9 @@ sudo python3 deploy/install.py --bundle "$PWD" \
 | --- | --- |
 | [版本选择与 Pro 部署](docs/EDITIONS.md) | Lite/Pro 对比、基础设施、迁移与群站接入 |
 | [主控＋业务站](docs/BUSINESS-SITES.md) | 导入子站令牌、远程管理、启停调度、在线与流量 |
-| [安装指南](docs/INSTALL.md) | DNS、证书、依赖、版本包、首次登录、卸载 |
+| [一键安装](docs/INSTALL.md) | 交互向导、域名与443、预检、账号和失败续装 |
+| [Docker部署](docs/DOCKER.md) | Release镜像归档、隔离、持久数据、维护与回退 |
+| [旧Nginx安装](docs/LEGACY_INSTALL.md) | 保留既有高级原生部署方法 |
 | [使用手册](docs/USER_GUIDE.md) | 从创建用户到导入出口、发放订阅与排错 |
 | [Nginx 共存](docs/NGINX.md) | 与现有 HTTPS 网站共用 TCP 443，保留自定义 SNI |
 | [运维手册](docs/OPERATIONS.md) | 升级、回滚、备份恢复、续期、资源与连通性诊断 |
@@ -108,9 +108,9 @@ sudo python3 deploy/install.py --bundle "$PWD" \
 
 ```mermaid
 flowchart LR
-    User[员工客户端] -->|TCP 443| Nginx[Nginx SNI 分流]
-    Nginx -->|面板域名| Web[HTTPS → Go / Vue]
-    Nginx -->|Reality SNI| Xray[Xray VLESS Vision]
+    User[员工客户端] -->|TCP 443| Gateway[独立 HTTPS / SNI 网关]
+    Gateway -->|面板域名| Web[HTTPS → Go / Vue]
+    Gateway -->|Reality SNI| Xray[Xray VLESS Vision]
     User -->|UDP 443| HY[Hysteria 2 节点路由核心]
     Web --> DB[(Lite SQLite / Pro PostgreSQL)]
     Web --> Cache[Pro Redis 短缓存]

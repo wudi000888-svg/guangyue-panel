@@ -68,8 +68,8 @@ import { t } from "../i18n";
                     ? "HY2 · UDP 443"
                     : "HTTPS / HTTP/2 · SNI"
               }}</span
-              ><span :class="['badge', s.active ? 'success' : 'danger']">{{
-                s.active ? t("运行中") : t("未运行")
+              ><span :class="['badge', s.checking ? 'neutral' : s.active ? 'success' : 'danger']">{{
+                s.checking ? t("正在检测") : s.active ? t("运行中") : t("未运行")
               }}</span>
             </div>
           </div>

@@ -18,8 +18,14 @@ from common import deployment_lock
 from infrastructure import edition_config, service_text, dump_postgres, restore_postgres
 from render import wallet_restore_location
 import update_state as updates
+import deployment_mode
+import maintenance_gate
 
 NGINX_PANEL = Path('/etc/nginx/sites-enabled/guangyue-panel.conf')
+
+
+def managed_units():
+    return [*UNITS, 'guangyue-gateway'] if deployment_mode.private_gateway() else UNITS
 
 
 def write_panel_proxy(content):
@@ -35,6 +41,7 @@ def write_panel_proxy(content):
 
 
 def upgrade_panel_proxy():
+    if deployment_mode.private_gateway(): return
     before = NGINX_PANEL.read_text()
     after = wallet_restore_location(before)
     if after == before: return
@@ -79,6 +86,9 @@ def verify_saved(backup):
     expected = json.loads((Path(backup) / 'app-checksums.json').read_text())
     if not expected or app_hashes(Path(backup) / 'app') != expected:
         raise ValueError('回退程序备份校验失败')
+    helper = Path(backup) / 'helper'
+    if helper.exists() and app_hashes(helper) != json.loads((Path(backup) / 'helper-checksums.json').read_text()):
+        raise ValueError('维护程序备份校验失败')
 
 
 def backup_current(config):
@@ -93,6 +103,13 @@ def backup_current(config):
     (backup / 'units').mkdir()
     for unit in UNITS:
         shutil.copy2('/etc/systemd/system/' + unit + '.service', backup / 'units')
+    if deployment_mode.private_gateway():
+        shutil.copy2('/etc/systemd/system/guangyue-gateway.service', backup / 'units')
+        _helper_directory(updates.HELPER)
+        shutil.copytree(updates.HELPER, backup / 'helper')
+        (backup / 'helper-checksums.json').write_text(json.dumps(app_hashes(backup / 'helper')))
+        for name in ['guangyue-updater.socket', 'guangyue-updater.service', 'guangyue-gateway-cert.path', 'guangyue-gateway-cert.service', 'guangyue-gateway-cert.timer']:
+            shutil.copy2(Path('/etc/systemd/system') / name, backup / 'units')
     if config.get('database', {}).get('driver') == 'postgres':
         dump_postgres(config, backup / 'postgres.dump')
         as_panel(str(APP / 'bin/guangyue'), '-snapshot', str(STATE / 'upgrade-snapshot.tar.gz'))
@@ -105,7 +122,7 @@ def restore_current(backup):
     backup = Path(backup)
     verify_saved(backup)
     config = json.loads((backup / 'config.json').read_text())
-    run('systemctl', 'stop', *UNITS)
+    run('systemctl', 'stop', *managed_units())
     for source, name in [(STATE, 'state'), (APP, 'app')]:
         if source.exists():
             failed = backup / ('failed-' + name)
@@ -118,33 +135,55 @@ def restore_current(backup):
     shutil.chown(CONFIG, user='root', group='guangyue')
     if (backup / 'postgres.dump').is_file(): restore_postgres(config, backup / 'postgres.dump')
     restore_units(backup)
+    if deployment_mode.private_gateway() and (backup / 'helper').is_dir():
+        _helper_directory(updates.HELPER)
+        for source in (backup / 'helper').iterdir():
+            if not source.is_file() or source.is_symlink(): raise ValueError('维护程序备份格式无效')
+            destination = updates.HELPER / source.name
+            temporary = destination.with_name(destination.name + '.restoring')
+            shutil.copyfile(source, temporary); temporary.chmod(0o644); os.replace(temporary, destination)
+        for name in ['guangyue-updater.socket', 'guangyue-updater.service', 'guangyue-gateway-cert.path', 'guangyue-gateway-cert.service', 'guangyue-gateway-cert.timer']:
+            shutil.copy2(backup / 'units' / name, Path('/etc/systemd/system') / name)
     if (backup / 'nginx-panel.conf').is_file():
         write_panel_proxy((backup / 'nginx-panel.conf').read_text())
         run('nginx', '-t'); run('systemctl', 'reload', 'nginx')
-    run('systemctl', 'daemon-reload'); run('systemctl', 'start', *UNITS)
+    run('systemctl', 'daemon-reload'); run('systemctl', 'start', *managed_units())
     health((backup / 'app/VERSION').read_text().strip())
 
 
 def restore_units(backup):
     for unit in UNITS:
         shutil.copy2(Path(backup) / 'units' / (unit + '.service'), '/etc/systemd/system/' + unit + '.service')
+    gateway = Path(backup) / 'units/guangyue-gateway.service'
+    if deployment_mode.private_gateway() and gateway.is_file():
+        shutil.copy2(gateway, '/etc/systemd/system/guangyue-gateway.service')
 
 
 def prepare_start(expected):
     as_panel(str(APP / 'bin/guangyue'), '-prepare')
     as_panel(str(APP / 'bin/xray'), 'run', '-test', '-c', str(STATE / 'xray.json'))
-    run('systemctl', 'daemon-reload'); run('systemctl', 'start', *UNITS)
+    run('systemctl', 'daemon-reload')
+    run('systemctl', 'start', *managed_units())
+    if deployment_mode.private_gateway():
+        run(str(APP / 'bin/guangyue-gateway'), '-config', '/etc/guangyue-gateway.json', '-wait-ready', '45s')
     health(expected)
 
 
 def transaction(change, target, new_config, progress=lambda stage: None, provision=None):
     old_config = json.loads(CONFIG.read_text())
+    private = deployment_mode.private_gateway()
+    if private and (updates.read('transaction.json') is not None or maintenance_gate.marker() is not None):
+        raise ValueError('前一次版本事务或维护冻结尚未恢复，拒绝覆盖')
     updates.baseline(updates.current()); updates.require_floor(target)
     signature = updates.schema(old_config)
     backup = None
+    committed = False
+    gate_started = False
     updates.write('transaction.json', {'phase': 'preparing', 'target': target, 'previous': updates.current()})
     try:
-        run('systemctl', 'stop', *UNITS)
+        if private:
+            maintenance_gate.begin(); gate_started = True
+        run('systemctl', 'stop', *managed_units())
         progress('backing_up')
         backup = backup_current(old_config)
         updates.write('transaction.json', {'backup': str(backup), 'target': target, 'phase': 'changing', 'schema': signature})
@@ -153,18 +192,35 @@ def transaction(change, target, new_config, progress=lambda stage: None, provisi
         updates.write('transaction.json', {'backup': str(backup), 'target': target, 'phase': 'healthy', 'schema': signature})
         updates.remember(backup, old_config, signature)
         if provision: provision()
+        if deployment_mode.private_gateway():
+            updates.write('transaction.json', {'backup': str(backup), 'target': target, 'phase': 'committed', 'schema': signature})
+            committed = True
+            maintenance_gate.finish()
         updates.write('transaction.json', None)
     except Exception:
+        if private and not gate_started:
+            raise ValueError('维护冻结未完成，保留事务等待恢复；未操作运行服务') from None
+        if committed:
+            raise ValueError('新版已提交；维护收尾未完成，请通过 SSH 检查更新服务，不会恢复旧数据') from None
         progress('recovering')
         if backup:
             try:
                 restore_current(backup)
+                if private:
+                    updates.write('transaction.json', {'backup': str(backup), 'phase': 'committed', 'target': updates.current()})
+                    committed = True
+                    maintenance_gate.finish()
                 updates.write('transaction.json', None)
             except Exception:
                 # Keep the recovery journal for the independent helper after a restart.
                 raise ValueError('自动恢复未完成，请通过 SSH 检查更新服务与离线备份') from None
         else:
-            subprocess.run(['systemctl', 'start', *UNITS], capture_output=True)
+            subprocess.run(['systemctl', 'start', *managed_units()], capture_output=True)
+            if deployment_mode.private_gateway():
+                health(updates.current())
+                updates.write('transaction.json', {'phase': 'committed', 'target': updates.current()})
+                committed = True
+                maintenance_gate.finish()
             updates.write('transaction.json', None)
         raise
     return backup
@@ -182,6 +238,10 @@ def upgrade(bundle, edition=None, site_id=None, infrastructure_file=None, progre
     def change(backup):
         for src, name in [('guangyue-linux-amd64', 'guangyue'), ('hysteria-node-linux-amd64', 'hysteria'), ('xray-linux-amd64', 'xray'), ('mihomo-linux-amd64', 'mihomo')]:
             temp = APP / 'bin' / (name + '.new'); shutil.copyfile(bundle / 'bin' / src, temp); temp.chmod(0o755); os.replace(temp, APP / 'bin' / name)
+        if deployment_mode.private_gateway():
+            source = bundle / 'bin/guangyue-gateway-linux-amd64'
+            if not source.is_file(): raise ValueError('新版缺少独立 443 网关')
+            temp = APP / 'bin/guangyue-gateway.new'; shutil.copyfile(source, temp); temp.chmod(0o755); os.replace(temp, APP / 'bin/guangyue-gateway')
         for directory in ['web', 'licenses', 'deploy']:
             if (APP / directory).exists(): shutil.rmtree(APP / directory)
             shutil.copytree(bundle / directory, APP / directory)
@@ -193,6 +253,8 @@ def upgrade(bundle, edition=None, site_id=None, infrastructure_file=None, progre
         for unit in UNITS:
             dest = Path('/etc/systemd/system') / (unit + '.service'); source = bundle / 'deploy' / dest.name
             dest.write_text(service_text(source, new_config['edition'], new_config.get('role')) if unit == 'guangyue' else source.read_text()); dest.chmod(0o644)
+        if deployment_mode.private_gateway():
+            shutil.copy2(bundle / 'deploy/guangyue-gateway.service', '/etc/systemd/system/guangyue-gateway.service')
         if migrating:
             as_panel(str(APP / 'bin/guangyue'), '-import-sqlite', str(STATE / 'panel.db'))
         upgrade_panel_proxy()
@@ -217,10 +279,17 @@ def rollback(target, progress=lambda stage: None):
 
 
 def preflight(bundle=None):
+    if deployment_mode.docker():
+        import docker_deploy
+        return docker_deploy.preflight(bundle)
     if os.geteuid() != 0 or not CONFIG.is_file() or not STATE.is_dir():
         raise ValueError('root and an existing installation are required')
     if bundle: verify_bundle(bundle)
-    run('nginx', '-t'); run('systemctl', 'is-active', '--quiet', *UNITS)
+    if deployment_mode.private_gateway():
+        run(str(APP / 'bin/guangyue-gateway'), '-config', '/etc/guangyue-gateway.json', '-check')
+        run('systemctl', 'is-active', '--quiet', *UNITS, 'guangyue-gateway')
+    else:
+        run('nginx', '-t'); run('systemctl', 'is-active', '--quiet', *UNITS)
     needed = 3 * sum(p.stat().st_size for parent in [STATE, APP] for p in parent.rglob('*') if p.is_file())
     if shutil.disk_usage('/root').free < needed + (256 << 20): raise ValueError('insufficient backup space')
 

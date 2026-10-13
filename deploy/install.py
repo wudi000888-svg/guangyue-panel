@@ -139,7 +139,13 @@ def health(expected=None):
                 if response.status == 200:
                     if expected and json.load(response).get('version') != expected:
                         raise ValueError('running version does not match the selected release')
-                    run('systemctl', 'is-active', '--quiet', *UNITS, 'nginx')
+                    import deployment_mode
+                    entry = 'guangyue-gateway' if deployment_mode.private_gateway() else 'nginx'
+                    run('systemctl', 'is-active', '--quiet', *UNITS, entry)
+                    if deployment_mode.private_gateway():
+                        from certificates import wait_served_certificate
+                        config = json.loads(CONFIG.read_text())
+                        wait_served_certificate(config['cert'], config['hy2_host'], timeout=3)
                     return
         except Exception:
             time.sleep(1)

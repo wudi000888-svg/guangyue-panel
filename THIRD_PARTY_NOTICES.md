@@ -5,7 +5,7 @@
 | 广月面板 | 本仓库 | LGPL-3.0-only | 源码与应用二进制，保留 fake-ui 上游版权 |
 | Xray-core | [v26.3.27](https://github.com/XTLS/Xray-core/tree/v26.3.27) + guangyue-sessions1 | MPL-2.0 | 包内提供会话计数扩展版、完整修改源码、补丁与原始许可；见 core-patches |
 | Hysteria | app/v2.9.2 / `c3a806b5cbbb20fe72099529573da26b1a2e9f22` | MIT | 应用包含节点路由补丁版；补丁和构建说明在 core-patches |
-| Mihomo | [v1.19.30](https://github.com/MetaCubeX/mihomo/tree/v1.19.30) | GPL-3.0 | 获取脚本直接从上游下载，未捆绑在本项目应用包 |
+| Mihomo | [v1.19.30 / ac017cdd](https://github.com/MetaCubeX/mihomo/tree/ac017cdd246ce8bd547653d927e7bf77d7ee73d5) | GPL-3.0 | 原生包和 Docker 镜像提供上游未修改的独立可执行文件；完整固定源码、构建材料、Go 模块锁、原始许可与校验记录随 licenses/mihomo-source.tar.gz、MIHOMO-SOURCE.json 分发 |
 | Vue | 以 package-lock.json 为准 | MIT | 编译进入前端 |
 | Lucide | 以 package-lock.json 为准 | ISC | 编译进入前端 |
 | QRCode | 以 package-lock.json 为准 | MIT | 编译进入前端 |
@@ -20,7 +20,9 @@ Trust Wallet Core 的 npm 包不含许可证文件，且 npm 的 MIT 声明不�
 
 [IP Geolocation by DB-IP](https://db-ip.com/)：国家判断使用 DB-IP 的 CC-BY-4.0 数据，不修改上游记录。该数据集保留自身许可，面板 LGPL 许可不替代它；来源、完整许可及「按现状提供」条款见对应署名和许可证文件。
 
-面板 LGPL-3.0-only 许可不替代第三方组件。如果你自行制作包含 Mihomo 的镜像、二进制集合或修改版本，需要自行满足 GPL 对相应源码、构建材料和许可的要求，不能把整个集合标成单一面板许可。Xray 的分发和修改同样遵循 MPL。官方源码地址、tag、校验和与构建脚本为可审计来源。
+面板 LGPL-3.0-only 许可不替代第三方组件。Mihomo 作为独立进程保留 GPL-3.0 许可，其对应源码与构建材料随包提供；不能把整个镜像或二进制集合标成单一面板许可。修改后重新分发仍需满足原有 GPL 条款。Xray 的分发和修改同样遵循 MPL。官方源码地址、固定 commit、校验和与构建脚本为可审计来源。
+
+Docker 离线包额外包含固定摘要的官方 PostgreSQL 17 与 Redis 8 镜像。构建时读取镜像的实际可执行版本与源版本，`licenses/DOCKER_COMPONENTS.json` 记录精确版本、镜像来源及摘要；PostgreSQL 原始版权文件和 Redis 对应发行版的完整源码、原始许可证一并保存在应用镜像的 `licenses` 目录。Redis 源码校验和必须匹配固定镜像中的 `REDIS_DOWNLOAD_SHA`。Redis 8 保留上游提供的 AGPLv3 等许可选项，面板许可不覆盖这些组件。现有 `SBOM.spdx.json` 记录应用依赖与代理核心，不代表 Docker 镜像操作系统全部软件包的 SBOM。
 
 品牌 banner/logo 为本项目原创 SVG，适用项目 LGPL-3.0-only。国家标记使用 Unicode regional indicator 字符，由设备字体渲染，不再分发来源不明的旗帜位图。
 

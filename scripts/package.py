@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build Linux amd64 releases including the reproducible MPL Xray extension."""
+"""Build complete Linux amd64 runtime and versioned one-click installer assets."""
 import ast
 import gzip
 import hashlib
@@ -10,22 +10,38 @@ from pathlib import Path
 root = Path(__file__).resolve().parent.parent
 version = (root / 'VERSION').read_text().strip()
 archives = []
+out = root / 'build/releases'
+out.mkdir(parents=True, exist_ok=True)
+def normalize(info):
+    info.uid = info.gid = 0
+    info.uname = info.gname = 'root'
+    info.mtime = 0
+    return info
+
+def archive_directory(directory, name):
+    archive = out / (name + '.tar.gz')
+    with archive.open('wb') as output:
+        with gzip.GzipFile(filename='', mode='wb', fileobj=output, mtime=0) as compressed:
+            with tarfile.open(fileobj=compressed, mode='w') as tar:
+                tar.add(directory, arcname=name, filter=normalize)
+    archives.append(archive)
+
 for edition in ['lite', 'pro']:
     name = 'guangyue-panel-' + edition + '-' + version + '-linux-amd64'
-    out = root / 'build/releases'
     bundle = out / name
     if bundle.exists():
         shutil.rmtree(bundle)
     (bundle / 'bin').mkdir(parents=True)
     (bundle / 'EDITION').write_text(edition + '\n')
-    for binary in ['guangyue-linux-amd64', 'hysteria-node-linux-amd64', 'xray-linux-amd64']:
+    for binary in ['guangyue-linux-amd64', 'guangyue-gateway-linux-amd64', 'hysteria-node-linux-amd64', 'xray-linux-amd64', 'mihomo-linux-amd64']:
         shutil.copyfile(root / 'build/bin' / binary, bundle / 'bin' / binary)
         (bundle / 'bin' / binary).chmod(0o755)
     ignore = shutil.ignore_patterns('__pycache__', '*.pyc', 'tests')
     for src, dest in [('frontend/dist', 'web'), ('deploy', 'deploy'), ('scripts', 'scripts'), ('docs', 'docs'), ('core-patches', 'core-patches'), ('examples', 'examples'), ('build/notices', 'licenses')]:
         shutil.copytree(root / src, bundle / dest, ignore=ignore)
-    for file in ['VERSION', 'README.md', 'README_EN.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'CHANGELOG.md', 'SECURITY.md', 'CONTRIBUTING.md']:
+    for file in ['VERSION', 'README.md', 'README_EN.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'CHANGELOG.md', 'SECURITY.md', 'CONTRIBUTING.md', 'install.sh']:
         shutil.copyfile(root / file, bundle / file)
+    (bundle / 'install.sh').chmod(0o755)
     # Both current and older updaters read this literal map before executing
     # installation. Pin the bundled build so an old upstream core is never reused.
     installer = bundle / 'deploy/install.py'
@@ -47,17 +63,20 @@ for edition in ['lite', 'pro']:
         if path.is_file():
             manifest.append(hashlib.sha256(path.read_bytes()).hexdigest() + '  ' + path.relative_to(bundle).as_posix())
     (bundle / 'SHA256SUMS').write_text('\n'.join(manifest) + '\n')
-    archive = out / (name + '.tar.gz')
-    def normalize(info):
-        info.uid = info.gid = 0
-        info.uname = info.gname = 'root'
-        info.mtime = 0
-        return info
-    with archive.open('wb') as output:
-        with gzip.GzipFile(filename='', mode='wb', fileobj=output, mtime=0) as compressed:
-            with tarfile.open(fileobj=compressed, mode='w') as tar:
-                tar.add(bundle, arcname=name, filter=normalize)
-    archives.append(archive)
+    archive_directory(bundle, name)
+
+name = 'guangyue-installer-' + version
+installer = out / name
+if installer.exists():
+    shutil.rmtree(installer)
+installer.mkdir()
+shutil.copytree(root / 'deploy', installer / 'deploy', ignore=shutil.ignore_patterns('__pycache__', '*.pyc', 'tests'))
+for file in ['VERSION', 'install.sh', 'LICENSE', 'THIRD_PARTY_NOTICES.md']:
+    shutil.copyfile(root / file, installer / file)
+(installer / 'install.sh').chmod(0o755)
+archive_directory(installer, name)
+shutil.copyfile(root / 'install.sh', out / 'install.sh')
+(out / 'install.sh').chmod(0o755)
 shutil.copyfile(root / 'build/notices/SBOM.spdx.json', out / 'SBOM.spdx.json')
-(out / 'SHA256SUMS').write_text('\n'.join(hashlib.sha256(p.read_bytes()).hexdigest() + '  ' + p.name for p in archives + [out / 'SBOM.spdx.json']) + '\n')
-print('Packaged ' + ', '.join(a.name for a in archives) + '; Xray source and session extension included. Fetch Mihomo before installation.')
+(out / 'SHA256SUMS').write_text('\n'.join(hashlib.sha256(p.read_bytes()).hexdigest() + '  ' + p.name for p in archives + [out / 'SBOM.spdx.json', out / 'install.sh']) + '\n')
+print('Packaged ' + ', '.join(a.name for a in archives) + '; all proxy cores, gateway, licenses and corresponding source included.')

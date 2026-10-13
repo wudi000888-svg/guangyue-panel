@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Publish only after all four assets have been downloaded and verified again.
+# Publish only after all eight assets have been downloaded and verified again.
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 cd "$root"
 tag=${1:?version tag required}
 test "$tag" = "v$(cat VERSION)"
 version=${tag#v}
-assets=("build/releases/guangyue-panel-lite-$version-linux-amd64.tar.gz" "build/releases/guangyue-panel-pro-$version-linux-amd64.tar.gz" build/releases/SHA256SUMS build/releases/SBOM.spdx.json)
+assets=("build/releases/guangyue-panel-lite-$version-linux-amd64.tar.gz" "build/releases/guangyue-panel-pro-$version-linux-amd64.tar.gz" "build/releases/guangyue-installer-$version.tar.gz" "build/releases/guangyue-panel-docker-$version-linux-amd64.tar.gz" build/releases/install.sh build/releases/DOCKER_IMAGES.json build/releases/SHA256SUMS build/releases/SBOM.spdx.json)
 for file in "${assets[@]}"; do test -s "$file"; done
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
@@ -26,7 +26,7 @@ else
 fi
 mkdir "$tmp/download"
 gh release download "$tag" --dir "$tmp/download"
-test "$(find "$tmp/download" -type f | wc -l)" -eq 4
+test "$(find "$tmp/download" -type f | wc -l)" -eq 8
 cmp build/releases/SHA256SUMS "$tmp/download/SHA256SUMS"
 (cd "$tmp/download" && sha256sum -c SHA256SUMS)
 gh release edit "$tag" --draft=false --latest

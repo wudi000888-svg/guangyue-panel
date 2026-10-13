@@ -15,11 +15,19 @@ import (
 	"path/filepath"
 	"runtime/debug"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 )
 
 type App struct {
+	maintenanceFlagPath    string // Tests only; production always uses the fixed persistent maintenance path.
+	maintenanceActive      atomic.Int32
+	maintenanceRequests    atomic.Int32
+	gatewayHealthMu        sync.Mutex
+	gatewayHealthSnapshot  gatewayHealthSnapshot
+	gatewayHealthBusy      bool
+	gatewayHealthProbe     func(context.Context) error
 	cryptoGasMu            sync.Mutex
 	cryptoGasSnapshots     map[string]*cryptoGasCacheEntry
 	cryptoGasSlots         chan struct{}
@@ -93,12 +101,19 @@ func Run() {
 	imageFormat := flag.String("normalize-ticket-image", "", "normalize an isolated ticket image")
 	cfgPath := flag.String("config", "/etc/guangyue-personal.json", "configuration file")
 	managedService := flag.String("run-core", "", "run a fixed managed service with runtime log control")
+	containerRuntime := flag.Bool("run-container", false, "supervise fixed panel and proxy services without systemd")
 	init := flag.Bool("init", false, "initialize configuration")
 	prepare := flag.Bool("prepare", false, "initialize state and render core configurations")
 	restore := flag.String("restore", "", "restore a backup while services are stopped")
 	snapshot := flag.String("snapshot", "", "write an offline portable backup to a new file")
 	importSQLite := flag.String("import-sqlite", "", "migrate a SQLite database into an empty Pro site")
 	flag.Parse()
+	if *containerRuntime {
+		if *cfgPath != "/etc/guangyue-personal.json" || *managedService != "" || *imageFormat != "" || *init || *prepare || *restore != "" || *snapshot != "" || *importSQLite != "" || flag.NArg() != 0 {
+			os.Exit(2)
+		}
+		os.Exit(runContainerRuntime())
+	}
 	if *imageFormat != "" {
 		os.Exit(ticketImageWorker(*imageFormat))
 	}
@@ -194,10 +209,10 @@ func Run() {
 		}
 		return
 	}
-	public := &http.Server{Addr: cfg.Listen, Handler: a.routes(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 45 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
+	public := &http.Server{Addr: cfg.Listen, Handler: a.maintenanceHandler(a.routes()), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 45 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
 	internalMux := http.NewServeMux()
 	internalMux.HandleFunc("POST /auth", a.hyAuth)
-	internal := &http.Server{Addr: cfg.InternalListen, Handler: internalMux, ReadHeaderTimeout: 2 * time.Second, ReadTimeout: 4 * time.Second, WriteTimeout: 8 * time.Second, IdleTimeout: 20 * time.Second, MaxHeaderBytes: 4 << 10}
+	internal := &http.Server{Addr: cfg.InternalListen, Handler: a.maintenanceHandler(internalMux), ReadHeaderTimeout: 2 * time.Second, ReadTimeout: 4 * time.Second, WriteTimeout: 8 * time.Second, IdleTimeout: 20 * time.Second, MaxHeaderBytes: 4 << 10}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	a.restart = stop
@@ -221,13 +236,9 @@ func Run() {
 		go func() { defer workers.Done(); work(ctx) }()
 	}
 	defer workers.Wait()
-	startWorker(a.loop)
-	startWorker(a.runEmailWorker)
-	startWorker(a.runPaymentWorker)
-	startWorker(a.runCryptoPaymentWorker)
-	startWorker(a.runCryptoSweepWorker)
+	dataWorkers := []func(context.Context){a.loop, a.runEmailWorker, a.runPaymentWorker, a.runCryptoPaymentWorker, a.runCryptoSweepWorker}
 	if cfg.controller() {
-		startWorker(a.mountLoop)
+		dataWorkers = append(dataWorkers, a.mountLoop)
 	}
 	startWorker(func(ctx context.Context) {
 		ticker := time.NewTicker(20 * time.Second)
@@ -243,7 +254,7 @@ func Run() {
 			}
 		}
 	})
-	startWorker(func(ctx context.Context) {
+	dataWorkers = append(dataWorkers, func(ctx context.Context) {
 		if err := a.jobs.Run(ctx); err != nil && ctx.Err() == nil {
 			log.Print("task runner failed")
 			stop()
@@ -271,13 +282,16 @@ func Run() {
 		})
 	}
 	if cfg.businessAgent() {
-		startWorker(a.businessAgentLoop)
+		dataWorkers = append(dataWorkers, a.businessAgentLoop)
 	} else {
-		startWorker(a.scheduleTasks)
+		dataWorkers = append(dataWorkers, a.scheduleTasks)
 	}
 	if !cfg.Dev {
-		startWorker(a.egressLoop)
+		dataWorkers = append(dataWorkers, a.egressLoop)
 	}
+	startWorker(func(ctx context.Context) {
+		maintenanceWorkerGroup(ctx, a.maintenancePending, dataWorkers, &a.maintenanceActive)
+	})
 	log.Printf("Guangyue Panel %s listening on %s", version, cfg.Listen)
 	<-ctx.Done()
 	shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)

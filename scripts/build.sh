@@ -6,4 +6,7 @@ mkdir -p "$root/build/bin"
 python3 "$root/scripts/sync-client-catalog.py"
 (cd "$root/frontend" && npm ci --ignore-scripts && npm run build)
 (cd "$root/backend" && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 "$go_bin" build -trimpath -ldflags='-s -w' -o "$root/build/bin/guangyue-linux-amd64" .)
+(cd "$root/backend" && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 "$go_bin" build -trimpath -ldflags='-s -w' -o "$root/build/bin/guangyue-gateway-linux-amd64" ./cmd/guangyue-gateway)
+bash "$root/scripts/fetch-mihomo.sh"
+bash "$root/scripts/fetch-mihomo-source.sh"
 printf 'Application and web built. Build HY2 with scripts/build-hy2-core.sh --test.\n'

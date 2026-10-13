@@ -6,7 +6,7 @@ After=network-online.target
 [Service]
 Type=simple
 User=root
-ExecStart=/usr/bin/python3 /opt/guangyue-updater/update_agent.py serve
+ExecStart=/usr/bin/python3 -I /opt/guangyue-updater/update_agent.py serve
 Environment=PYTHONDONTWRITEBYTECODE=1
 UMask=0077
 NoNewPrivileges=true

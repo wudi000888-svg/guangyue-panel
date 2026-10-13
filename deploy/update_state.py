@@ -8,6 +8,7 @@ import sqlite3
 import subprocess
 import time
 from pathlib import Path
+import deployment_mode
 
 ROOT = Path('/var/lib/guangyue-updater')
 HELPER = Path('/opt/guangyue-updater')
@@ -38,6 +39,9 @@ def write(name, value):
     with os.fdopen(fd, 'w') as f:
         json.dump(value, f, ensure_ascii=False); f.flush(); os.fsync(f.fileno())
     os.replace(p, ROOT / name)
+    descriptor = os.open(ROOT, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try: os.fsync(descriptor)
+    finally: os.close(descriptor)
 
 
 def current():
@@ -60,6 +64,9 @@ def require_floor(target):
 
 
 def schema(config):
+    if deployment_mode.docker():
+        import docker_deploy
+        return docker_deploy.schema(config)
     if config.get('database', {}).get('driver') == 'postgres':
         from infrastructure import postgres_env
         site = config.get('site_id', 'default')
@@ -90,6 +97,9 @@ def remember(backup, config, signature):
 
 
 def candidates():
+    if deployment_mode.docker():
+        import docker_deploy
+        return docker_deploy.candidates()
     values = read('history.json', [])
     if not values: return []
     config = json.loads(CONFIG.read_text()); ident = identity(config)
@@ -119,10 +129,26 @@ def setup(initial, source):
                 continue
             temp = HELPER / (path.name + '.new'); shutil.copyfile(path, temp); temp.chmod(0o644); os.replace(temp, HELPER / path.name)
         helper_version.write_text(wanted + '\n'); helper_version.chmod(0o644)
-    for name in ['guangyue-updater.socket', 'guangyue-updater.service', 'guangyue-network.service']:
+    private = deployment_mode.private_gateway()
+    container = deployment_mode.docker()
+    units = ['guangyue-updater.socket', 'guangyue-updater.service']
+    units += ['guangyue-gateway-cert.path', 'guangyue-gateway-cert.service', 'guangyue-gateway-cert.timer'] if private and not container else []
+    if not private: units.append('guangyue-network.service')
+    for name in units:
         dest = Path('/etc/systemd/system') / name
         if (source / name).exists():
             shutil.copyfile(source / name, dest); dest.chmod(0o644)
+            if container and name == 'guangyue-updater.socket':
+                parent = Path('/var/lib/guangyue-maintenance')
+                if parent.is_symlink(): raise ValueError('维护 socket 目录存在不可信链接')
+                parent.mkdir(mode=0o750, exist_ok=True)
+                shutil.chown(parent, user='root', group='guangyue'); parent.chmod(0o750)
+                dest.write_text(dest.read_text().replace('ListenStream=/run/guangyue-update.sock', 'ListenStream=/var/lib/guangyue-maintenance/update.sock'))
+            if private and name == 'guangyue-updater.service':
+                text = dest.read_text().replace('ReadWritePaths=/etc/systemd/system /etc/guangyue-personal.json /etc/nginx/sites-enabled', 'ReadWritePaths=/etc/systemd/system /etc/guangyue-personal.json -/opt/guangyue-docker /etc/guangyue-deployment.json')
+                dest.write_text(text)
     subprocess.run(['systemctl', 'daemon-reload'], check=True, capture_output=True)
     subprocess.run(['systemctl', 'enable', '--now', 'guangyue-updater.socket'], check=True, capture_output=True)
     subprocess.run(['systemctl', 'enable', 'guangyue-updater.service'], check=True, capture_output=True)
+    if private and not container:
+        subprocess.run(['systemctl', 'enable', '--now', 'guangyue-gateway-cert.path', 'guangyue-gateway-cert.timer'], check=True, capture_output=True)

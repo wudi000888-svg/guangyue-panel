@@ -13,6 +13,7 @@ from urllib.parse import urlparse, unquote, parse_qs
 import subprocess
 import tempfile
 from pathlib import Path
+import deployment_mode
 from common import deployment_lock
 
 PROFILE = Path('/etc/guangyue-infrastructure.json')
@@ -106,10 +107,17 @@ def postgres_env(config):
     env.setdefault('PGCONNECT_TIMEOUT','10')
     return env
 
+
+def postgres_run(args, config, **kwargs):
+    if deployment_mode.docker():
+        import docker_deploy
+        return docker_deploy.postgres_run(args, config, **kwargs)
+    return subprocess.run(args, env=postgres_env(config), **kwargs)
+
 def dump_postgres(config, path):
     env=postgres_env(config)
     with Path(path).open('xb') as output:
-        subprocess.run(['pg_dump','--format=custom','--schema=gy_'+config.get('site_id','default')],env=env,stdout=output,stderr=subprocess.PIPE,check=True)
+        postgres_run(['pg_dump','--format=custom','--schema=gy_'+config.get('site_id','default')],config,stdout=output,stderr=subprocess.PIPE,check=True)
 
 def restore_postgres(config, path):
     """Restore a trusted, site-scoped snapshot without cascading into other sites.
@@ -127,7 +135,7 @@ def restore_postgres(config, path):
         raise ValueError('PostgreSQL recovery requires a regular snapshot file')
     env=postgres_env(config)
     try:
-        listing = subprocess.run(['pg_restore', '--list', str(path)], env=env,
+        listing = postgres_run(['pg_restore', '--list', str(path)], config,
                                  capture_output=True, check=True).stdout.decode('utf-8')
     except (subprocess.CalledProcessError, UnicodeError):
         raise ValueError('PostgreSQL snapshot could not be validated') from None
@@ -220,14 +228,14 @@ $guangyue_restore$;
                 # Namespace filtering omits the SCHEMA TOC item. The whole
                 # archive was scoped above, so restore it including CREATE
                 # SCHEMA and its privileges rather than filtering a second time.
-                subprocess.run(['pg_restore', '--file=-', '--no-owner', '--exit-on-error',
-                                str(path)], env=env,
+                postgres_run(['pg_restore', '--file=-', '--no-owner', '--exit-on-error',
+                                str(path)], config,
                                stdout=output, stderr=subprocess.PIPE, check=True)
             except subprocess.CalledProcessError:
                 raise ValueError('PostgreSQL snapshot could not be decoded; database was not changed') from None
         try:
-            subprocess.run(['psql', '-X', '--no-password', '--set=ON_ERROR_STOP=1',
-                            '--single-transaction', '--file', str(script)], env=env,
+            postgres_run(['psql', '-X', '--no-password', '--set=ON_ERROR_STOP=1',
+                            '--single-transaction', '--file', str(script)], config,
                            capture_output=True, check=True)
         except subprocess.CalledProcessError:
             # SQL errors can echo sensitive row values. Never expose raw psql
