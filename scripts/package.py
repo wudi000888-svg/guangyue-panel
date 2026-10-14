@@ -39,7 +39,7 @@ for edition in ['lite', 'pro']:
     ignore = shutil.ignore_patterns('__pycache__', '*.pyc', 'tests')
     for src, dest in [('frontend/dist', 'web'), ('deploy', 'deploy'), ('scripts', 'scripts'), ('docs', 'docs'), ('core-patches', 'core-patches'), ('examples', 'examples'), ('build/notices', 'licenses')]:
         shutil.copytree(root / src, bundle / dest, ignore=ignore)
-    for file in ['VERSION', 'README.md', 'README_EN.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'CHANGELOG.md', 'SECURITY.md', 'CONTRIBUTING.md', 'install.sh']:
+    for file in ['VERSION', 'README.md', 'README_EN.md', 'README.fa_IR.md', 'README.ar_EG.md', 'README.es_ES.md', 'README.ru_RU.md', 'README.tr_TR.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'CHANGELOG.md', 'SECURITY.md', 'CONTRIBUTING.md', 'install.sh']:
         shutil.copyfile(root / file, bundle / file)
     (bundle / 'install.sh').chmod(0o755)
     # Both current and older updaters read this literal map before executing

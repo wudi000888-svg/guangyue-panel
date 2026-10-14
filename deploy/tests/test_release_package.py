@@ -21,8 +21,11 @@ class CompleteReleasePackageTests(unittest.TestCase):
             root = Path(temporary)
             (root / 'scripts').mkdir()
             shutil.copyfile(source / 'scripts/package.py', root / 'scripts/package.py')
-            for name in ['VERSION', 'README.md', 'README_EN.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'CHANGELOG.md', 'SECURITY.md', 'CONTRIBUTING.md', 'install.sh']:
+            readmes = ['README.md', 'README_EN.md', 'README.fa_IR.md', 'README.ar_EG.md', 'README.es_ES.md', 'README.ru_RU.md', 'README.tr_TR.md']
+            for name in ['VERSION', 'LICENSE', 'THIRD_PARTY_NOTICES.md', 'CHANGELOG.md', 'SECURITY.md', 'CONTRIBUTING.md', 'install.sh']:
                 (root / name).write_text('0.41.0\n' if name == 'VERSION' else 'test fixture\n')
+            for name in readmes:
+                (root / name).write_text('Translated introduction fixture: ' + name + '\n')
             for directory in ['frontend/dist', 'deploy/docker', 'scripts', 'docs', 'core-patches', 'examples', 'build/notices', 'licenses', 'build/bin']:
                 (root / directory).mkdir(parents=True, exist_ok=True)
             (root / 'frontend/dist/index.html').write_text('<html>fixture</html>')
@@ -49,6 +52,12 @@ class CompleteReleasePackageTests(unittest.TestCase):
                     members = {item.name: item for item in archive.getmembers()}
                     for path in ['bin/guangyue-gateway-linux-amd64', 'bin/mihomo-linux-amd64', 'licenses/mihomo-source.tar.gz', 'licenses/MIHOMO-LICENSE.txt', 'install.sh', 'deploy/oneclick.py', 'deploy/docker/entrypoint.sh']:
                         self.assertIn(name + '/' + path, members)
+                    manifest = dict((path, digest) for digest, path in (row.split('  ', 1) for row in archive.extractfile(name + '/SHA256SUMS').read().decode().splitlines()))
+                    for readme in readmes:
+                        self.assertIn(name + '/' + readme, members)
+                        content = archive.extractfile(name + '/' + readme).read()
+                        self.assertEqual(content, (root / readme).read_bytes())
+                        self.assertEqual(manifest[readme], hashlib.sha256(content).hexdigest())
                     self.assertTrue(members[name + '/install.sh'].mode & 0o111)
                     for item in members.values():
                         self.assertEqual((item.uid, item.gid, item.mtime), (0, 0, 0))

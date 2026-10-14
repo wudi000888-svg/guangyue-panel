@@ -1,6 +1,10 @@
-# Nginx 与现有服务共存
+# Nginx：现有服务与历史入口
 
-## 443 的实际分工
+0.41.0 起的新一键安装不依赖 Nginx，Docker 和原生都使用专属网关。已有 Nginx 只监听 HTTP 80、没有配置声明或程序占用 TCP / UDP 443 时，可以保留它并运行 [一键安装](INSTALL.md)。安装器不会自动搬迁已有 HTTPS 网站、关闭 QUIC 或清空配置。
+
+如果 Nginx 已声明 443，即使当前进程未运行也会停止新安装。需要保留既有 HTTPS 站点时，先由管理员评估迁移；下文是 **历史 Nginx stream 原生入口的高级集成指南**，不应作为新一键部署的前置操作。已有历史入口升级仍保持 Nginx，见 [更新与回退](UPDATES.md)。
+
+## 历史入口的 443 分工
 
 TCP 443 由 Nginx `stream` 独占，读取 TLS ClientHello 的 SNI 后分流；不在这一层终止 TLS。面板与现有网站由回环 HTTPS 监听处理，Reality 由 Xray 处理。UDP 443 由 Hysteria 2 独占，因此现有网站的 HTTP/3/QUIC 不能再占用同一地址的 UDP 443。
 
@@ -14,9 +18,9 @@ TCP 443 由 Nginx `stream` 独占，读取 TLS ClientHello 的 SNI 后分流；�
 
 不要把普通 `location /` 反向代理当作 Reality 入口。不要把 Hysteria 2 误称为网站 HTTP/2。
 
-## 已有 Nginx 网站的迁移
+## 高级手动路径：迁移已有 HTTPS 网站
 
-先备份 `/etc/nginx`，记录每个站点的 `server_name`、证书、监听地址和其他 TCP/UDP 服务。安排一次短维护窗口。
+仅在明确选择 [旧 Nginx 部署](LEGACY_INSTALL.md) 时执行本节。先备份 `/etc/nginx`，记录每个站点的 `server_name`、证书、监听地址和其他 TCP / UDP 服务，再安排维护窗口。这会改变既有站点入口，需要分别验收全部网站。
 
 1. 每个需要保留的 HTTPS `server` 将 `listen 443 ssl ...;` / `listen [::]:443 ssl ...;` 改成 `listen 127.0.0.1:10443 ssl http2 proxy_protocol;`，去掉旧的 443 监听。保留站点的证书、root、location、upstream 等内容。
 2. 配置正确的客户端来源：仅信任回环传入的 PROXY 信息。
@@ -52,15 +56,15 @@ python3 deploy/render.py --panel-domain panel.example.com \
 
 ## 已经有 stream 块
 
-安装器会拒绝自动叠加第二个 stream 块。管理员应合并生成文件里的 `map` 与 `server` 到既有 stream，确认没有另一个 TCP 443 监听。复杂的已有 stream、非发行版目录、自定义 worker 或 Caddy/Apache 接管场景按生成配置进行人工集成；不属于自动安装器的一键路径。
+旧 Nginx 安装器会拒绝自动叠加第二个 stream 块。管理员应合并生成文件里的 `map` 与 `server` 到既有 stream，确认没有另一个 TCP 443 监听。复杂的已有 stream、非发行版目录、自定义 worker 或 Caddy/Apache 接管场景按生成配置进行人工集成；不属于当前一键安装支持的场景。
 
 可以先在空闲测试 VPS 按标准安装验证，再将服务和片段逐项集成。不要通过注释预检查来强制覆盖；原有 stream 可能承载其他业务。
 
-## 自定义 Reality SNI
+## 历史 Nginx 路径的自定义 Reality SNI
 
 面板保存新 SNI 时会校验名称、解析结果、本站地址与 TLS 能力，并固定通过校验的目标 IP。相同 SNI 的节点共享一个 Xray 入站，节点和用户权限仍独立。
 
-Nginx 的受限域名正则将自定义 SNI 映射到 `/run/guangyue-reality/` 的 socket；未知域名没有 socket，会连接失败，不会让 Nginx任意解析网络目标。目录权限 `2750 guangyue:www-data`，socket `0660`。不要把数据库或密钥目录设为组可读来解决 socket 问题。
+Nginx 的受限域名正则将自定义 SNI 映射到 `/run/guangyue-reality/` 的 socket；未知域名没有 socket，会连接失败，不会让 Nginx 任意解析网络目标。此历史入口目录权限为 `2750 guangyue:www-data`，socket 为 `0660`；新专属网关使用自己的权限边界，不要复制旧权限来解决新部署问题。不要把数据库或密钥目录设为组可读来解决 socket 问题。
 
 ## 变更与排错
 

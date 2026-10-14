@@ -1,12 +1,14 @@
 # 旧 Nginx 部署安装指南
 
-本文保留原生Nginx stream部署的高级操作，示例使用历史0.23.3。0.41.0起的新安装见[一键安装](INSTALL.md)。已有Nginx入口站点仍可沿[既有更新流程](UPDATES.md)升级，无需重新安装或切换Docker。
+本文保留历史 Nginx stream 原生部署的高级操作，固定版本示例为 **0.23.3**，用于理解旧站点的结构与维护要求，不是推荐的新安装版本。0.41.0 起，请使用 [一键安装](INSTALL.md)：默认 Docker、可选原生专属网关，无需手动准备 Nginx 或 Certbot。
 
-Release assets 分为 Lite / Pro；包内标记决定默认版本。本文演示独立 Lite（`--role standalone` 可省略）；安装不需要注册文件。安装后在子站生成配对令牌，Pro 直接粘贴导入，详见[子站指南](BUSINESS-SITES.md)。旧 `--connect-token` / `--enrollment-file` 参数仅为已有拉取式部署保留。安装 Pro 或从 Lite 升级，先阅读[双版本部署指南](EDITIONS.md)。
+已有 Nginx 入口站点沿 [既有更新流程](UPDATES.md)升级，保留入口与数据，无需重装或切换 Docker。若明确需要手动集成其他 HTTPS 网站，先阅读 [Nginx 指南](NGINX.md) 并准备维护窗口。
+
+历史 Release 提供 Lite / Pro 版本包，包内标记决定版别。本文演示独立 Lite（`--role standalone` 可省略）；安装不需要注册文件。安装后在子站生成配对令牌，Pro 直接粘贴导入，详见[子站指南](BUSINESS-SITES.md)。旧 `--connect-token` / `--enrollment-file` 参数仅为已有拉取式部署保留。安装 Pro 或从 Lite 升级，先阅读[双版本部署指南](EDITIONS.md)。
 
 ## 1. 系统、资源与域名
 
-新安装默认启用 BBR 与 HY2 优化，要求宿主机支持并允许修改网络参数。不支持的环境可在安装命令添加 `--no-bbr --no-hy2-optimization`；安装后在 **系统设置 → 网络优化** 调整。参数与恢复行为见[运维指南](OPERATIONS.md#bbr-与-hy2-优化)。
+**本历史 Nginx 安装路径**默认启用 BBR 与 HY2 优化，要求宿主机支持并允许修改网络参数。不支持的环境可在安装命令添加 `--no-bbr --no-hy2-optimization`；安装后在 **系统设置 → 网络优化** 调整。参数与恢复行为见[网络优化适用范围](OPERATIONS.md#网络优化的适用范围)。
 
 | 项目 | 要求 |
 | --- | --- |
@@ -21,7 +23,7 @@ Release assets 分为 Lite / Pro；包内标记决定默认版本。本文演示
 
 Reality SNI 默认 `www.cloudflare.com`，它是 TLS 伪装目标，不要把此域名解析到自己的 VPS。自定义目标必须具备兼容的 TLS 1.3 / HTTP/2 能力，且不能是本站域名或内网地址。
 
-已有 Nginx/Caddy/Apache 或其他服务占用 TCP/UDP 443，先阅读 [Nginx 共存](NGINX.md)。本安装器不会抢占端口、覆盖其他虚拟主机或更改防火墙。
+已有 Nginx/Caddy/Apache 或其他服务占用 TCP/UDP 443，先阅读 [Nginx 共存](NGINX.md)。此手动安装器不会抢占端口、覆盖其他虚拟主机或更改防火墙；当前一键向导也不会自动迁移已有 HTTPS。
 
 ## 2. 安装系统依赖
 
@@ -77,7 +79,7 @@ cd guangyue-panel-lite-0.23.3-linux-amd64
 
 ### 从源码构建
 
-在开发机安装 Go 1.26.9、Node.js 24 LTS、npm、Git、Python 3、curl、unzip，然后：
+源码构建使用所选标签的 `go.mod`、`frontend/package.json` 与构建脚本要求的工具链；不要把当前主分支的工具版本假定为历史标签要求。另需 Git、Python 3、curl 与 unzip。历史标签示例：
 
 ```bash
 git clone https://github.com/wudi000888-svg/guangyue-panel.git
@@ -90,11 +92,13 @@ python3 scripts/third-party.py
 python3 scripts/package.py
 ```
 
-输出位于 `build/releases/`。源码构建支持 macOS/Linux 开发机，部署产物固定为 Linux amd64。Go 工具链按 `go.mod` 的 toolchain 指令固定到 1.26.9。编译所需内存显著高于面板运行内存，建议在工作机或 CI 构建。
+输出位于 `build/releases/`。源码构建支持 macOS/Linux 开发机，部署产物固定为 Linux amd64。Go 工具链以所选标签的 `go.mod` 为准。编译所需内存显著高于面板运行内存，建议在工作机或 CI 构建。
 
-## 5. 下载代理核心
+## 5. 历史资产的代理核心准备
 
-应用发布包包含广月程序、前端、经过节点路由补丁的 Hysteria 和支持用户会话计数的 Xray（附完整修改源码）。Xray 脚本校验包内核心，不重复下载；Mihomo 脚本从官方 Release 下载固定版本并核验 SHA256。
+按对应版本包中的清单和脚本核验核心，不混用其他版本二进制。部分历史资产需另外获取固定 Mihomo；Xray / Hysteria 的修改源码与授权说明随对应资产提供。
+
+0.41.0 起的完整新版本包已包含固定 Xray、Hysteria、Mihomo 和专属网关，一键安装自动完成校验，不需要本节额外下载步骤。
 
 在已解压的版本包目录执行：
 
@@ -127,7 +131,7 @@ sudo python3 deploy/install.py --bundle "$PWD" --role standalone \
 
 安装生成随机密钥和初始管理员，将状态存入 `/var/lib/guangyue`，创建三个非 root 服务。失败会尝试恢复 Nginx 与清理本次新建文件，失败状态保存在 root 专有备份目录。不会操作其他项目服务。
 
-## 7. 首次登录与验收
+## 7. 历史版本的首次登录与验收
 
 ```bash
 sudo systemctl is-active nginx guangyue guangyue-xray guangyue-hy2
@@ -138,7 +142,7 @@ sudo cat /var/lib/guangyue/initial-owner.json
 
 浏览器打开 `https://panel.example.com`。初始用户名 `owner`，密码随机生成；修改密码后初始凭证文件会删除。健康接口返回 200 只证明面板进程可用，**仍要做节点真实连接测试**：
 
-1. 创建成员，确认私有订阅里有默认 VLESS 和 HY2 直连节点。
+1. 历史 0.23.3 按当时授权界面创建成员并检查默认 VLESS / HY2。当前版本成员权限由生效套餐决定，先配置套餐，再检查订阅。
 2. 用支持 Reality/Vision 和 HY2 的客户端分别连接，两次分别查看外部出口 IP。
 3. 测试 TCP 网页、DNS；需要 UDP 的业务再单独测试 UDP。HTTP 出口通常不提供 UDP。
 4. 添加一个你有权限使用的 HTTP/SOCKS5 出口，绑定新节点后核对出口变化。

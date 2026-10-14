@@ -1,30 +1,39 @@
-# 客户端与实时监控
+# 客户端选择与实时监控
 
-## 客户端中心
+## 为设备选择客户端
 
-导航中的“客户端中心”对管理员和成员均可见，管理员和成员均可按权限使用。先按系统筛选，再选择 CPU 架构。Apple Silicon 对应 ARM64；Intel/AMD 桌面设备通常对应 x64；Android 需核对设备架构。Linux 直链提供 DEB（Debian/Ubuntu），其他包格式打开官方发布页选择。
+管理员和成员可在 **客户端中心** 先选择系统，再选择 CPU 架构。Apple Silicon 使用 ARM64，Intel/AMD 桌面设备通常为 x64，Android 按设备实际架构选择。目录中的 Linux DEB 包适用于 Debian/Ubuntu；其他包格式到官方发布页选择。
 
-提供 Clash Verge Rev、FlClash、v2rayN、v2rayNG、Clash Meta for Android、Shadowrocket。Mihomo 系客户端使用面板的 Mihomo 订阅；v2rayN/v2rayNG/Shadowrocket 使用 Base64/Raw。v2rayNG 仅标注 VLESS；v2rayN 使用 HY2 时需选择兼容核心。iOS/iPadOS 入口为 App Store，费用与地区可用性以商店为准。
+| 客户端 | 面板订阅格式 | 使用边界 |
+| --- | --- | --- |
+| Clash Verge Rev、FlClash、Clash Meta for Android | Mihomo | 以客户端当前内核的 VLESS/HY2 支持为准 |
+| v2rayN | Base64 / Raw | 使用 HY2 需选择支持该协议的核心 |
+| v2rayNG | Base64 / Raw | 面板目录仅标注 VLESS 支持 |
+| Shadowrocket | Base64 / Raw | iOS/iPadOS 从 App Store 安装，费用和地区由商店决定 |
 
-下载数据位于 `frontend/src/data/clients.json`。26 个入口于 2026-09-16 从官方 README、GitHub Release Assets、F-Droid 和 Apple 商店核实。直链指向明确版本，不随“latest”重定向改变架构；同时保留官方发布页供选择新版。运行 `python3 scripts/check-client-links.py` 可再次核实所有资产。官方来源：
+客户端中心使用对应项目图标、官方来源及明确版本安装包，不把同名不同架构的文件混为一个链接。面板提供连接配置，不能替客户端开启 TUN、安装驱动或解决操作系统的安全提示。
 
-- [Clash Verge Rev](https://github.com/clash-verge-rev/clash-verge-rev/releases/tag/v2.5.2)
-- [FlClash](https://github.com/chen08209/FlClash/releases/tag/v0.8.98)
-- [v2rayN](https://github.com/2dust/v2rayN/releases/tag/7.24.9)
-- [v2rayNG](https://github.com/2dust/v2rayNG/releases/tag/2.2.6)
-- [Clash Meta for Android](https://github.com/MetaCubeX/ClashMetaForAndroid) / [F-Droid](https://f-droid.org/packages/com.github.metacubex.clash.meta/)
-- [Shadowrocket](https://apps.apple.com/us/app/shadowrocket/id932747118)
+下载目录由 `frontend/src/data/clients.json` 维护，采用固定版本而非可变的 `latest` 跳转。目录版本不代表上游最新版本，也不保证外部链接永远可达。管理员可运行 `python3 scripts/check-client-links.py` 核实资产；更新目录后按[中继说明](CLIENT-DOWNLOADS.md)同步后端快照。
 
-## 管理员实时监控
+官方下载来源：[Clash Verge Rev](https://github.com/clash-verge-rev/clash-verge-rev/releases)、[FlClash](https://github.com/chen08209/FlClash/releases)、[v2rayN](https://github.com/2dust/v2rayN/releases)、[v2rayNG](https://github.com/2dust/v2rayNG/releases)、[Clash Meta for Android](https://github.com/MetaCubeX/ClashMetaForAndroid)、[F-Droid](https://f-droid.org/packages/com.github.metacubex.clash.meta/)、[Shadowrocket](https://apps.apple.com/us/app/shadowrocket/id932747118)。如开启[站点下载中继](CLIENT-DOWNLOADS.md)，GitHub 固定安装包可由本站服务器提供下载。
 
-“实时监控”按用户展示 VLESS 活跃认证会话、HY2 已认证 QUIC 连接、上传/下载速率。VLESS 多路复用载体计一条会话；HY2 一条 QUIC 连接可以承载多个 TCP/UDP 流。这些数量不是设备数、去重 IP 数或网页请求数。
+## 查看用户当前连接与流量
 
-后台在原有约 5 秒流量采样中读取统计，浏览器只读缓存快照；管理员人数增加不会重复运行 Xray CLI。速率使用累计原始字节差除以实际采样间隔，不含计费倍率，且不修改配额检查点。初次采样、核心重启、计数回退、接口失败或超过 15 秒的间隔会显示未知并重新预热，不用零填补丢失数据。
+管理员打开 **实时监控**，可搜索用户、按当前速率排序并分页；选择一位用户查看最近五分钟上传/下载曲线。进入子站远程管理后，可查看该子站的快照。
 
-可按用户名搜索、按当前速率排序、分页，选择单个用户查看最近五分钟速率曲线；曲线保留采样缺口。后台最多保留 60 帧和约 20,000 个历史用户点，用户量大时历史窗口缩短。数据仅在进程内存，不写数据库、日志或浏览器存储；无日志模式同样支持临时监控，重启清空。
+| 指标 | 统计含义 |
+| --- | --- |
+| VLESS 活跃会话 | 已认证的代理会话，多路复用载体计一条 |
+| HY2 活跃连接 | 已认证的 QUIC 连接，一条可承载多个 TCP/UDP 流 |
+| 上传/下载速率 | 两次核心累计原始字节差 ÷ 实际采样间隔，不应用计费倍率 |
+| 曲线缺口/未知 | 初始预热、核心重启、计数回退、读取失败或样本过期，不以零补齐 |
 
-`GET /api/monitor` 仅管理员可访问，不返回连接目标、IP、订阅令牌或代理凭据。独立站点管理权限允许读取该站快照，只读仪表盘凭据不允许读取用户监控。监控只覆盖当前站点本机核心，主控不将业务站上报的累计账单数据当作实时连接统计；业务站的聚合连接监控未包含在此版本。
+连接数不是设备数、去重 IP 数或网页请求数。实时速率用于观察当前负载；套餐配额与账单使用持久计量，不能用曲线替代结算。
 
-## 升级
+后台复用约 5 秒采样，浏览器读取缓存，不随每个管理员请求重复启动 Xray CLI。超过 15 秒间隔重新预热。历史只保存在进程内存，最多 60 帧、约 20,000 个用户点，人数较多时窗口缩短；服务重启清空，无日志模式也可使用临时监控。
 
-升级到 0.22.0 时安装包会同步更新带会话计数扩展的 Xray。[源码和构建说明](../core-patches/README.md)随包提供。旧 Xray 可继续提供流量数据，但连接数显示暂不可用，不能用其“在线 IP 数”替代。HY2 使用已有原生 `/online` 认证连接计数。无需数据库迁移。
+## 权限与版本边界
+
+`GET /api/monitor` 仅管理员可访问，不返回连接目标、IP、订阅令牌或代理凭据。管理令牌可读取子站快照，只读仪表盘凭据不能读取用户监控。
+
+监控反映当前站点本机核心，不把旧业务协议的累计账单当作全站实时连接统计，也不自动合并不同站点的同名用户。VLESS 会话数依赖随安装包提供的 Xray 扩展；仅有原版核心时可以读取流量，但连接数可能未知，不能以“在线 IP 数”替代。[扩展源码和构建说明](../core-patches/README.md)随项目和安装包提供，HY2 使用原生 `/online` 计数。

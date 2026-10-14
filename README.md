@@ -1,67 +1,40 @@
+<!-- language-navigation -->
+[简体中文](README.md) · [English](README_EN.md) · [فارسی](README.fa_IR.md) · [العربية](README.ar_EG.md) · [Español](README.es_ES.md) · [Русский](README.ru_RU.md) · [Türkçe](README.tr_TR.md)
+<!-- /language-navigation -->
+
 <div align="center">
 
-<img src="docs/assets/banner.svg" alt="广月面板 Guangyue Panel" width="960" />
+<img src="docs/assets/banner.svg" alt="广月面板 Guangyue Panel：一键部署、套餐运营、IP 与子站管理" width="960" />
 
 # 广月面板 · Guangyue Panel
 
-**新一代跨境电商企业级解决方案**
+**从一个域名开始，把节点、套餐与子站放进同一个工作台。**
 
-面向跨境电商团队的网络资源控制台，提供 Lite 独立站/子站版与 Pro 主站版：统一管理成员、节点、私有出口与独立公共代理池。
+[![最新版本](https://img.shields.io/github/v/release/wudi000888-svg/guangyue-panel?color=2563eb)](https://github.com/wudi000888-svg/guangyue-panel/releases/latest)
+[![CI](https://github.com/wudi000888-svg/guangyue-panel/actions/workflows/ci.yml/badge.svg)](https://github.com/wudi000888-svg/guangyue-panel/actions/workflows/ci.yml)
+[![LGPL-3.0](https://img.shields.io/badge/License-LGPL--3.0-blue.svg)](LICENSE)
 
-[English](README_EN.md) · [一键安装](docs/INSTALL.md) · [Docker运行](docs/DOCKER.md) · [使用手册](docs/USER_GUIDE.md) · [运维与备份](docs/OPERATIONS.md)
-
-[月庭 Penpot 设计源](docs/designs/penpot/README.md) · [UI UX 施工方案](docs/designs/penpot-courtyard-system.md)
-
-![version](https://img.shields.io/badge/version-0.41.0-2563eb)
-![license](https://img.shields.io/badge/panel_license-LGPL--3.0-16a34a)
-![platform](https://img.shields.io/badge/server-Linux_amd64-475569)
+[开始安装](docs/INSTALL.md) · [下载最新版](https://github.com/wudi000888-svg/guangyue-panel/releases/latest) · [使用手册](docs/USER_GUIDE.md) · [文档导航](docs/README.md)
 
 </div>
 
-## 项目定位
+广月是基于 Go + Vue 3 的自托管代理服务与网络资源管理面板。准备一台符合要求的服务器和一个已解析的域名，即可部署 VLESS Reality/Vision 与 Hysteria 2，随后在面板中管理套餐订阅、出口 IP、独立子站、订单工单与收款。
 
-把服务器入口、出口 IP、员工订阅和可追溯的质量检测放进一个工作台，减少跨境团队配置和切换网络资源的重复工作。采用 Go + Vue 3。Lite 使用 SQLite，Pro 使用 PostgreSQL + Redis，提供任务中心与多个 VPS 站点的集中接入和管理。
-
-“企业级”描述团队管理与运维场景。每个站点由一个控制器独占管理；Pro 支持主控站＋业务站、统一成员授权与订阅，以及可选的邮件和在线支付接入。同站点多主高可用、组织级租户隔离与服务等级承诺不属于当前部署能力。
-
-## 功能一览
-
-| 模块 | 能力 |
-| --- | --- |
-| 套餐与倍率 | 节点 0–100×倍率、节点权限组、套餐分类与版本，手动分配/续期/周期重置，实际与配额双计量；[使用指南](docs/PLANS.md) |
-| 账户与服务 | 站内余额、定额兑换码（有效期/作废）、套餐订单、退款、图片工单与内部备注；[使用指南](docs/COMMERCE.md) |
-| 仪表盘 | 用户、节点、流量、出口与服务状态，快速进入常用操作 |
-| 实时监控 | 管理员查看每用户 VLESS 会话、HY2 连接与实时流量曲线；约 5 秒采样，当前站点范围 |
-| 客户端中心 | 6 款常见代理客户端，按系统与 CPU 架构提供官方安装入口；[使用说明](docs/LIVE-MONITORING.md) |
-| 节点管理 | VLESS Reality / Hysteria 2 多用户；保留两个默认直连节点；绑定出口创建新节点；批量操作 |
-| 私有 IP 池 | 独立出口 / 订阅出口 / 订阅来源分栏；HTTP CONNECT、SOCKS5、单节点和订阅导入 |
-| 来源管理 | 手动更新、删除，默认每日错峰自动更新；删除来源清理独占资源及绑定节点 |
-| 公共 IP 池 | 独立来源、采集策略、黑名单、并发与时限预算、定时检查；自动维护独立节点 |
-| 用户与订阅 | 管理员/成员、协议权限、有效期、共享流量配额；统一订阅管理、节点来源筛选及挂载来源标注，兼容旧订阅地址 |
-| 订阅体验 | Raw / Base64 / Mihomo，节点链接一键复制、二维码、成员可见质量报告 |
-| IP 质量 | 多源地理位置、ASN、代理风险信号、公开页面可达性；保留来源、时间、未知和冲突 |
-| DNS / IPv6 | 每节点 DNS 出口策略，安全 DoH 与 IPv6 允许/阻断选项 |
-| 任务与群站 | 持久化任务队列、取消与重启恢复、配置版本；Pro 主站＋Lite/Pro 子站、统一订阅、出口分配、站点额度与远程检测 |
-| 工作台 | 中文/English、主题、站内信、品牌与系统设置 |
-| 运行模式 | 常规 / 无日志切换，与统一面板界面独立 |
-| 部署 | 交互一键安装，默认Docker/可选原生；独立TCP443网关、HY2 UDP443、自动证书、私有状态与更新回退 |
-| 版本更新 | 左上角检测并选择正式版本，后台升级、健康检查后 8 秒刷新；安装基线保护与兼容版本回退 |
-
-> 流媒体或 AI 网站的公开页面可达，不等于账号登录、播放、支付或完整业务解锁。质量标签基于可核验的数据；不会把信息缺失强行标为“家宽”或“原生”。
-
-## 下载版本
-
-在 [Releases](https://github.com/wudi000888-svg/guangyue-panel/releases/latest) 的 Assets 选择 Lite（默认独立站）或 Pro（默认主站）安装包，并校验 `SHA256SUMS`。安装不需要注册文件。子站在“配对令牌”生成令牌，Pro 在“群站管理”粘贴导入，即可管理用户、节点、权限、流量与服务启停；不需要分组或预建站点。历史独立接入自动进入同一子站列表，保留本地管理员和独立运行能力。详见[子站管理](docs/BUSINESS-SITES.md)。
-
-已有部署可按[在线更新与版本回退说明](docs/UPDATES.md)启用左上角版本管理。回退保留当前数据，不能低于安装基线；不兼容当前数据库的旧版本会被阻止。
+适合从单站起步的代理服务运营者、需要集中管理多个独立站点的管理员，以及需要为成员分配出口 IP 的团队。Lite 用于独立运营，Pro 扩展为主站控制台；两者均可由交互脚本安装。
 
 ## 快速开始
 
-准备 **Linux amd64完整systemd服务器**；预检查白名单为Debian12/13、Ubuntu22.04/24.04，真实VM验证以该Release的CI为准，Debian白名单不等同完成原生VM验收。Lite建议1核1GiB，Pro建议2核2GiB；Docker要求Linux5.4或更新，另为其他程序、镜像和备份留余量。
+### 安装前准备
 
-1. 将1～2个域名解析到本机，关闭CDN代理；Docker当前仅IPv4，使用A记录，需要AAAA/IPv6时选择原生双栈。确认TCP443和UDP443空闲并放行，保留SSH。已有Nginx的HTTP80无需迁移。
-2. 运行下面脚本，选择Lite/Pro、域名和部署方式（默认Docker、可选原生）。检测后确认计划，自动准备组件和证书。
-3. 读取`/var/lib/guangyue/initial-owner.json`，以随机初始密码登录`owner`并修改密码，再验证VLESS/HY2真实连接。
+- **域名必须已经解析到这台服务器，不能开启 CDN 代理。** Cloudflare 选择“仅 DNS”，关闭橙色云朵。
+- 使用有 root / sudo 权限的 **Linux amd64（x86_64）完整 systemd 服务器**。安装预检查接受 Debian 12/13、Ubuntu 22.04/24.04；原生 VM 安装测试目前覆盖 Ubuntu 22.04/24.04，系统白名单不等于每种服务器配置都已验收。
+- **公网 TCP 443 与 UDP 443 必须空闲并放行**，包括云安全组和主机防火墙。脚本固定使用 443，不会自动迁移现有 HTTPS 服务；已有 Nginx 的 HTTP 80 服务可以保留。
+- **默认 Docker，可选原生安装。** Docker 当前仅发布 IPv4，请只配置 A 记录，不要配置 AAAA；需要 IPv6 时选择原生双栈。Docker 要求 Linux 5.4 或更新。
+- 建议 Lite 从 1 核 / 1 GiB、Pro 从 2 核 / 2 GiB 起步，并为镜像、数据和备份留空间。这是安装建议，不是并发人数或带宽承诺。
+
+### 运行安装脚本
+
+将下面整段复制到服务器终端：
 
 ```bash
 gy_install_file=$(mktemp)
@@ -71,64 +44,85 @@ curl --proto '=https' --proto-redir '=https' -fsSL \
 rm -f "$gy_install_file"
 ```
 
-脚本锁定完整正式Release并校验组件及Docker镜像归档，无需GitHub/镜像仓库账号。`--check`只读检测，`--resume`按原计划续装。443占用时停止，保留其他程序与Nginx配置，默认不改宿主网络优化。详见[安装指南](docs/INSTALL.md)，旧Nginx高级路径见[旧部署指南](docs/LEGACY_INSTALL.md)。
+向导会让你选择 Lite / Pro、绑定域名和部署方式，检查系统、资源、DNS、端口以及已有 Nginx / Docker 配置，然后展示安装计划供确认。运行组件和 Docker 镜像来自所选正式 Release 并校验文件摘要；无需创建镜像仓库账号。证书通过 TCP 443 的 TLS-ALPN-01 自动签发和续期。
 
-## 邮箱与在线支付
+安装后，按脚本提示读取私有初始账户文件 `/var/lib/guangyue/initial-owner.json`，登录并修改管理员密码，再用真实客户端测试 VLESS 与 HY2。按需配置注册、套餐上架和收款渠道；外部支付与邮件服务需要你自己的有效配置。
 
-在“系统设置 → 交易与接入”配置邮件服务与在线支付。邮件支持标准 SMTP 的 TLS/STARTTLS，提供邮箱验证、密码找回和订单通知；支付支持易支付 V1 MD5 和 Stripe Checkout，包括套餐支付、钱包充值与退款处理。新安装默认关闭这些外部服务，需填写自己的服务商凭据并检查接入。
+`--check` 可执行只读预检查，`--resume` 可恢复中断的安装。已有站点请使用[在线更新与回退](docs/UPDATES.md)，不要用新装流程覆盖数据。详细要求、失败恢复和部署限制见[安装指南](docs/INSTALL.md)。
 
-加密钱包支持内置热 HD 钱包和外部 xpub。用户选择加密付款后自动获得专属地址，Ethereum/BSC、Solana 的白名单 USDT/USDC，以及 Plasma 的 USDT0/原生 USDC，在双 RPC 核验并最终确认后自动开通套餐。历史地址永久保存；管理员可以查看余额，在内置热钱包中通过固定 Gas 资金地址补足手续费并发起资产提取。创建钱包时选链，默认 BNB；固定 Gas 地址立即显示并可提前充值。一键启用内置独立公共 RPC 与自动人民币报价，无需填写 RPC 或汇率；预检失败保留原配置，高级手动配置保留。归集页面提供收款地址、费用预览、密码确认及余额自动刷新，Gas 费用每 5 秒查询并显示约合 USD/人民币；已有钱包可增加支持网络，Solana 使用独立 SOL 资金地址并列明代币账户租金。L2 候选网络当前只读，待核验 L1 最终性后再开放自动资金操作。详见[钱包管理](docs/CRYPTO_WALLETS.md)、[订单与归集](docs/CRYPTO_TREASURY.md)。
+## Lite 与 Pro 怎么选
 
-热钱包由官方 Trust Wallet Core 浏览器 WASM 创建，助记词由服务端 Vault 加密保存；只建议存放小额并定期转走。外部 xpub 模式不保存私钥，资产转出由外部钱包负责。生成地址或广播交易成功不等于资金最终确认。实现边界、接口和验证要求见[加密支付项目](docs/projects/crypto-payments/README.md)，长期方案见[加密支付设计](docs/CRYPTO_PAYMENTS.md)。SMTP 配置与排错见[邮件服务](docs/EMAIL.md)，法币支付接入见[交易系统](docs/COMMERCE.md)。
+| | Lite | Pro |
+| --- | --- | --- |
+| 默认用途 | 独立站，也可作为子站 | 主站，集中管理子站 |
+| 数据库 | SQLite | PostgreSQL |
+| 缓存与任务 | 有界进程缓存、持久化任务队列 | Redis 缓存、持久化任务队列 |
+| 本站功能 | 节点、IP 池、套餐、用户、订单与工单 | 同 Lite，并增加集中管理能力 |
+| 连接方式 | 生成子站令牌供主站导入 | 粘贴子站令牌，建立连接 |
+| 安装方式 | Docker / 原生 systemd | Docker / 原生 systemd |
 
-## 文档导航
+安装不需要注册文件，也不需要先创建站点分组。**子站生成令牌，Pro 主站粘贴导入。** 令牌可设置期限或永久有效，直到撤销。接入后子站保留本地管理员、账户、数据库和独立服务；授权可以撤销。首次被接管的子站默认关闭支付模块，本地管理员仍可按需启用。详见[版本区别](docs/EDITIONS.md)与[子站管理](docs/BUSINESS-SITES.md)。
 
-| 文档 | 适用场景 |
+## 能做什么
+
+| 场景 | 能力 |
 | --- | --- |
-| [版本选择与 Pro 部署](docs/EDITIONS.md) | Lite/Pro 对比、基础设施、迁移与群站接入 |
-| [主控＋业务站](docs/BUSINESS-SITES.md) | 导入子站令牌、远程管理、启停调度、在线与流量 |
-| [一键安装](docs/INSTALL.md) | 交互向导、域名与443、预检、账号和失败续装 |
-| [Docker部署](docs/DOCKER.md) | Release镜像归档、隔离、持久数据、维护与回退 |
-| [旧Nginx安装](docs/LEGACY_INSTALL.md) | 保留既有高级原生部署方法 |
-| [使用手册](docs/USER_GUIDE.md) | 从创建用户到导入出口、发放订阅与排错 |
-| [Nginx 共存](docs/NGINX.md) | 与现有 HTTPS 网站共用 TCP 443，保留自定义 SNI |
-| [运维手册](docs/OPERATIONS.md) | 升级、回滚、备份恢复、续期、资源与连通性诊断 |
-| [配置参考](docs/CONFIGURATION.md) | JSON 配置字段、端口、目录、运行模式 |
-| [架构与边界](docs/ARCHITECTURE.md) | 数据流、权限、DNS、安全与资源设计 |
-| [钱包管理](docs/CRYPTO_WALLETS.md) | 内置热钱包、外部 xpub、备份恢复、地址与资金安全边界 |
-| [订单与归集](docs/CRYPTO_TREASURY.md) | 自动收款地址、历史余额、固定 Gas 地址、费用预览和提取恢复 |
-| [加密支付项目](docs/projects/crypto-payments/README.md) | 当前链上支付接口、技术债、后续任务及验证门槛 |
-| [开发指南](CONTRIBUTING.md) | 本地开发、测试、构建、贡献流程 |
-| [安全政策](SECURITY.md) | 漏洞报告、秘密与供应链管理 |
-| [第三方许可](THIRD_PARTY_NOTICES.md) | 上游来源、修改说明与再分发约束 |
-| [变更记录](CHANGELOG.md) | 版本变更 |
-| [发布准备](docs/RELEASE.md) | 构建产物、公开发布与版本验收 |
+| 节点与订阅 | VLESS Reality/Vision、HY2；Raw / Base64 / Mihomo 订阅、复制与二维码；按平台提供官方客户端入口与可选站点中继下载 |
+| 套餐运营 | 按来源节点组或组内指定节点授权，额度与有效期、零元上架、限购、套餐排队；套餐内节点倍率按 0.5 一档，最高 10× |
+| 订单与支持 | 站内余额、兑换码、订单、退款申请 / 取消 / 审批 / 拒绝、图片工单、管理员内部备注与站内通知 |
+| IP 资源 | HTTP CONNECT / SOCKS5 出口、授权上游订阅、来源自动更新、质量检测、DNS 与 IPv6 策略；公共资源入口默认隐藏，可按当前浏览器偏好显示 |
+| 子站管理 | 令牌接入、权限与服务操作、共享预算和冷却恢复、节点挂载、子站 IP 出口、受支持的版本检测与更新回退 |
+| 运行监控 | 用户流量曲线、VLESS 会话与 HY2 连接采样、服务状态、任务进度与重启恢复 |
+| 邮件与支付 | SMTP 邮件、易支付 V1、Stripe Checkout、支持链和白名单资产的加密收款；外部渠道需配置并验收 |
+| 钱包管理 | 内置 HD 热钱包 / 外部公钥导入、永久订单地址、余额与有余额地址、Gas 预估、管理员确认归集 |
+| 日常工作台 | 中英文界面、亮暗主题、移动端、可调整侧边栏、国家访问规则、备份恢复与版本管理 |
 
-## 架构
+### 套餐决定成员能用哪些节点
 
-```mermaid
-flowchart LR
-    User[员工客户端] -->|TCP 443| Gateway[独立 HTTPS / SNI 网关]
-    Gateway -->|面板域名| Web[HTTPS → Go / Vue]
-    Gateway -->|Reality SNI| Xray[Xray VLESS Vision]
-    User -->|UDP 443| HY[Hysteria 2 节点路由核心]
-    Web --> DB[(Lite SQLite / Pro PostgreSQL)]
-    Web --> Cache[Pro Redis 短缓存]
-    Web --> Fleet[Pro HTTPS 群站网关]
-    Web -->|鉴权与配置| Xray
-    Web -->|鉴权与配置| HY
-    Xray --> Exit[直连 / HTTP / SOCKS5 / Mihomo]
-    HY --> Exit
-```
+管理员在套餐内选择本地、子站或公共节点组，也可以选择组内的指定节点。成员看到自己的当前套餐、剩余时间与额度、订阅入口和客户端，不必理解节点组与混合订阅的内部规则。
 
-网站 HTTP/2 与 Hysteria 2 是不同概念。VLESS 使用 Reality + Vision + TCP，HY2 使用 QUIC/UDP；Linux BBR 不直接控制 HY2 的 QUIC 拥塞控制。
+购买另一套餐后，原套餐剩余有效期暂停，按权益队列恢复。退款需管理员审核：当前套餐按剩余额度或时间计算，排队订单当前按原订单金额退回，其他权益的恢复顺序保留；具体规则见[套餐](docs/PLANS.md)与[订单和退款](docs/COMMERCE.md)。当前套餐的节点、倍率和协议修改会同步服务端授权；额度、有效期和排队套餐保留快照。客户端缓存的订阅仍需要刷新。
 
-## 来源与致谢
+### 子站节点与子站 IP 是两条不同路径
 
-本项目由 [fake-ui](https://github.com/wudi000888-svg/fake-ui) 2.3.1 的部署与控制台实践发展而来，当前发布的是重新整理的 Go/Vue 双版本，**不是原版 fake-ui 2.3.1 的重打包**。保留原项目 MIT 版权声明。
+- **挂载子站节点：** 客户端直接连接子站节点，流量不过主站。
+- **使用子站 IP 出口：** 客户端连接主站节点，主站中转到子站 IP 出口。
 
-文档组织和专业控制台分区参考 [Sub2API](https://github.com/Wei-Shaw/sub2api)；没有复制其产品标识、截图或文案。感谢 Xray、Hysteria、Mihomo、Go、Vue 与 SQLite 生态。
+两类资源分别管理并标明来源。子站共享预算耗尽时按配置暂停授权，冷却结束后恢复；节点组成员关系保留。配置流程见[节点挂载与预算](docs/NODE_MOUNTS.md)。
 
-面板源码自 0.15.0 使用 [LGPL-3.0-only](LICENSE)，配套 [GPL-3.0 文本](licenses/GPL-3.0.txt)和[历史 MIT 声明](licenses/guangyue-legacy-MIT.txt)随项目提供。Hysteria 修改补丁使用 MIT；Xray 和 Mihomo 分别适用 MPL-2.0 与 GPL-3.0，详见第三方许可。
+### 加密收款与钱包
 
-子站节点挂载与统一订阅的使用及兼容说明见 [节点挂载](docs/NODE_MOUNTS.md)。
+用户选择加密货币支付时分配独立、永久保存的订单地址。当前自动收款和归集覆盖 Ethereum、BNB Smart Chain、Plasma 与 Solana 的受支持 USDT / USDC 资产，以合约或 mint 白名单为准；配置 L2 不代表已支持自动结算与归集。
+
+余额与 Gas 查询是只读操作。**只有管理员确认归集才支付手续费**；自动手续费支持仅用于真实订单地址，所选白名单稳定币余额须严格大于 0.1。EVM 只补不足差额，Solana 使用固定 SOL 资金地址代付；超过原批准费用上限时暂停并要求人工核对。详细操作和链差异见[钱包管理](docs/CRYPTO_WALLETS.md)与[订单收款和归集](docs/CRYPTO_TREASURY.md)。
+
+内置热钱包适合小额运营资金。助记词虽加密保存，签名权限仍在同一服务器，请私下备份并定期取走资金；外部 EVM xpub 可用于地址派生和查询，资金转出由外部钱包完成，不等于拥有服务器签名能力。
+
+## 使用边界
+
+- 当前直接提供的入口协议为 **VLESS Reality/Vision 与 Hysteria 2**。可导入的上游格式取决于解析器与 Mihomo，不等于新增同名原生入口。
+- 当前按单站控制器部署，不承诺同站多主高可用、组织级租户隔离、SLA 或独立安全审计。Pro 的数据库与缓存不会改善一条本身拥堵的网络线路。
+- CI 包含隔离 Linux 安装、更新恢复和协议验证；这不等于大规模生产容量报告或你的商户与主网交易已验收。上线前请测试真实客户端、备份、邮件和收款流程。
+- RPC、行情与质量检测源可能限流或不可用。未知结果不会当成零费用；公开页面可达不等于账号、播放、支付或区域业务全部解锁。
+- 本仓库提供 **7 种语言的项目介绍**；面板界面当前支持 **简体中文和英语**。详细手册以中文为主，部分提供英文；翻译介绍不代表整套界面和手册已完成对应语言本地化。
+
+## 按任务查文档
+
+| 你想做什么 | 从这里开始 |
+| --- | --- |
+| 安装与选择版别 | [一键安装](docs/INSTALL.md) · [Docker](docs/DOCKER.md) · [Lite / Pro](docs/EDITIONS.md) |
+| 配置套餐、销售与用户订阅 | [使用手册](docs/USER_GUIDE.md) · [套餐](docs/PLANS.md) · [订单与支付](docs/COMMERCE.md) |
+| 连接子站、挂载节点与分配出口 | [子站管理](docs/BUSINESS-SITES.md) · [节点挂载](docs/NODE_MOUNTS.md) · [实时监控](docs/LIVE-MONITORING.md) |
+| 配置邮件、加密收款与归集 | [邮件](docs/EMAIL.md) · [钱包](docs/CRYPTO_WALLETS.md) · [收款与归集](docs/CRYPTO_TREASURY.md) |
+| 运维、故障排查与更新 | [运维](docs/OPERATIONS.md) · [版本更新](docs/UPDATES.md) · [系统配置](docs/CONFIGURATION.md) |
+| 参与开发与安全报告 | [贡献指南](CONTRIBUTING.md) · [架构](docs/ARCHITECTURE.md) · [安全](SECURITY.md) |
+
+完整索引见[文档导航](docs/README.md)。设计资料见 [Penpot 设计源](docs/designs/penpot/README.md)与[界面设计方案](docs/designs/penpot-courtyard-system.md)。
+
+## 开源与贡献
+
+欢迎提交可复现的问题、改进建议与 Pull Request。报告问题请提供版本、版别、部署方式、站点角色和复现步骤，勿上传真实订阅凭据、私钥、助记词或完整生产配置。功能和文档修改的验证要求见[贡献指南](CONTRIBUTING.md)，安全问题使用[私密报告流程](SECURITY.md)。
+
+广月面板自 0.15.0 起采用 **LGPL-3.0-only**。原 fake-ui MIT 声明保留在[历史许可证](licenses/guangyue-legacy-MIT.txt)，并附 [GPL-3.0 文本](licenses/GPL-3.0.txt)。自定义 Hysteria 补丁采用 MIT，Xray 为 MPL-2.0，Mihomo 为 GPL-3.0；组件归属与对应源码见[第三方声明](THIRD_PARTY_NOTICES.md)。
+
+项目介绍的组织方式参考 [3x-ui](https://github.com/MHSanaei/3x-ui)，多语言内容按广月实际能力编写；既有文档结构曾参考 Sub2API，未使用其品牌或截图。完整 Release 提供运行包、安装器、Docker 镜像归档、校验清单与依赖信息，详见[发布说明](docs/RELEASE.md)。如果项目对你有帮助，欢迎 Star，或贡献一次实际安装反馈。

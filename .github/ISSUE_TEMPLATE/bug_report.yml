@@ -1,34 +1,91 @@
 name: 缺陷报告 / Bug report
-description: 提供可复现、已脱敏的问题信息。
+description: 提供环境和最小复现，帮助定位安装、订阅或运营问题。 / Share an environment and minimal reproduction.
 title: "[Bug] "
 body:
+  - type: markdown
+    attributes:
+      value: |
+        先查看 [安装指南](https://github.com/wudi000888-svg/guangyue-panel/blob/main/docs/INSTALL.md) 和 [更新说明](https://github.com/wudi000888-svg/guangyue-panel/blob/main/docs/UPDATES.md)。
+        安全漏洞请按 [安全政策](https://github.com/wudi000888-svg/guangyue-panel/blob/main/SECURITY.md) 私密报告。
+        不要上传原始配置、数据库、完整日志、订阅链接、私钥/助记词或支付凭据。请使用合成账号和已脱敏截图。
+        Use synthetic data. Never upload live configurations, subscriptions, wallet secrets or unreviewed logs.
   - type: input
     id: version
     attributes:
-      label: 面板版本 / Version
+      label: 面板版本 / Panel version
+      description: 填写已安装版本；主站与子站不同版本时分别列出。 / Include both versions for cross-site issues.
+      placeholder: "0.41.0；主站和子站版本相同 / Same version on both sites"
+    validations:
+      required: true
+  - type: dropdown
+    id: edition
+    attributes:
+      label: 版别 / Edition
+      options:
+        - Lite
+        - Pro
+        - 主站与子站涉及不同版别 / Mixed editions across sites
+    validations:
+      required: true
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: 安装方式 / Deployment mode
+      options:
+        - 一键 Docker / One-click Docker
+        - 一键原生 systemd / One-click native systemd
+        - 旧版 Nginx 原生安装 / Legacy native with Nginx
+        - 本地开发模式 / Local development
+        - 其他（在环境中说明） / Other (describe below)
+    validations:
+      required: true
+  - type: dropdown
+    id: role
+    attributes:
+      label: 受影响站点与账号 / Affected site and account
+      multiple: true
+      options:
+        - 独立站管理员 / Standalone administrator
+        - Pro 主站管理员 / Pro master administrator
+        - 被管理子站管理员 / Managed child administrator
+        - 普通成员 / Member
     validations:
       required: true
   - type: input
     id: environment
     attributes:
-      label: 系统、架构与安装方式
+      label: 系统与客户端环境 / OS and client environment
+      description: 填发行版、架构和相关浏览器/代理客户端版本；安装问题补充内核及 Docker 版本。无需填写真实 IP 或域名。
+      placeholder: "Ubuntu 24.04 / amd64；Chrome；客户端名称和版本 / Client name and version"
     validations:
       required: true
   - type: textarea
     id: steps
     attributes:
-      label: 重现步骤与预期/实际结果
-      description: 不要上传真实订阅、密码、IP 清单、私钥或数据库。
+      label: 最小复现步骤 / Steps to reproduce
+      description: 从哪个页面、用什么角色开始，按顺序列操作。节点/套餐名称用示例，不贴真实订阅或配置。
+      placeholder: |
+        1. 管理员打开…… / Open … as an administrator.
+        2. 使用合成套餐与节点执行…… / Use synthetic plans and nodes to …
+        3. …… / …
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: 预期与实际结果 / Expected and actual result
+      description: 写明发生了什么、页面显示什么；是否每次发生，刷新或重试是否改变结果。
     validations:
       required: true
   - type: textarea
     id: logs
     attributes:
-      label: 脱敏错误和验证结果
+      label: 脱敏错误与已做检查 / Redacted errors and checks
+      description: 只贴相关错误摘要或已检查的截图；移除令牌、用户名、邮箱、IP、域名和钱包材料。不要附原始配置或完整生产日志。
   - type: checkboxes
     id: privacy
     attributes:
-      label: 信息检查
+      label: 提交前检查 / Before submitting
       options:
-        - label: 我已移除凭证和私人数据，安全漏洞会通过私密渠道报告。
+        - label: 我已移除真实凭据与私人数据；安全漏洞会通过私密渠道报告。 / I removed secrets and private data and will report vulnerabilities privately.
           required: true
