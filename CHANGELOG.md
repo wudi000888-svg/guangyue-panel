@@ -1,5 +1,14 @@
 # 变更记录
 
+## 0.41.1 — 多语言项目介绍与使用文档
+
+- 重写简体中文和英文 README，新增波斯语、阿拉伯语、西班牙语、俄语、土耳其语介绍，统一七语言导航、安装入口与功能边界。面板界面仍支持中英；本次未新增界面语言。
+- 更新项目横幅与文档导航，统一默认 Docker / 可选原生、固定 443、域名直连与关闭 CDN 的安装说明；旧部署和设计记录标明历史范围。
+- 校正套餐、退款、子站、客户端、邮件与支付的操作说明，并修正订单页一条过时退款提示。未改变业务逻辑或现有数据库。
+- 完整运行包附带全部七语言介绍；Release 提供中英安装提示和八份资产说明。
+
+English: Reworked the introduction in seven languages, clarified current deployment and product limits, refreshed operator documentation, and corrected one stale refund message. Interface languages remain Chinese and English; business logic is unchanged.
+
 ## 0.41.0 — 默认 Docker 的一键安装与独立 443 入口
 
 - 新增交互式一键安装：默认 Docker，可选原生 systemd；选择 Lite/Pro、输入已解析且关闭 CDN 的域名后，自动准备缺失依赖、签发证书和创建管理员。公网 TCP/UDP 固定 443。

@@ -1819,7 +1819,7 @@
   "取消订单": "Cancel order",
   "审核整单退款": "Review full refund",
   "订单工单": "Contact support",
-  "系统先撤回对应权益，再将订单金额退回用户余额。后续权益有变化时不能自动退款。": "The system revokes the order entitlement before returning funds. Automatic refunds are blocked if entitlements have changed since this order.",
+  "系统按对应订单计算可退金额，处理当前或排队权益后退回用户余额；其他套餐的恢复顺序保持不变。": "The system calculates this order’s refundable amount and handles its active or paused entitlement before returning funds. Other plans retain their recovery order.",
   "确认退款": "Confirm refund",
   "有效期必须在未来": "Expiry must be in the future",
   "请及时保存兑换码，列表只显示尾号": "Save these codes now. Lists show only their suffixes.",

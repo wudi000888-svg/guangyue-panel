@@ -1,17 +1,23 @@
-# Balances, redemption codes, orders and support
+# Plan sales, orders and customer support
 
-Available in **0.21.0+**, on Lite and Pro controllers. Open **Account & services** in the unified panel. Members see their own records; administrators manage all members. The panel works without an external payment provider, and optional signed adapters can be configured for online checkout.
+This guide covers the current Lite standalone and Pro controller workflows: publish plans, collect payments, review refunds and answer support tickets. Members see only their own records; administrators manage this site. Entries removed from the sidebar remain available under **System settings → More features**.
+
+Internal balances work without an external payment provider. Online checkout requires merchant credentials; email requires an SMTP account. A successful installation does not configure either service for you.
 
 ## Enable the services
 
-1. Create a plan with the required node groups, allowance, period, protocols, validity and “Package price / CNY”. Prices are stored as integer cents and plan edits create a new template version.
-2. In **Buy a plan**, create an offer with a plan version and CNY price, then enable sales for that offer.
-3. In **System settings → Balance, redemption codes and support**, enable plan purchases and verify the current administrator password.
-4. Credit members using redemption codes or an administrator balance adjustment.
+1. Create a plan with its nodes, quota, period, protocols, validity and price. Choose the local, sub-site or public source group first; narrow a group to individual nodes if needed.
+2. In the administrator **Plan listings** page, create an offer with a plan version, CNY price, listing status and per-member purchase limit. **A zero-price offer can be listed.** A purchase limit of zero means unlimited purchases.
+3. Confirm that the payment module is enabled in **System settings → Commerce and integrations → Online payments**. Changing that switch requires the current administrator password. Listed offers control whether a plan is purchasable; the old balance-sales flag is no longer required. Token-managed sub-sites default to payments disabled on first takeover; their local administrators can enable them deliberately.
+4. Test as a member: choose a plan, create an order, confirm free activation or complete payment, check the active plan and import the subscription. Fund internal balances using codes or an administrator adjustment when testing balance payment.
+
+Prices are integer CNY cents. Offers and orders retain their own price and entitlement snapshots. Edits to active plans propagate node selection, multipliers and protocol permissions; purchased quotas, validity and paused plan snapshots remain unchanged. See the [plan guide](PLANS.md).
 
 ## Online payments
 
 Open **System settings → Commerce and integrations → Online payments**. Newly created methods are disabled by default. Hosted checkout supports **EPay V1 MD5** and **Stripe Checkout**. The generic JSON Webhook adapter is retained for existing integrations and does not offer a customer checkout. Prices and wallet balances use integer CNY cents.
+
+On-chain plan checkout, receiving wallets, balances and collection live in the separate **Cryptocurrency** module. See the [wallet guide](CRYPTO_WALLETS.md) and [implementation guide](projects/crypto-payments/README.md). Internal balances and on-chain assets are separate accounts; crypto payments cannot be completed through the fiat manual-refund confirmation interface.
 
 Secrets are write-only and encrypted in the site Vault. A blank secret during editing preserves the saved value. Disabling a method stops new checkouts but keeps existing callbacks functional. Removing a method with payment history archives it; a method without history can be deleted.
 
@@ -46,7 +52,7 @@ After restart, verified receipts resume without another provider callback. A pay
 
 ### External refunds
 
-Approve a completed plan's refund in **Orders** first. After entitlement revocation and settlement, an external-payment order becomes `refund_pending` (**awaiting original-method refund**). This does **not** mean funds have been returned. Open **Online payments → Receipts and refunds** and select the actual receipt ID:
+Review the completed order in **Orders** first. The system fixes its refundable amount and handles the corresponding entitlement. After revocation and settlement, an external-payment order becomes `refund_pending` (**awaiting original-method refund**). This does **not** mean funds have been returned. Open **Online payments → Receipts and refunds** and select the actual receipt ID:
 
 Refund requests are stored separately from fulfillment. A member request leaves the order `completed` and exposes `refund_status=requested`; the member can cancel before review, while an administrator can reject with a reason. Approval requires the request ID and revision. A unique pending constraint and database CAS prevent an old page from cancelling or rejecting a later request for the same order. Migration 017 backfills legacy `refund_requested` rows into this aggregate.
 
@@ -54,9 +60,9 @@ Refund requests are stored separately from fulfillment. A member request leaves 
 - **EPay:** Complete the real refund in the merchant console first. Enter the actual refund reference and reason, and explicitly confirm that funds were returned. The panel records the verified administrator confirmation; it does not send an EPay refund or credit the internal wallet.
 - **Unknown-order receipts:** Reconcile the merchant statement and complete any actual refund before recording manual confirmation. Such receipts cannot automatically fund a user or plan.
 
-Refund references are unique within the merchant account. External payments never silently become internal-wallet refunds. Wallet-funded orders retain the existing wallet-return behavior after entitlement revocation. Refund operations require the current administrator password, which is cleared from the form after use.
+Refund references are unique within the merchant account. External payments never silently become internal-wallet refunds. Balance-funded orders return the approved refundable amount to the internal balance after entitlement handling. Refund operations require the current administrator password, which is cleared from the form after use.
 
-Fresh installations default to sales disabled, with redemption and support enabled. Upgrades preserve existing settings. Disabling new sales or payment methods retains historical settlement and after-sales workflows. Without merchant credentials, installation or release checks do not constitute a real-payment acceptance test.
+Standalone installations default to the payment module, redemption and support enabled. Plans need a listed offer, and external payment methods require configuration. Token takeover disables the sub-site payment module once; upgrades preserve existing settings. Disabling new sales or payment methods retains historical settlement and after-sales workflows. Without merchant credentials, installation or release checks do not constitute a real-payment acceptance test.
 
 ## Redemption codes
 
@@ -70,7 +76,7 @@ Codes use 128 random bits. Code records store a hash and suffix. Original genera
 
 ## Balance and orders
 
-Since 0.21.2, the header shows the signed-in account’s available balance and opens the wallet when clicked, including on mobile. The tooltip and accessible label include held funds. When an administrator selects another member in the wallet, the header continues to show the administrator’s own balance. Redemption, adjustments and order actions refresh it immediately; visible pages also refresh every 30 seconds and when revisited. Loading or failed reads display “—” instead of a misleading zero. Local balance is hidden while managing an independent remote site.
+The header shows the signed-in account’s available balance and opens the wallet when clicked, including on mobile. The tooltip and accessible label include held funds. When an administrator selects another member in the wallet, the header continues to show the administrator’s own balance. Redemption, adjustments and order actions refresh it immediately; visible pages also refresh every 30 seconds and when revisited. Loading or failed reads display “—” instead of a misleading zero. Local balance is hidden while managing a remote sub-site.
 
 Amounts are stored as integer cents. Minimum positive amount: CNY 0.01. Maximum transaction amount and total account balance: CNY 1 billion. An authenticated owner session can credit, gift or debit an unarchived account without a second password prompt. A reason is still required, every change is audited in the immutable ledger and integrity-checked, and regular members cannot adjust balances. Negative balances are prohibited.
 
@@ -78,9 +84,26 @@ Every movement posts balanced ledger entries and updates the wallet in one trans
 
 Creating an order generates a unique `GYO-` number and snapshots its price and entitlement. The order expires after 15 minutes without confirmation. Wallet confirmation holds the balance; successful entitlement provisioning captures it in the same transaction. Online payment confirmation starts provisioning without a wallet hold. Cancellation releases any held funds. State and retries persist across process restarts; retries back off to 60 seconds. Provisioning times out after 30 minutes: wallet funds are released and external payments require original-method refund handling.
 
-Supported purchases: initial activation, reactivation after expiry, and renewal of the **same plan version**. Renewal extends expiry without clearing current period usage or moving its boundary. Permanent entitlements do not require renewal. Cross-plan prorated upgrades and downgrades are not available.
+Purchases support initial activation, reactivation after expiry, and renewal of the same plan version. Renewal extends expiry without clearing current usage or moving its cycle boundary. A different plan starts first and pauses the previous plan with its remaining validity, usage and permissions. Buying A, then B, then C gives the usage order C → B → A. Members see the remaining days of each paused plan. Permanent plans do not require renewal; changing plans does not automatically deduct the old plan’s residual value from the new price.
 
-Administrators can approve a full refund. The system first revokes and settles the order entitlement, then returns wallet-funded orders to account balance or moves external payments to the original-method refund workflow above. A first-purchase refund ends its entitlement without restoring a previous free plan. A renewal refund restores the earlier expiry and preserves usage. Later entitlement changes block automatic refunds. Partial refunds are not implemented.
+### Refund requests and paused plans
+
+Members can request a refund under **My orders** and cancel before review. Administrators can approve or reject, with a reason visible to the member. Requesting or rejecting a refund does not revoke the plan.
+
+Refunds identify the active or paused entitlement by its original order. Later node-policy changes and subsequent purchases do not by themselves block a refund. An entitlement replaced manually and no longer linked to the order still requires reconciliation; the system does not refund another plan in its place.
+
+Amounts are rounded down to integer cents. Administrators cannot enter an arbitrary partial-refund amount:
+
+| Order position | Current calculation |
+| --- | --- |
+| Active plan with a finite traffic quota | When quota has been used: price × unused quota ÷ plan quota, with a minimum of zero; consumed quota is not refunded |
+| Active unlimited-traffic plan with finite validity | Proportion of remaining time to total plan duration, capped at the original price |
+| Paused plan | The current implementation refunds that order’s original price; it does not prorate usage before the pause |
+| Free order | Entitlement can be withdrawn; the refund is zero |
+
+An active refund revokes and settles that entitlement before restoring any remaining paused plans in their original order, with their saved time and usage. Refunding a paused item removes only that item. A renewal refund removes that renewal’s extension and preserves usage.
+
+Balance payments return the refundable amount to the internal balance. External payments enter the original-method workflow above. Funds are not refunded before required revocation completes; an offline sub-site can leave settlement waiting.
 
 Active orders exclude conflicting manual entitlement and business-site membership changes. Old connections and business-site grants must settle before a new paid quota period is issued.
 
@@ -110,12 +133,12 @@ Images are encrypted SQL records with authenticated access, so ownership and con
 
 ## Fleet, archives and recovery
 
-The Pro controller owns wallets, codes, orders and tickets. A cross-site plan creates one order, not one charge per site. Business agents have no financial/support data or APIs. Legacy independent-site relays cannot forward account-service requests.
+The Pro controller owns its members’ balances, codes, orders and tickets. A cross-site plan creates one order rather than a charge per site. Legacy pull agents have no controller financial/support data or APIs. Token-connected sub-sites keep their own data and default to payments disabled on first takeover; financial services must be managed locally rather than through the remote gateway.
 
-Assigned sites must support entitlement/period protocol 2. Unsupported sites or incompatible quota reservations block purchases. Offline old grants must be revoked and settled before a new period can be issued. After controller provisioning, nodes become usable according to business-site synchronization.
+Legacy assigned sites must support entitlement/period protocol 2. Upgrade unsupported sites first. Configured reservations do not block listing, purchase or renewal simply because they exceed the member’s remaining quota; runtime grants are bounded by the available quota and are withdrawn when exhausted. Offline old grants must be revoked and settled before a new period can be issued. After controller provisioning, nodes become usable according to business-site synchronization.
 
 No-logs mode preserves financial, support and entitlement business records. User deletion with financial/support history becomes archival after active orders and balances are settled. IDs and histories are not reused. Archived accounts are read-only.
 
 Full backups include encrypted images and the recovery key. Portable snapshots and SQLite/PostgreSQL migration validate ledger consistency. Row/file streaming limits memory; the database restore limit is 8 GiB. Reserve adequate disk space for backups and encoding overhead.
 
-Commerce started with `005_commerce.sql`; payment integration adds `013_payment_integration.sql`, including receipt and refund tables in backups. Direct downgrade to a binary without these migrations is blocked. Disaster recovery to an older version requires a matching full backup; later transactions cannot be reconstructed automatically. See [installation](INSTALL.md), [operations](OPERATIONS.md) and the [Chinese detailed guide](COMMERCE.md).
+Commerce started with `005_commerce.sql`; payment integration was introduced by `013_payment_integration.sql`, and refund requests by `017_commerce_refund_requests.sql`. Their records are included in current full backups. Direct downgrade to a binary without these migrations is blocked. Disaster recovery to an older version requires a matching full backup; later transactions cannot be reconstructed automatically. See [installation](INSTALL.md), [operations](OPERATIONS.md) and the [Chinese detailed guide](COMMERCE.md).

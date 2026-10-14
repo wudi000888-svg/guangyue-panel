@@ -1,20 +1,41 @@
 name: 功能建议 / Feature request
-description: 说明跨境团队的具体使用场景。
+description: 说明谁遇到什么问题，以及希望完成的任务。 / Describe the user, problem and desired task.
 title: "[Feature] "
 body:
+  - type: markdown
+    attributes:
+      value: |
+        请描述实际使用场景，便于判断功能是否适合套餐、节点、IP 出口或子站管理。
+        不要附真实账号、订阅、生产配置或钱包材料。 / Do not include live accounts, subscriptions, configurations or wallet material.
+  - type: dropdown
+    id: audience
+    attributes:
+      label: 谁使用此功能 / Who needs this?
+      multiple: true
+      options:
+        - 独立站管理员 / Standalone administrator
+        - Pro 主站管理员 / Pro master administrator
+        - 子站管理员 / Child-site administrator
+        - 普通成员 / Member
+        - 开发者或集成方 / Developer or integration provider
+    validations:
+      required: true
   - type: textarea
     id: problem
     attributes:
-      label: 使用场景与当前问题
+      label: 使用场景与当前问题 / Use case and current problem
+      description: 说明目前如何操作、在哪一步受阻，以及影响；不要只列功能名称。
     validations:
       required: true
   - type: textarea
     id: outcome
     attributes:
-      label: 希望实现的行为
+      label: 希望实现的行为 / Desired behavior
+      description: 用具体例子说明成功后用户能完成什么任务。
     validations:
       required: true
   - type: textarea
     id: constraints
     attributes:
-      label: 资源约束与替代方案
+      label: 环境、约束与替代方案 / Environment, constraints and alternatives
+      description: 可填版别、Docker/原生、移动端、服务商限制、资源预算，以及已尝试的替代办法。无需提供真实凭据。
