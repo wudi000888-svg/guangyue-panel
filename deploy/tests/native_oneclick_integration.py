@@ -262,7 +262,7 @@ def synthetic_bundle(source, work, version):
     config.write_text(code)
     environment = dict(os.environ, CGO_ENABLED='0', GOOS='linux', GOARCH='amd64')
     go = os.environ.get('GY_GO') or shutil.which('go')
-    assert go, 'CI VM needs Go 1.26.9 for isolated synthetic binary fixtures'
+    assert go, 'CI VM needs Go 1.26.10 for isolated synthetic binary fixtures'
     run(go, 'build', '-trimpath', '-ldflags=-s -w', '-o', str(target / 'bin/guangyue-linux-amd64'), '.', timeout=300, cwd=sources, environment=environment)
     (target / 'VERSION').write_text(version + '\n')
     (target / 'CI_SYNTHETIC_VERSION').write_text('Never upload this fixture or tag this version. Disposable VM only.\n')
