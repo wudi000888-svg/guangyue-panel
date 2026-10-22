@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue';
-import QRCode from 'qrcode';
+import { qrDataURL } from '../lib/qrcode';
 import { ArrowUpRight, Copy, ExternalLink, QrCode, ShieldAlert } from 'lucide-vue-next';
 import type { CryptoChain } from '../lib/cryptoPayments';
 import { chainExplorer, gasReceiveURI, portfolioAmount, type PortfolioSnapshot } from '../lib/cryptoPortfolio';
@@ -18,7 +18,7 @@ const gasProblem = computed(() => props.gasError || props.gas?.gas_error || '');
 const reference=computed(()=>gasReferenceDisplay(props.gas,props.chain));
 const explorer = computed(() => chainExplorer(props.chain?.chain_id || 0, props.fundingAddress));
 const qrText = computed(() => gasReceiveURI(props.chain?.chain_id || 0, props.fundingAddress));
-watch(qrText, async value => { const current = ++sequence; qr.value = ''; qrError.value = ''; if (!value) return; try { const image = await QRCode.toDataURL(value, { width: 260, margin: 2, errorCorrectionLevel: 'M', color: { dark: '#142a4a', light: '#ffffff' } }); if (!disposed && sequence === current) qr.value = image; } catch { if (!disposed && sequence === current) qrError.value = t('二维码生成失败，可复制地址充值'); } }, { immediate: true });
+watch(qrText, async value => { const current = ++sequence; qr.value = ''; qrError.value = ''; if (!value) return; try { const image = await qrDataURL(value, { width: 260, margin: 2, errorCorrectionLevel: 'M', color: { dark: '#142a4a', light: '#ffffff' } }); if (!disposed && sequence === current) qr.value = image; } catch { if (!disposed && sequence === current) qrError.value = t('二维码生成失败，可复制地址充值'); } }, { immediate: true });
 onUnmounted(() => { disposed = true; sequence++; });
 </script>
 <template>

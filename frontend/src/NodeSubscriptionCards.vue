@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue';
 import { Check, Clock3, Copy, FileSearch, LoaderCircle, QrCode, RefreshCw, ShieldCheck, X } from 'lucide-vue-next';
-import QRCode from 'qrcode';
+import { qrDataURL } from './lib/qrcode';
 import {rateText} from "./lib/quota";
 import CountryMark from './CountryMark.vue';
 import QualityTags from './QualityTags.vue';
@@ -66,7 +66,7 @@ async function showQR(node: SubscriptionNode, event: MouseEvent) {
   if (!alive || sequence !== qrSequence || !qrNode.value) return;
   qrDialog.value?.showModal();
   try {
-    const image = await QRCode.toDataURL(node.uri, { width: 320, margin: 3, errorCorrectionLevel: 'M', color: { dark: '#0b1220', light: '#ffffff' } });
+    const image = await qrDataURL(node.uri, { width: 320, margin: 3, errorCorrectionLevel: 'M', color: { dark: '#0b1220', light: '#ffffff' } });
     if (alive && sequence === qrSequence && qrNode.value?.uri === node.uri) qrImage.value = image;
   } catch {
     if (alive && sequence === qrSequence) qrError.value = t('节点二维码生成失败，请使用复制链接。');
