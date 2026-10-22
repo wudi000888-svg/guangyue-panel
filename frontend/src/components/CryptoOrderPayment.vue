@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import {sameCryptoAddress,SOLANA_CHAIN_ID} from '../lib/cryptoNetworks';
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
-import QRCode from 'qrcode';
+import { qrDataURL } from '../lib/qrcode';
 import { Check, Copy, LoaderCircle, RefreshCw } from 'lucide-vue-next';
 import { useApi, isCancelled, ApiError } from '../lib/api';
 import { operationID, stamp, type Order } from '../lib/commerce';
@@ -32,7 +32,7 @@ function transferNetwork(row:CryptoTransfer){return options.value?.assets.find(a
 function transferAmount(row:CryptoTransfer){const coin=options.value?.assets.find(a=>a.chain_id===row.chain_id&&sameCryptoAddress(row.chain_id,a.contract,row.contract));if(coin)return tokenAmount(row.atoms,coin.decimals)+' '+coin.symbol;const current=invoice.value;if(current?.chain_id===row.chain_id&&sameCryptoAddress(row.chain_id,current.contract,row.contract))return tokenAmount(row.atoms,current.decimals)+' '+current.symbol;return row.atoms+' '+t('最小单位')}
 watch(selectedID,()=>{transferSequence++;transfers.value=[];transfersLoaded.value=false;transfersLoading.value=false;if(transfersOpen.value)void loadTransfers()});
 async function copy(value:string){try{await navigator.clipboard.writeText(value);notice.value=t('已复制')}catch{error.value=t('复制失败，请手动选择内容')}}
-watch(qrText,async value=>{const current=++qrSequence;qr.value='';if(!value)return;try{const result=await QRCode.toDataURL(value,{width:240,margin:2,errorCorrectionLevel:'M'});if(!disposed&&current===qrSequence)qr.value=result}catch{if(!disposed&&current===qrSequence)error.value=t('二维码生成失败，可复制地址与金额完成付款')}},{immediate:true});
+watch(qrText,async value=>{const current=++qrSequence;qr.value='';if(!value)return;try{const result=await qrDataURL(value,{width:240,margin:2,errorCorrectionLevel:'M'});if(!disposed&&current===qrSequence)qr.value=result}catch{if(!disposed&&current===qrSequence)error.value=t('二维码生成失败，可复制地址与金额完成付款')}},{immediate:true});
 watch(()=>props.order.id,()=>{sequence++;items.value=[];selectedID.value='';assetID.value='';pending=undefined;error.value='';void load()});
 const poll=serialPoll(async()=>{now.value=Date.now()/1000;if(!document.hidden&&!busy.value&&!loading.value)await load()},()=>8000);
 onMounted(async()=>{await load();if(!disposed)poll.start()});onUnmounted(()=>{disposed=true;sequence++;qrSequence++;transferSequence++;poll.stop()});

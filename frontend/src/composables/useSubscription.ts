@@ -1,5 +1,5 @@
 import { computed, onMounted, onScopeDispose, ref, watch, type Ref, type ComputedRef } from "vue";
-import QRCode from "qrcode";
+import { qrDataURL } from "../lib/qrcode";
 import { useApi, downloadBlob, getRemoteSite } from "../lib/api";
 import { download } from "../lib/download";
 import { t } from "../i18n";
@@ -143,7 +143,7 @@ watch(subURL, async (v) => {
   qrError.value = "";
   if (!v) return;
   try {
-    const image = await QRCode.toDataURL(v, {
+    const image = await qrDataURL(v, {
         width: 240,
         margin: 2,
         color: { dark: "#0b1220", light: "#ffffff" },
