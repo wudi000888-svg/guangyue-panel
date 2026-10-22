@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { ArrowUpRight, Check, Copy, Download, LoaderCircle, Monitor, QrCode, Smartphone } from 'lucide-vue-next';
-import QRCode from 'qrcode';
+import { qrDataURL } from '../../lib/qrcode';
 import clients from '../../data/clients.json';
 import { downloadBlob, getRemoteSite, isCancelled } from '../../lib/api';
 import { download } from '../../lib/download';
@@ -38,7 +38,7 @@ const downloadScope = new AbortController();
 watch([link, qrOpen], async ([value, open]) => {
   const sequence = ++qrSequence; qr.value = ''; error.value = '';
   if (!value || !open) return;
-  try { const image = await QRCode.toDataURL(value, { width: 240, margin: 3, color: { dark: '#0b1220', light: '#ffffff' } }); if (sequence === qrSequence) qr.value = image; }
+  try { const image = await qrDataURL(value, { width: 240, margin: 3, color: { dark: '#0b1220', light: '#ffffff' } }); if (sequence === qrSequence) qr.value = image; }
   catch { if (sequence === qrSequence) error.value = t('订阅二维码生成失败，请使用复制地址。'); }
 });
 async function saveConfig() {
