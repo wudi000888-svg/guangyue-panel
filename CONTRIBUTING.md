@@ -6,7 +6,7 @@
 
 ## 本地开发
 
-需要 Go 1.26.9、Node 24 LTS、npm、Python 3、Git、curl、unzip 和 OpenSSL 1.1.1+（推荐 3.x）。前端依赖由锁文件固定，使用 `npm ci`。Go 不在 PATH 时设置 `GY_GO=/path/to/go`。
+需要 Go 1.26.10、Node 24 LTS、npm、Python 3、Git、curl、unzip 和 OpenSSL 1.1.1+（推荐 3.x）。前端依赖由锁文件固定，使用 `npm ci`。Go 不在 PATH 时设置 `GY_GO=/path/to/go`。
 
 ```bash
 python3 scripts/dev.py
