@@ -1,5 +1,14 @@
 # 变更记录
 
+## 0.41.2 — Go 安全更新与前端首屏提速
+
+- 升级 Go 工具链到 1.26.10，修复标准库 `crypto/x509` 漏洞 GO-2026-6809（未拒绝已泄露的中间证书），该路径经 443 入口 TLS 握手可达。CI、源码构建与发布包统一使用新版本，漏洞扫描恢复通过。
+- 英文界面文案改为切换到英文时按需加载，二维码生成库改为首次显示二维码时加载。默认中文用户的入口脚本由 434 kB 降至 93 kB（gzip 147 kB → 33 kB）；已保存英文偏好的用户首屏仍直接显示英文。
+- 后端控制面按职责拆分 `http.go` 与 `commerce_orders.go`，仅移动代码，不改变接口、业务逻辑或数据库。
+- 提供 Lite/Pro 安装包、Docker 镜像归档、SHA256SUMS 与 SBOM。
+
+English: Updated the Go toolchain to 1.26.10 for the reachable crypto/x509 vulnerability GO-2026-6809, loaded English UI text and the QR encoder on demand (entry script 434 kB → 93 kB, gzip 147 kB → 33 kB), and split two large backend files without behaviour changes. Existing data and configuration are unaffected.
+
 ## 0.41.1 — 多语言项目介绍与使用文档
 
 - 重写简体中文和英文 README，新增波斯语、阿拉伯语、西班牙语、俄语、土耳其语介绍，统一七语言导航、安装入口与功能边界。面板界面仍支持中英；本次未新增界面语言。
