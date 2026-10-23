@@ -20,7 +20,7 @@ watch(() => props.open, async open => {
   query.value = "";
   await nextTick();
   input.value?.focus();
-}, { flush: "post" });
+}, { flush: "post", immediate: true });
 watch(query, () => { index.value = 0; });
 watch(() => results.value.map(item => item.id).join("|"), () => { index.value = Math.min(index.value, Math.max(0, results.value.length - 1)); });
 watch(index, async () => { await nextTick(); document.getElementById(`navigation-result-${index.value}`)?.scrollIntoView({ block: "nearest" }); });

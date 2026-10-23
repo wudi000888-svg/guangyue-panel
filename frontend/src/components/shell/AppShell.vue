@@ -11,8 +11,9 @@ import { allowedRoute } from "../../lib/access";
 import { router } from "../../router";
 import { t } from "../../i18n";
 import LanguageSwitcher from "../LanguageSwitcher.vue";
-import CommandPalette from "./CommandPalette.vue";
-import MobileTools from "./MobileTools.vue";
+// Loaded on first use: the palette when first opened, the tools sheet on small screens.
+const CommandPalette = defineAsyncComponent(() => import("./CommandPalette.vue"));
+const MobileTools = defineAsyncComponent(() => import("./MobileTools.vue"));
 const PanelUpdater = defineAsyncComponent(() => import("../PanelUpdater.vue"));
 const HeaderBalance = defineAsyncComponent(() => import("../HeaderBalance.vue"));
 
@@ -22,7 +23,7 @@ const { selectedSite, selectedSiteName, switchSite, api, state, error, page, mob
 const isDesktop = ref(matchMedia('(min-width: 901px)').matches);
 const refreshing = ref(false);
 const mobileTools = ref(false), drawer = ref<HTMLElement | null>(null);
-const commandOpen = ref(false), pageContent = ref<HTMLElement | null>(null);
+const commandOpen = ref(false), paletteUsed = ref(false), pageContent = ref<HTMLElement | null>(null);
 const permittedNav = computed(() => nav.value.filter(item => allowedRoute(router.resolve('/' + item.id).meta, {
   role: state.value?.me.role || null, edition: state.value?.system.edition || 'lite', publicFeatures: publicFeaturesEnabled.value,
 })).map(item => ({ ...item, label: !owner.value && MEMBER_NAVIGATION_LABELS[item.id] ? t(MEMBER_NAVIGATION_LABELS[item.id]!) : item.label })));
@@ -48,6 +49,7 @@ function openSearch() {
   if (!state.value || modal.value || confirmation.value || document.getElementById('app')?.inert) return;
   const activeDialog = document.querySelector('[role="dialog"][aria-modal="true"], [role="alertdialog"][aria-modal="true"]');
   if (activeDialog && !mobileNav.value && !mobileTools.value) return;
+  paletteUsed.value = true;
   commandOpen.value = true;
   closeMobile();
 }
@@ -271,7 +273,7 @@ defineExpose({ closeOverlays });
   <Teleport to="body">
     <div v-if="sidebarCustomization.dragging.value&&sidebarCustomization.pointerPosition.value" class="sidebar-drag-preview" aria-hidden="true" :style="dragPreviewStyle"><GripVertical :size="15"/>{{permittedNav.find(item=>item.id===sidebarCustomization.dragging.value?.id)?.label}}</div>
     <div v-if="owner&&!isDesktop&&sidebarCustomization.dragging.value?.source==='directory'" data-sidebar-drop-target="sidebar" :class="['sidebar-mobile-drop',{'active':sidebarCustomization.target.value==='sidebar'}]" role="status"><Grid2X2 :size="22"/>{{t('拖到这里，立即放入侧边栏')}}</div>
-    <CommandPalette :open="commandOpen" :entries="searchEntries" @close="commandOpen=false" @navigate="navigate"/>
-    <MobileTools :open="!isDesktop && mobileTools" @close="closeMobile" @refresh="refreshPanel()"/>
+    <CommandPalette v-if="paletteUsed" :open="commandOpen" :entries="searchEntries" @close="commandOpen=false" @navigate="navigate"/>
+    <MobileTools v-if="!isDesktop" :open="mobileTools" @close="closeMobile" @refresh="refreshPanel()"/>
   </Teleport>
 </template>
