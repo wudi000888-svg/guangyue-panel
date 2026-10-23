@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch } from 'vue';
+import { onActivated, onDeactivated, onMounted, onUnmounted, ref, watch } from 'vue';
 import { Mail, Send, ShieldCheck, RefreshCw, LoaderCircle } from 'lucide-vue-next';
 import { usePanelContext } from '../composables/panelContext';
 import { serialPoll } from '../lib/requests';
@@ -38,6 +38,9 @@ function changeTLS() { if (form.value) form.value.port = form.value.tls_mode ===
 const deliveryLabels: Record<string, string> = { pending: '待发送', sending: '发送中', retry: '等待重试', sent: '已发送', failed: '发送失败', expired: '已过期', cancelled: '已取消' };
 const kindLabels: Record<string,string> = { registration:'注册验证',bind:'邮箱绑定',reset:'密码找回',test:'测试邮件',commerce:'订单通知' };
 onMounted(async () => { await load(); if (!disposed) poll.start(); });
+// Inside the settings <KeepAlive>: stop polling while the section is hidden.
+onDeactivated(() => poll.stop());
+onActivated(() => { if (form.value && !disposed) poll.start(); });
 onUnmounted(() => { disposed = true; poll.stop(); smtpPassword.value = ''; adminPassword.value = ''; });
 </script>
 <template>
