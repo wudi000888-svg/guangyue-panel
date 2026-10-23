@@ -69,4 +69,4 @@
 - [支付长期设计](CRYPTO_PAYMENTS.md)：包含已实现部分、候选链和后续设计；操作以钱包和归集指南为准。
 - [支付项目设计](projects/crypto-payments/README.md)与[验收计划](projects/crypto-payments/VALIDATION.md)：区分方案要求和已完成验证。
 - [Pro 实施清单](PRO-IMPLEMENTATION.md)与[控制器实施清单](CONTROLLER-IMPLEMENTATION.md)：保留历史里程碑。
-- [0.30.0 技术债](TECH-DEBT-0.30.0.md)：特定版本的审计记录，不代表当前全部问题仍存在。
+- 归档（[docs/archive](archive/)）：[0.30.0 技术债](archive/TECH-DEBT-0.30.0.md)、[0.34.0 验证记录](archive/VALIDATION-0.34.0.md)与开发过程笔记，仅对应各自版本，不代表当前全部问题仍存在。
