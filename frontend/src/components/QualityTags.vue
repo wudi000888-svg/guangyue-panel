@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, nextTick, onUnmounted, ref } from 'vue';
+import { computed, onUnmounted, ref } from 'vue';
+import { useModalFocus } from '../composables/useModalFocus';
 import { Activity, ArrowUpRight, ChevronRight, Clock3, Database, Globe2, RefreshCw, Server, ShieldCheck, ShieldAlert, X } from 'lucide-vue-next';
 import { t, locale } from '../i18n';
 import CountryMark from './CountryMark.vue';
@@ -41,9 +42,10 @@ const info=computed(()=>[
  [t('浏览器时区'),localZone],
 ]);
 const tabs=computed(()=>[{id:'overview',label:t('检测总览')},{id:'services',label:t('流媒体与 AI')},{id:'providers',label:t('数据源对照')}]);
-async function show(){open.value=true;section.value='overview';await nextTick();dialog.value?.focus()}
-function close(){open.value=false;nextTick(()=>trigger.value?.focus())}
-function keydown(e:KeyboardEvent){if(e.key==='Escape'){e.preventDefault();close()}if(e.key==='Tab'&&dialog.value){const items=Array.from(dialog.value.querySelectorAll<HTMLElement>('button:not(:disabled),a[href],input,select,textarea,summary,[tabindex="0"]')).filter(el=>el.offsetParent!==null);const first=items[0],last=items[items.length-1];if(e.shiftKey&&(document.activeElement===first||document.activeElement===dialog.value)){e.preventDefault();last?.focus()}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus()}}}
+function show(){open.value=true;section.value='overview'}
+function close(){open.value=false}
+// One instance per table row: bind the trap to the dialog instead of document.
+const {onKeydown:keydown}=useModalFocus(open,dialog,close,{listen:false,fallbackFocus:()=>trigger.value});
 onUnmounted(()=>{open.value=false});
 </script>
 <template>

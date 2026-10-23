@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {computed,nextTick,onMounted,onBeforeUnmount,ref,watch} from 'vue';
+import {useModalFocus} from '../composables/useModalFocus';
 import { errorMessage } from '../lib/api';
 import {ArrowUpCircle,History,RefreshCw,X,LoaderCircle,CheckCircle2,ExternalLink} from 'lucide-vue-next';
 import {t} from '../i18n';
@@ -26,14 +27,15 @@ function place(){
  position.value=Object.fromEntries(Object.entries(geometry).map(([key,value])=>[key,value+'px']));
 }
 function queuePlace(){cancelAnimationFrame(placementFrame);placementFrame=requestAnimationFrame(place);}
-const dialog=ref<HTMLElement|null>(null);let previousFocus:HTMLElement|null=null;let previousOverflow='';let previousInert=false;let isolated=false;
+const dialog=ref<HTMLElement|null>(null);
 const resizeObserver=typeof ResizeObserver==='undefined'?null:new ResizeObserver(queuePlace);
 watch(dialog,value=>{resizeObserver?.disconnect();if(value){resizeObserver?.observe(value);queuePlace();}});
-function releaseDialog(){if(!isolated)return;const app=document.getElementById('app');if(app)app.inert=previousInert;document.body.style.overflow=previousOverflow;isolated=false;void nextTick(()=>{if(previousFocus?.getClientRects().length&&!previousFocus.closest('[inert]')&&getComputedStyle(previousFocus).visibility!=='hidden')previousFocus.focus();else document.querySelector<HTMLElement>('.mobile-menu')?.focus();});}
 watch(open,value=>{if(value){place();emit('open');}},{flush:'sync'});
+// Focus trap, Escape, scroll lock and #app isolation come from useModalFocus.
+useModalFocus(open,dialog,close,{isolate:true,fallbackFocus:()=>document.querySelector<HTMLElement>('.mobile-menu')});
+// Re-place and keep focus inside when the dialog switches into confirm/running states.
 watch([open,confirm,running],async()=>{
- if(!open.value){releaseDialog();return;}
- if(!isolated){previousFocus=document.activeElement as HTMLElement;previousOverflow=document.body.style.overflow;const app=document.getElementById('app');previousInert=app?.inert||false;if(app)app.inert=true;document.body.style.overflow='hidden';isolated=true;}
+ if(!open.value)return;
  await nextTick();if(open.value){place();if(!dialog.value?.contains(document.activeElement))dialog.value?.focus();}
 });
 async function request(path:string,method='GET',body?:unknown,timeout=AbortSignal.timeout(40000)){
@@ -74,19 +76,8 @@ async function apply(){
  finally{busy.value=false;schedule();}
 }
 function close(){if(!running.value)open.value=false;confirm.value=null;}
-function escape(e:KeyboardEvent){
- if(!open.value)return;
- if(e.key==='Escape'){e.preventDefault();close();}
- if(e.key==='Tab'){
-  const items=Array.from(dialog.value?.querySelectorAll<HTMLElement>('button:not(:disabled),a[href],select:not(:disabled),summary,[tabindex="0"]')||[]).filter(el=>el.tabIndex>=0&&el.getClientRects().length&&getComputedStyle(el).visibility!=='hidden');
-  const first=items[0],last=items.at(-1),active=document.activeElement;
-  if(!first){e.preventDefault();dialog.value?.focus();}
-  else if(e.shiftKey&&(active===first||active===dialog.value||!dialog.value?.contains(active))){e.preventDefault();last?.focus();}
-  else if(!e.shiftKey&&(active===last||active===dialog.value||!dialog.value?.contains(active))){e.preventDefault();first.focus();}
- }
-}
-onMounted(async()=>{document.addEventListener('keydown',escape);window.addEventListener('resize',queuePlace);window.visualViewport?.addEventListener('resize',queuePlace);window.visualViewport?.addEventListener('scroll',queuePlace);try{const saved=JSON.parse(sessionStorage.getItem(storeKey)||'null');if(saved?.request_id&&saved?.version){remember(saved);open.value=true;}}catch{/* Ignore invalid browser state. */}await load();schedule();});
-onBeforeUnmount(()=>{stopped=true;lifetime.abort();clearTimeout(timer);cancelAnimationFrame(placementFrame);resizeObserver?.disconnect();document.removeEventListener('keydown',escape);window.removeEventListener('resize',queuePlace);window.visualViewport?.removeEventListener('resize',queuePlace);window.visualViewport?.removeEventListener('scroll',queuePlace);releaseDialog();});
+onMounted(async()=>{window.addEventListener('resize',queuePlace);window.visualViewport?.addEventListener('resize',queuePlace);window.visualViewport?.addEventListener('scroll',queuePlace);try{const saved=JSON.parse(sessionStorage.getItem(storeKey)||'null');if(saved?.request_id&&saved?.version){remember(saved);open.value=true;}}catch{/* Ignore invalid browser state. */}await load();schedule();});
+onBeforeUnmount(()=>{stopped=true;lifetime.abort();clearTimeout(timer);cancelAnimationFrame(placementFrame);resizeObserver?.disconnect();window.removeEventListener('resize',queuePlace);window.visualViewport?.removeEventListener('resize',queuePlace);window.visualViewport?.removeEventListener('scroll',queuePlace);});
 </script>
 <template>
  <div class="version-control"><button ref="badge" class="version-badge" :class="{update:releases.length}" @click="toggle" :title="t('版本与更新')" :aria-label="t('版本与更新')" :aria-expanded="open"><span>v{{current}}</span><i/></button></div>
