@@ -186,6 +186,24 @@ func (s *Store) commercePendingExcept(user int64, exclude string) (bool, error) 
 	e := s.db.QueryRow(query, args...).Scan(&n)
 	return n > 0, e
 }
+// commerceBarrierUsers returns every user with an order still provisioning or
+// refunding, in one query rather than one per user.
+func (s *Store) commerceBarrierUsers() (map[int64]bool, error) {
+	rows, err := s.db.Query("SELECT DISTINCT user_id FROM commerce_orders WHERE state IN ('provisioning','refunding')")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	users := map[int64]bool{}
+	for rows.Next() {
+		var id int64
+		if err = rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		users[id] = true
+	}
+	return users, rows.Err()
+}
 func (s *Store) commerceBarrier(user int64) (bool, error) {
 	var n int
 	e := s.db.QueryRow("SELECT COUNT(*) FROM commerce_orders WHERE user_id=? AND state IN ('provisioning','refunding')", user).Scan(&n)
