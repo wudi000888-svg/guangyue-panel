@@ -59,9 +59,9 @@ function contrast(foreground: Color, background: Color): number {
   return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05);
 }
 
-const rootTokens = declarations(tokensCSS, ':root');
-const light = { ...rootTokens, ...declarations(themeCSS, ':root') };
-const dark = { ...light, ...declarations(themeCSS, ':root[data-theme="dark"]') };
+// tokens.css is the single source of theme variables; dark overrides light.
+const light = declarations(tokensCSS, ':root');
+const dark = { ...light, ...declarations(tokensCSS, ':root[data-theme="dark"]') };
 const surfaces = ['--canvas', '--surface', '--surface-raised', '--surface-soft',
   '--surface-muted', '--surface-hover', '--surface-table', '--input'];
 
