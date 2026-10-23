@@ -8,7 +8,7 @@
 
 **Tech Stack:** Go、SQLite/PostgreSQL、Vue 3、TypeScript、Vitest、现有 crypto invoice/wallet/sweep API。
 
-**Spec:** `docs/superpowers/specs/2026-10-12-refund-crypto-modules-design.md`
+**Spec:** `docs/archive/superpowers/specs/2026-10-12-refund-crypto-modules-design.md`
 
 ## Global Constraints
 

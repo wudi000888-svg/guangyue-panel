@@ -4,6 +4,63 @@
 
 0.41.0 起，新安装通过同一个向导选择 Docker 或原生 systemd，默认 Docker。两种方式都使用专属网关，固定公开 TCP / UDP 443，自动申请证书；原有 Nginx stream 部署保留既有更新路径。详细要求见 [一键安装](INSTALL.md)，容器边界见 [Docker 部署](DOCKER.md)。
 
+## 组件总览
+
+下图为 0.41.0 起专属网关部署的组件与主要连接（原生 systemd 与 Docker 拓扑相同：Docker 中网关与 Postgres / Redis 为独立容器，面板与三个核心在同一面板容器内）。旧 Nginx stream 部署以宿主 Nginx 代替网关，见 [Nginx 指南](NGINX.md)。
+
+```mermaid
+flowchart LR
+    client["客户端 / 浏览器"]
+    subgraph host["单台服务器（一个站点）"]
+        gw["专属网关 guangyue-gateway<br/>TCP 443：TLS / SNI 分流<br/>ACME TLS-ALPN-01 证书"]
+        subgraph app["面板进程 guangyue（非特权 UID）"]
+            panel["控制面 HTTP API + Vue 前端<br/>127.0.0.1:19100 · /api/health"]
+            reconcile["配置协调器 / 后台任务"]
+        end
+        xray["Xray<br/>VLESS Reality + Vision<br/>127.0.0.1:18443"]
+        hy2["Hysteria（补丁版）<br/>HY2 · UDP 443"]
+        mihomo["Mihomo 桥接（按需）<br/>回环 SOCKS 出口"]
+        subgraph data["持久化"]
+            sqlite[("Lite：SQLite (WAL)")]
+            pg[("Pro：PostgreSQL<br/>每站点 schema gy_site_id")]
+            redis[("Pro：Redis 短缓存")]
+        end
+        updater["本机维护执行器（root）<br/>guangyue-updater.socket / service"]
+        backups[("/root/guangyue-backups<br/>升级前快照")]
+    end
+    github["GitHub Releases<br/>正式版本包 + SHA256"]
+    subsite["子站（Lite / Pro）"]
+    exits["上游出口<br/>直出 / HTTP / SOCKS5 / 订阅节点"]
+
+    client -- "TCP 443 面板域名 HTTPS" --> gw
+    client -- "TCP 443 Reality SNI" --> gw
+    client -- "UDP 443 QUIC" --> hy2
+    gw -- "HTTP 回环" --> panel
+    gw -- "Reality 透传" --> xray
+    panel --- reconcile
+    reconcile -- "生成并应用配置" --> xray
+    reconcile -- "生成并应用配置" --> hy2
+    reconcile -- "订阅型 IP 池" --> mihomo
+    panel --> sqlite
+    panel --> pg
+    panel -. "缓存，故障按未命中" .-> redis
+    xray --> exits
+    hy2 --> exits
+    xray -. "IP 池出口" .-> mihomo
+    hy2 -. "IP 池出口" .-> mihomo
+    mihomo --> exits
+    panel -- "固定请求（本机 socket）" --> updater
+    updater -- "下载并校验" --> github
+    updater -- "停写、备份、切换、健康检查、清理旧快照" --> backups
+    subsite -- "子站生成 gys_ 令牌，Pro 导入" --> panel
+    panel -- "Pro 管理网关：令牌作用域 + HTTPS" --> subsite
+```
+
+- **入口**：网关独占 TCP 443，按 SNI 将面板域名终止为 HTTPS 并转给回环面板，Reality SNI 原样转给 Xray；HY2 直接监听 UDP 443。
+- **数据**：Lite 使用本机 SQLite；Pro 以 PostgreSQL 为事实来源，Redis 只做短缓存。
+- **群站**：子站生成管理令牌，由 Pro 主站导入；主站经管理网关调用子站固定接口，子站保留本地账号与独立运行能力。
+- **维护**：Web 进程不持有 root 权限，版本操作经本机 socket 交给 root 维护执行器，过程与备份清理见 [更新与回退](UPDATES.md)。
+
 ## 从用户操作到代理转发
 
 1. 前端通过受鉴权 API 提交套餐、节点或资源变更。

@@ -508,7 +508,7 @@ class UpdateTests(unittest.TestCase):
             try: yield
             finally: held.pop()
         def verify(_bundle): self.assertTrue(held)
-        def apply(*args):
+        def apply(*args, **kwargs):
             self.assertTrue(held)
             self.assertEqual((helper / 'infrastructure.py').read_bytes(), b'new recovery module\n')
         with patch.object(sys, 'argv', ['upgrade.py', '--bundle', str(bundle), '--apply']), patch.object(upgrade, 'deployment_lock', side_effect=locked), patch.object(upgrade, 'preflight', side_effect=verify), patch.object(upgrade, 'edition_config'), patch.object(upgrade, 'run'), patch.object(upgrade, 'upgrade', side_effect=apply) as mutation:
