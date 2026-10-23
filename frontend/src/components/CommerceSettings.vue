@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, watch } from 'vue';
+import { errorMessage } from '../lib/api';
 import { CreditCard, Mail, Settings2 } from 'lucide-vue-next';
 import { useCommerce } from '../lib/commerce';
 import { notifyPaymentModuleChanged, type CommerceSettings as CommerceSettingsValue } from '../lib/paymentModule';
@@ -27,11 +28,11 @@ onMounted(loadSettings);
 watch(()=>props.active,active=>{password.value='';modulePassword.value='';if(active)void loadSettings()});
 watch(section,()=>{password.value='';modulePassword.value=''});
 onUnmounted(()=>{disposed=true;password.value='';modulePassword.value=''});
-async function saveModule(){if(busy.value||!settingsLoaded.value)return;busy.value=true;error.value='';notice.value='';try{const value=await api<CommerceSettingsValue>('/settings','POST',{settings:{...settings.value,payment_module_enabled:moduleDraft.value},password:modulePassword.value});if(!disposed){settings.value=value;moduleDraft.value=value.payment_module_enabled;notifyPaymentModuleChanged();notice.value=t('支付模块设置已保存');await loadSettings()}}catch(e){if(!disposed)error.value=t((e as Error).message)}finally{modulePassword.value='';busy.value=false}}
+async function saveModule(){if(busy.value||!settingsLoaded.value)return;busy.value=true;error.value='';notice.value='';try{const value=await api<CommerceSettingsValue>('/settings','POST',{settings:{...settings.value,payment_module_enabled:moduleDraft.value},password:modulePassword.value});if(!disposed){settings.value=value;moduleDraft.value=value.payment_module_enabled;notifyPaymentModuleChanged();notice.value=t('支付模块设置已保存');await loadSettings()}}catch(e){if(!disposed)error.value=errorMessage(e)}finally{modulePassword.value='';busy.value=false}}
 async function save() {
   busy.value = true; error.value = ''; notice.value = '';
   try { const {payment_module_enabled: _module,...accountSettings}=settings.value;await api<CommerceSettingsValue>('/settings', 'POST', { settings: accountSettings, password: password.value });await loadSettings();notice.value = t('账户服务设置已保存'); }
-  catch (e) { error.value = t((e as Error).message); }
+  catch (e) { error.value = errorMessage(e); }
   finally { password.value = ''; busy.value = false; }
 }
 </script>

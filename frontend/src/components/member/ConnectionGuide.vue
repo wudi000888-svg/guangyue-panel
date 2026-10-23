@@ -3,7 +3,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { ArrowUpRight, Check, Copy, Download, LoaderCircle, Monitor, QrCode, Smartphone } from 'lucide-vue-next';
 import { qrDataURL } from '../../lib/qrcode';
 import clients from '../../data/clients.json';
-import { downloadBlob, getRemoteSite, isCancelled } from '../../lib/api';
+import { downloadBlob, getRemoteSite, isCancelled, errorMessage } from '../../lib/api';
 import { download } from '../../lib/download';
 import { t } from '../../i18n';
 import { clientDownloadURL, clientPlatforms, detectClientPlatform, isGitHubReleaseDownload, platformDownloads } from '../../lib/clientDownloads';
@@ -46,7 +46,7 @@ async function saveConfig() {
   downloading.value = true; error.value = '';
   const url = link.value, filename = client.value?.format === 'Mihomo' ? 'guangyue.yaml' : 'guangyue.txt';
   try { if (getRemoteSite()) window.open(url, '_blank', 'noopener,noreferrer'); else download(await downloadBlob(url, { signal: downloadScope.signal }), filename); }
-  catch (reason) { if (!isCancelled(reason)) error.value = reason instanceof Error ? t(reason.message) : t('请求失败'); }
+  catch (reason) { if (!isCancelled(reason)) error.value = errorMessage(reason); }
   finally { downloading.value = false; }
 }
 onBeforeUnmount(() => { qrSequence++; downloadScope.abort(); });

@@ -36,8 +36,22 @@ function isAccessDenial(value: unknown): value is AccessDenial {
 export class ApiError extends Error {
   constructor(public status: number, public data: Partial<SiteAccessStatus> & { access_denied?: boolean; error?: string; warnings?: { index: number; reason: string }[] } = {}) {
     const warnings = Array.isArray(data.warnings) ? data.warnings.filter(w => w && typeof w.reason === 'string').slice(0, 5) : [];
-    super((data.error || t('请求失败')) + (warnings.length ? '：' + warnings.map(w => t('第 ') + w.index + t(' 项 ') + w.reason).join('；') : ''));
+    super((data.error ? t(data.error) : t('请求失败')) + (warnings.length ? '：' + warnings.map(w => t('第 ') + w.index + t(' 项 ') + t(w.reason)).join('；') : ''));
   }
+}
+// Browsers report a failed fetch (offline, DNS, TLS, CORS) as a bare TypeError.
+const networkFailure = /failed to fetch|networkerror|load failed|network request failed|fetch failed/i;
+export function isNetworkError(error: unknown): boolean {
+  return error instanceof TypeError && networkFailure.test(error.message);
+}
+// User-facing text for any thrown value: server and local messages are
+// translated (Chinese source strings are catalogue keys) and transport
+// failures get a readable explanation instead of `TypeError: Failed to fetch`.
+export function errorMessage(error: unknown): string {
+  if (isNetworkError(error)) return t('网络连接失败，请检查网络后重试');
+  if (error instanceof Error) return error.message ? t(error.message) : t('请求失败');
+  if (typeof error === 'string' && error) return t(error);
+  return t('请求失败');
 }
 export const isCancelled = (error: unknown): boolean => error instanceof Error && error.name === 'AbortError';
 const aborted = () => new DOMException('Request cancelled', 'AbortError');

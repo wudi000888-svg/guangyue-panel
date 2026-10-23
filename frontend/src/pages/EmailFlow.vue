@@ -2,7 +2,7 @@
 import { computed, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { Mail, ShieldCheck, LoaderCircle } from 'lucide-vue-next';
-import { useApi, invalidateSession } from '../lib/api';
+import { useApi, invalidateSession, errorMessage } from '../lib/api';
 import { saveEmailProof } from '../lib/email';
 import { usePanelContext } from '../composables/panelContext';
 import { t } from '../i18n';
@@ -34,7 +34,7 @@ async function submit() {
       const v = await api<{message: string}>('/email/reset/request', 'POST', { email: email.value });
       message.value = t(v.message);
     }
-  } catch (e) { error.value = t((e as Error).message); }
+  } catch (e) { error.value = errorMessage(e); }
   finally { busy.value = false; }
 }
 </script>

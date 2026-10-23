@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useApi, isCancelled } from "./lib/api";
+import { useApi, isCancelled, errorMessage } from "./lib/api";
 const api = useApi();
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { Clock3, FileSearch, LoaderCircle, RefreshCw, ShieldCheck } from 'lucide-vue-next';
@@ -24,7 +24,7 @@ async function load(clear=false){
  try{
   const result=await api<MemberReports>('/node-quality?pool='+pool,'GET',undefined,{signal:controller.signal});
   if(!controller.signal.aborted&&pool===props.pool)reports.value=result;
- }catch(reason){if(!controller.signal.aborted&&!isCancelled(reason)){error.value=(reason as Error).message;reports.value=null}}
+ }catch(reason){if(!controller.signal.aborted&&!isCancelled(reason)){error.value=errorMessage(reason);reports.value=null}}
  finally{if(request===controller){loading.value=false;request=undefined}}
 }
 function schedule(){timer=setTimeout(async()=>{if(!document.hidden&&!loading.value)await load();if(mounted)schedule()},60000)}

@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { ArrowRight, Check, CircleCheck, CircleHelp, LoaderCircle, Package, RefreshCw, } from 'lucide-vue-next';
 import { usePanelContext } from '../composables/panelContext';
-import { useApi } from '../lib/api';
+import { useApi, errorMessage } from '../lib/api';
 import { useCommerce, cents, money, type Offer, type Order } from '../lib/commerce';
 import { bytes } from '../lib/format';
 import type { Plan } from '../types';
@@ -23,10 +23,10 @@ const canRenew=(o:Offer)=>offerState(state.value?.me,o).renew;
 const renewalBlocked=(o:Offer)=>offerState(state.value?.me,o).permanent;
 function selectPlan(){if(editing.value)return;const p=plans.value.find(v=>v.id===selected.value);if(p)price.value=(Number(p.price||'0')/100).toFixed(2)}
 let sequence=0;
-async function load(){void refreshModule();const current=++sequence;loading.value=true;error.value='';try{const result=await read<{items:Offer[]}>('/offers');if(result&&current===sequence)offers.value=result.items;if(owner.value){try{const result=await panelApi<{plans:Plan[]}>('/plans');if(current===sequence)plans.value=result.plans.filter(v=>!v.archived)}catch(e){if(current===sequence)error.value=(e as Error).message}}}finally{if(current===sequence)loading.value=false}}
+async function load(){void refreshModule();const current=++sequence;loading.value=true;error.value='';try{const result=await read<{items:Offer[]}>('/offers');if(result&&current===sequence)offers.value=result.items;if(owner.value){try{const result=await panelApi<{plans:Plan[]}>('/plans');if(current===sequence)plans.value=result.plans.filter(v=>!v.archived)}catch(e){if(current===sequence)error.value=errorMessage(e)}}}finally{if(current===sequence)loading.value=false}}
 function edit(o:Offer){editing.value=o;selected.value=o.plan.id;price.value=(Number(o.price)/100).toFixed(2);enabled.value=o.enabled;purchaseLimit.value=o.purchase_limit||0;document.getElementById('offer-editor')?.scrollIntoView({block:'start',behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'})}
 function reset(){editing.value=null;selected.value='';price.value='';purchaseLimit.value=0;enabled.value=true}
-async function save(){const p=plans.value.find(v=>v.id===selected.value);if(!p)return;let amount:string;try{amount=/^0(?:\.0{1,2})?$/.test(price.value.trim())?'0':cents(price.value)}catch(e){error.value=(e as Error).message;return}if(!Number.isInteger(purchaseLimit.value)||purchaseLimit.value<0||purchaseLimit.value>100000){error.value=t('限购次数应为 0–100000，0 表示不限购');return}busy.value=true;error.value='';notice.value='';try{await api('/offers','POST',{id:editing.value?.id||'',version:editing.value?.version||0,plan_id:p.id,plan_version:p.version,price:amount,enabled:enabled.value,purchase_limit:purchaseLimit.value});reset();notice.value=t('套餐上架配置已保存');await load()}catch(e){error.value=t((e as Error).message)}finally{busy.value=false}}
+async function save(){const p=plans.value.find(v=>v.id===selected.value);if(!p)return;let amount:string;try{amount=/^0(?:\.0{1,2})?$/.test(price.value.trim())?'0':cents(price.value)}catch(e){error.value=errorMessage(e);return}if(!Number.isInteger(purchaseLimit.value)||purchaseLimit.value<0||purchaseLimit.value>100000){error.value=t('限购次数应为 0–100000，0 表示不限购');return}busy.value=true;error.value='';notice.value='';try{await api('/offers','POST',{id:editing.value?.id||'',version:editing.value?.version||0,plan_id:p.id,plan_version:p.version,price:amount,enabled:enabled.value,purchase_limit:purchaseLimit.value});reset();notice.value=t('套餐上架配置已保存');await load()}catch(e){error.value=errorMessage(e)}finally{busy.value=false}}
 async function order(o:Offer){if(!moduleEnabled.value){error.value=t('本站暂未开放购买，现有套餐与订单仍可查看。');return}ordering.value=o.id;try{const v=await run<Order>('/orders',{offer_id:o.id,offer_version:o.version});if(v)await router.push({path:'/orders',query:{checkout:v.id}})}finally{ordering.value=''}}
 onMounted(load);
 </script>

@@ -5,7 +5,7 @@ import {useModalFocus} from './composables/useModalFocus';
 import './styles/admin-ui.css';
 import {usePanelContext} from "./composables/panelContext";
 const {loadEntitlements}=usePanelContext();
-import { useApi, isCancelled } from "./lib/api";
+import { useApi, isCancelled, errorMessage } from "./lib/api";
 import { latestRequest } from "./lib/requests";
 const api = useApi("");
 const loadRequest = latestRequest();
@@ -50,27 +50,27 @@ async function load(reset=false){
   if(!loadRequest.isCurrent(request))return;
   info.value=result;error.value='';
   if(reset&&info.value)Object.assign(form,info.value.settings,{sources:[...info.value.settings.sources]});
- }catch(e){if(loadRequest.isCurrent(request)&&!isCancelled(e))error.value=(e as Error).message;}
+ }catch(e){if(loadRequest.isCurrent(request)&&!isCancelled(e))error.value=errorMessage(e);}
 }
 function retainSourceDraft(){const previous=[...(info.value?.settings.sources||[])],draft=[...form.sources];return ()=>{if(info.value)Object.assign(form,{sources:rebaseSourceSelection(previous,draft,info.value.settings.sources,info.value.sources.map(source=>source.id)),revision:info.value.settings.revision,enabled:info.value.settings.enabled});};}
 function syncSourceSettings(){if(info.value)Object.assign(form,{sources:[...info.value.settings.sources],revision:info.value.settings.revision,enabled:info.value.settings.enabled});}
-async function save(enabled=form.enabled){if(busy.value)return;const restoreDraft=retainSourceDraft();busy.value=true;error.value='';saved.value='';try{await api('/public-pool','PUT',{...form,sources:[...(info.value?.settings.sources||[])],enabled});await load(true);restoreDraft();emit('refresh');saved.value=enabled?t('策略已保存，正在采集与检测'):t('已关闭，自动节点和公共资源已撤下');}catch(e){if(!isCancelled(e))error.value=(e as Error).message;}finally{busy.value=false;}}
-async function toggleCollection(){if(busy.value||!info.value)return;const restoreDraft=retainSourceDraft();busy.value=true;error.value='';saved.value='';try{const enabled=!info.value.settings.enabled;await api('/public-pool','PUT',{...info.value.settings,enabled});await load();restoreDraft();emit('refresh');saved.value=enabled?t('策略已保存，正在采集与检测'):t('已关闭，自动节点和公共资源已撤下');}catch(e){if(!isCancelled(e))error.value=(e as Error).message;}finally{busy.value=false;}}
-async function saveSourceSelection(){if(busy.value||!info.value)return;busy.value=true;error.value='';saved.value='';try{await api('/public-pool','PUT',{...info.value.settings,sources:[...form.sources]});await load();syncSourceSettings();saved.value=t('采集来源已保存');}catch(e){if(!isCancelled(e))error.value=(e as Error).message;}finally{busy.value=false;}}
-async function run(){if(busy.value)return;busy.value=true;error.value='';try{await api('/public-pool/run','POST',{});await load();}catch(e){if(!isCancelled(e))error.value=(e as Error).message;}finally{busy.value=false;}}
-async function quality(p:Resource){if(qualityRunning.value)return;qualityRunning.value=p.id;error.value='';try{await api('/ips/'+p.id+'/quality','POST',{});emit('refresh');}catch(e){if(!isCancelled(e))error.value=(e as Error).message;}finally{qualityRunning.value='';}}
+async function save(enabled=form.enabled){if(busy.value)return;const restoreDraft=retainSourceDraft();busy.value=true;error.value='';saved.value='';try{await api('/public-pool','PUT',{...form,sources:[...(info.value?.settings.sources||[])],enabled});await load(true);restoreDraft();emit('refresh');saved.value=enabled?t('策略已保存，正在采集与检测'):t('已关闭，自动节点和公共资源已撤下');}catch(e){if(!isCancelled(e))error.value=errorMessage(e);}finally{busy.value=false;}}
+async function toggleCollection(){if(busy.value||!info.value)return;const restoreDraft=retainSourceDraft();busy.value=true;error.value='';saved.value='';try{const enabled=!info.value.settings.enabled;await api('/public-pool','PUT',{...info.value.settings,enabled});await load();restoreDraft();emit('refresh');saved.value=enabled?t('策略已保存，正在采集与检测'):t('已关闭，自动节点和公共资源已撤下');}catch(e){if(!isCancelled(e))error.value=errorMessage(e);}finally{busy.value=false;}}
+async function saveSourceSelection(){if(busy.value||!info.value)return;busy.value=true;error.value='';saved.value='';try{await api('/public-pool','PUT',{...info.value.settings,sources:[...form.sources]});await load();syncSourceSettings();saved.value=t('采集来源已保存');}catch(e){if(!isCancelled(e))error.value=errorMessage(e);}finally{busy.value=false;}}
+async function run(){if(busy.value)return;busy.value=true;error.value='';try{await api('/public-pool/run','POST',{});await load();}catch(e){if(!isCancelled(e))error.value=errorMessage(e);}finally{busy.value=false;}}
+async function quality(p:Resource){if(qualityRunning.value)return;qualityRunning.value=p.id;error.value='';try{await api('/ips/'+p.id+'/quality','POST',{});emit('refresh');}catch(e){if(!isCancelled(e))error.value=errorMessage(e);}finally{qualityRunning.value='';}}
 const sourceState=(id:string)=>info.value?.source_status?.find(s=>s.id===id);
 const sourcePending=computed(()=>info.value?.source_status?.some(s=>s.queued||s.running)||false);
-async function fetchSources(ids:string[]){if(busy.value)return;busy.value=true;error.value='';saved.value='';try{await api('/public-pool/sources/fetch','POST',{ids});await load();saved.value=t('来源抓取已排队，完成后按现有策略检测入池');}catch(e){error.value=(e as Error).message}finally{busy.value=false}}
+async function fetchSources(ids:string[]){if(busy.value)return;busy.value=true;error.value='';saved.value='';try{await api('/public-pool/sources/fetch','POST',{ids});await load();saved.value=t('来源抓取已排队，完成后按现有策略检测入池');}catch(e){error.value=errorMessage(e)}finally{busy.value=false}}
 function editSource(source?:PublicSource){Object.assign(sourceForm,{id:source?.id||'',name:source?.name||'',url:'',text:'',protocol:'',enabled:source?.enabled??true,revision:source?.revision||''});sourceMode.value='url';sourceError.value='';sourceModal.value=true;}
 function closeSource(){if(busy.value)return;sourceModal.value=false;sourceDelete.value=null;sourceForm.url='';sourceForm.text='';sourceError.value='';}
-async function readSourceFile(event:Event){const input=event.target as HTMLInputElement,file=input.files?.[0];if(!file)return;try{if(file.size>1048576)throw new Error(t('文件不能超过 1 MiB'));sourceForm.text=await file.text();sourceMode.value='text';sourceError.value='';}catch(e){sourceError.value=(e as Error).message;}finally{input.value='';}}
+async function readSourceFile(event:Event){const input=event.target as HTMLInputElement,file=input.files?.[0];if(!file)return;try{if(file.size>1048576)throw new Error(t('文件不能超过 1 MiB'));sourceForm.text=await file.text();sourceMode.value='text';sourceError.value='';}catch(e){sourceError.value=errorMessage(e);}finally{input.value='';}}
 async function saveCustomSource(){if(busy.value)return;const restoreDraft=retainSourceDraft();busy.value=true;sourceError.value='';try{
  const result=await api('/public-pool/sources'+(sourceForm.id?'/'+sourceForm.id:''),sourceForm.id?'PUT':'POST',sourceForm.id?{name:sourceForm.name,enabled:sourceForm.enabled,revision:sourceForm.revision}:{name:sourceForm.name,enabled:sourceForm.enabled,protocol:sourceForm.protocol,...(sourceMode.value==='url'?{url:sourceForm.url}:{text:sourceForm.text})});
  if(!sourceForm.id)sourceResult.value={entries:result.entries||0,queued:result.queued,screening_pending:result.screening_pending};
  sourceModal.value=false;sourceForm.url='';sourceForm.text='';await load();restoreDraft();saved.value=t('公开来源已保存');
-}catch(e){sourceError.value=(e as Error).message;}finally{busy.value=false;}}
-async function removeSource(){if(busy.value||!sourceDelete.value)return;const restoreDraft=retainSourceDraft();busy.value=true;sourceError.value='';try{await api('/public-pool/sources/'+sourceDelete.value.id+'?revision='+encodeURIComponent(sourceDelete.value.revision||''),'DELETE');sourceDelete.value=null;await load();restoreDraft();emit('refresh');saved.value=t('公开来源已删除，已验证出口保留');}catch(e){sourceError.value=(e as Error).message;}finally{busy.value=false;}}
+}catch(e){sourceError.value=errorMessage(e);}finally{busy.value=false;}}
+async function removeSource(){if(busy.value||!sourceDelete.value)return;const restoreDraft=retainSourceDraft();busy.value=true;sourceError.value='';try{await api('/public-pool/sources/'+sourceDelete.value.id+'?revision='+encodeURIComponent(sourceDelete.value.revision||''),'DELETE');sourceDelete.value=null;await load();restoreDraft();emit('refresh');saved.value=t('公开来源已删除，已验证出口保留');}catch(e){sourceError.value=errorMessage(e);}finally{busy.value=false;}}
 let timer:ReturnType<typeof setTimeout>|undefined;let mounted=true;
 async function poll(){if(!document.hidden&&!busy.value)await load();if(mounted)timer=setTimeout(poll,info.value?.status.running||sourcePending.value?3000:30000);}
 onMounted(async()=>{await load(true);if(mounted)timer=setTimeout(poll,3000)});onUnmounted(()=>{mounted=false;loadRequest.cancel();clearTimeout(timer)});

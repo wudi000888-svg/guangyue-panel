@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {computed,nextTick,onMounted,onBeforeUnmount,ref,watch} from 'vue';
+import { errorMessage } from '../lib/api';
 import {ArrowUpCircle,History,RefreshCw,X,LoaderCircle,CheckCircle2,ExternalLink} from 'lucide-vue-next';
 import {t} from '../i18n';
 import {activeStages,freshCatalog,releaseStatusMessage,usableReleases,updateOutcome,type UpdateState,type VersionOperation} from '../lib/updater';
@@ -43,7 +44,7 @@ async function request(path:string,method='GET',body?:unknown,timeout=AbortSigna
 }
 function remember(op:VersionOperation|null){pending.value=op;try{if(op)sessionStorage.setItem(storeKey,JSON.stringify(op));else sessionStorage.removeItem(storeKey);}catch{/* The operation also persists on the server. */}}
 function receive(data:UpdateState){if(stopped)return;info.value=data;if(!releases.value.some(r=>r.version===selected.value))selected.value=releases.value[0]?.version||'';if(data.operation&&activeStages.has(data.operation.stage)&&!pending.value){remember(data.operation);open.value=true;schedule();}}
-async function load(check=false){if(busy.value||stopped)return;const timeout=AbortSignal.timeout(40000);busy.value=true;error.value='';try{const data=await request(check?'/check':'',check?'POST':'GET',check?{}:undefined,timeout);if(stopped)return;receive(data);error.value=data.error||data.catalog_error||data.warning||'';}catch(e){if(!stopped){if(info.value)info.value={...info.value,catalog_stale:true};error.value=timeout.aborted?t('版本检查超时，请重试'):(e as Error).message;}}finally{if(!stopped)busy.value=false;}}
+async function load(check=false){if(busy.value||stopped)return;const timeout=AbortSignal.timeout(40000);busy.value=true;error.value='';try{const data=await request(check?'/check':'',check?'POST':'GET',check?{}:undefined,timeout);if(stopped)return;receive(data);error.value=data.error||data.catalog_error||data.warning||'';}catch(e){if(!stopped){if(info.value)info.value={...info.value,catalog_stale:true};error.value=timeout.aborted?t('版本检查超时，请重试'):errorMessage(e);}}finally{if(!stopped)busy.value=false;}}
 async function toggle(){open.value=!open.value;if(open.value&&!running.value)await load();}
 function schedule(){clearTimeout(timer);if(!stopped&&pending.value)timer=setTimeout(poll,countdown.value===null?2000:1000);}
 async function poll(){
@@ -69,7 +70,7 @@ async function apply(){
  const op:VersionOperation={action,version,expected_version:current.value,request_id:crypto.randomUUID(),stage:'queued',started_at:Math.floor(Date.now()/1000)};
  remember(op);confirm.value=null;busy.value=true;error.value='';countdownUntil=0;waiting.value=false;
  try{const response=await request('/apply','POST',{action:op.action,version:op.version,expected_version:op.expected_version,request_id:op.request_id});info.value={...info.value!,operation:response};}
- catch(e){const status=(e as Error&{status?:number}).status;if(status&&status<500){error.value=(e as Error).message;remember(null);}else{error.value=t('连接暂时中断，正在确认更新状态');}}
+ catch(e){const status=(e as Error&{status?:number}).status;if(status&&status<500){error.value=errorMessage(e);remember(null);}else{error.value=t('连接暂时中断，正在确认更新状态');}}
  finally{busy.value=false;schedule();}
 }
 function close(){if(!running.value)open.value=false;confirm.value=null;}

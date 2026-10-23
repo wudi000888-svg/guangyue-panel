@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useApi, isCancelled } from "./lib/api";
+import { useApi, isCancelled, errorMessage } from "./lib/api";
 import { latestRequest } from "./lib/requests";
 const api = useApi("/messages");
 const loadRequest = latestRequest();
@@ -24,11 +24,11 @@ const date=(v:number)=>new Date(v*1000).toLocaleString(locale.value);
 async function load(more=false){
  const request=loadRequest.start();loading.value=true;error.value='';
  try{const v=await api('?folder='+folder.value+(folder.value==='inbox'&&unreadOnly.value?'&unread=1':'')+(more?'&before='+next.value:''),'GET',undefined,{signal:request.signal});if(!loadRequest.isCurrent(request))return;items.value=more?[...items.value,...v.items]:v.items;next.value=v.next_before;}
- catch(e){if(loadRequest.isCurrent(request)&&!isCancelled(e))error.value=(e as Error).message;}
+ catch(e){if(loadRequest.isCurrent(request)&&!isCancelled(e))error.value=errorMessage(e);}
  finally{if(loadRequest.isCurrent(request))loading.value=false;}
 }
 onUnmounted(()=>loadRequest.cancel());
-async function action(fn:()=>Promise<void>){if(busy.value)return;busy.value=true;error.value='';notice.value='';try{await fn();emit('refresh');}catch(e){if(!isCancelled(e))error.value=(e as Error).message;}finally{busy.value=false;}}
+async function action(fn:()=>Promise<void>){if(busy.value)return;busy.value=true;error.value='';notice.value='';try{await fn();emit('refresh');}catch(e){if(!isCancelled(e))error.value=errorMessage(e);}finally{busy.value=false;}}
 async function open(m:Message,event:MouseEvent){if(busy.value)return;messageTrigger=event.currentTarget as HTMLElement;selected.value=m;await nextTick();messageDetail.value?.focus({preventScroll:true});if(folder.value!=='sent'&&!m.read_at)await action(async()=>{await api('/'+m.id+'/read','POST',{});m.read_at=Math.floor(Date.now()/1000);});}
 async function returnToList(){selected.value=null;await nextTick();if(messageTrigger?.isConnected)messageTrigger.focus({preventScroll:true});else searchInput.value?.focus({preventScroll:true});}
 async function markAll(){await action(async()=>{await api('/read-all','POST',{});await load();notice.value='已全部标为已读';});}

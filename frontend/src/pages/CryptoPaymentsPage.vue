@@ -6,7 +6,7 @@ import WalletPortfolioGallery from '../components/WalletPortfolioGallery.vue';
 import type {CryptoWallet} from '../lib/cryptoWallet';
 import type {WalletAction} from '../lib/walletGallery';
 import {applyWalletList,applyWalletListChange,type WalletListChange} from '../lib/cryptoWalletList';
-import { useApi, isCancelled } from '../lib/api';
+import { useApi, isCancelled, errorMessage } from '../lib/api';
 import { cryptoWorkspaceReadiness, cryptoWorkspaceSections, type CryptoWorkspaceSectionID } from '../lib/cryptoModule';
 import type { CryptoSettings } from '../lib/cryptoPayments';
 import { t } from '../i18n';
@@ -36,8 +36,8 @@ async function load(){
  const sequence=++loadSequence,walletRequest=walletSequence;loading.value=true;error.value='';
  const [status,list]=await Promise.allSettled([api<CryptoSettings>('/setup/status'),api<{items:CryptoWallet[]}>('/wallets')]);
  if(sequence!==loadSequence)return;
- if(status.status==='fulfilled')settings.value=status.value;else if(!isCancelled(status.reason))error.value=t((status.reason as Error).message);
- if(list.status==='fulfilled'&&walletRequest===walletSequence){wallets.value=applyWalletList(list.value,wallets.value).wallets;if(selectedWalletId.value&&!wallets.value.some(wallet=>wallet.id===selectedWalletId.value)){selectedWalletId.value='';detailsOpen.value=false}}else if(list.status==='rejected'&&!isCancelled(list.reason))error.value=[error.value,t((list.reason as Error).message)].filter(Boolean).join(' ');
+ if(status.status==='fulfilled')settings.value=status.value;else if(!isCancelled(status.reason))error.value=errorMessage(status.reason);
+ if(list.status==='fulfilled'&&walletRequest===walletSequence){wallets.value=applyWalletList(list.value,wallets.value).wallets;if(selectedWalletId.value&&!wallets.value.some(wallet=>wallet.id===selectedWalletId.value)){selectedWalletId.value='';detailsOpen.value=false}}else if(list.status==='rejected'&&!isCancelled(list.reason))error.value=[error.value,errorMessage(list.reason)].filter(Boolean).join(' ');
  loading.value=false;
 }
 onMounted(() => { void load(); });

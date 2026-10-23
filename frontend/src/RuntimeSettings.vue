@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useApi, isCancelled } from "./lib/api";
+import { useApi, isCancelled, errorMessage } from "./lib/api";
 const api = useApi();
 import { latestRequest } from "./lib/requests";
 const loadRequest = latestRequest();
@@ -12,8 +12,8 @@ type RuntimeSettings = {mode:RuntimeMode;revision:string;applied:boolean;changed
 const emit=defineEmits<{updated:[]}>();
 const current=ref<RuntimeSettings|null>(null),selected=ref<RuntimeMode>('normal'),busy=ref(false),error=ref(''),saved=ref(false);
 const changed=computed(()=>!!current.value && (selected.value!==current.value.mode || !current.value.applied));
-async function load(){const request=loadRequest.start();error.value='';try{const v=await api<RuntimeSettings>('/runtime-settings','GET',undefined,{signal:request.signal});if(!loadRequest.isCurrent(request))return false;current.value=v;selected.value=v.mode;emit('updated');return true;}catch(e){if(loadRequest.isCurrent(request)&&!isCancelled(e)){current.value=null;error.value=(e as Error).message;}return false;}}
-async function save(){if(busy.value||!current.value)return;busy.value=true;loadRequest.cancel();error.value='';saved.value=false;try{const v=await api<RuntimeSettings>('/runtime-settings','PUT',{mode:selected.value,revision:current.value.revision});current.value=v;selected.value=v.mode;saved.value=!!v.applied;emit('updated');if(!v.applied)error.value='运行模式尚未完整生效，请重新加载后重试';}catch(e){if(!isCancelled(e)){const message=(e as Error).message;const known=await load();error.value=known?message:message+' · '+t('当前生效状态未知，请重新加载');}}finally{busy.value=false;}}
+async function load(){const request=loadRequest.start();error.value='';try{const v=await api<RuntimeSettings>('/runtime-settings','GET',undefined,{signal:request.signal});if(!loadRequest.isCurrent(request))return false;current.value=v;selected.value=v.mode;emit('updated');return true;}catch(e){if(loadRequest.isCurrent(request)&&!isCancelled(e)){current.value=null;error.value=errorMessage(e);}return false;}}
+async function save(){if(busy.value||!current.value)return;busy.value=true;loadRequest.cancel();error.value='';saved.value=false;try{const v=await api<RuntimeSettings>('/runtime-settings','PUT',{mode:selected.value,revision:current.value.revision});current.value=v;selected.value=v.mode;saved.value=!!v.applied;emit('updated');if(!v.applied)error.value='运行模式尚未完整生效，请重新加载后重试';}catch(e){if(!isCancelled(e)){const message=errorMessage(e);const known=await load();error.value=known?message:message+' · '+t('当前生效状态未知，请重新加载');}}finally{busy.value=false;}}
 watch(selected,()=>{saved.value=false});
 onMounted(load);
 </script>

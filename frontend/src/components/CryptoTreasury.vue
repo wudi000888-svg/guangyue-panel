@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import {computed,nextTick,onMounted,onUnmounted,ref,watch} from 'vue';
 import {ArrowUpRight,Check,ChevronDown,Coins,History,LoaderCircle,RefreshCw,Settings2,WalletCards,X} from 'lucide-vue-next';
-import {useApi,isCancelled,ApiError,onSessionExpired,onAccessDenied} from '../lib/api';
+import {useApi,isCancelled,ApiError,onSessionExpired,onAccessDenied, errorMessage } from '../lib/api';
 import {operationID,stamp} from '../lib/commerce';
 import {tokenAmount,cryptoOperationsSupported,type CryptoSettings} from '../lib/cryptoPayments';
 import {canSignSweep,previewFundingFees,previewGasFees,previewTotalCost,previewFundingShortfall,sweepStateText,sweepJobStateText,sweepFinished,treasuryChains,treasuryChainID,treasurySweepInput,treasuryPreviewMatches,treasuryFeeSelection,type SweepFeeMode,type SweepPreview,type SweepJob} from '../lib/cryptoTreasury';
@@ -35,7 +35,7 @@ const assets=computed(()=>settings.value?.assets.filter(a=>a.chain_id===chain.va
 const dialog=ref<HTMLDialogElement>(),action=ref<'sweep'|'retry'|'cancel'|''>(''),retryJob=ref<SweepJob>(),assetID=ref(''),destination=ref(''),threshold=ref('0.1'),password=ref(''),preview=ref<SweepPreview>(),formError=ref(''),withdrawalError=ref(''),busy=ref(false),previewLoading=ref(false),now=ref(Date.now()/1000);
 const quoteReady=ref(false),feeMode=ref<SweepFeeMode>('standard'),customGwei=ref('');
 const asset=computed(()=>assets.value.find(a=>a.id===assetID.value));
-const feeInputError=computed(()=>{try{treasuryFeeSelection(chain.value,feeMode.value,customGwei.value);return ''}catch(reason){return (reason as Error).message}});
+const feeInputError=computed(()=>{try{treasuryFeeSelection(chain.value,feeMode.value,customGwei.value);return ''}catch(reason){return errorMessage(reason)}});
 const draftPreview=ref<SweepPreview>(),draftLoading=ref(false),draftError=ref('');
 const gasSnapshot=ref<CryptoGasSnapshot>(),gasLoading=ref(false),gasError=ref('');
 const estimator=createSweepEstimator((path,method,body,options)=>api<SweepPreview>(path,method,body,options),state=>{draftPreview.value=state.preview;draftLoading.value=state.loading;draftError.value=state.error});
@@ -72,7 +72,7 @@ async function loadSettings(){
     if(!readable()||!settingsRequests.isCurrent(request))return;
     settings.value=value;settingsError.value='';
     await nextTick();await refresh();applyRequestedAction();
-  }catch(reason){if(readable()&&settingsRequests.isCurrent(request)&&!isCancelled(reason))settingsError.value=t((reason as Error).message)}
+  }catch(reason){if(readable()&&settingsRequests.isCurrent(request)&&!isCancelled(reason))settingsError.value=errorMessage(reason)}
 }
 function loadJobs():Promise<void>{
   if(!readable()||!walletID.value)return Promise.resolve();
@@ -80,7 +80,7 @@ function loadJobs():Promise<void>{
   const request=jobRequests.start(),wid=walletID.value;jobsLoading.value=true;lastJobs=Date.now();
   const flight=(async()=>{
     try{const value=await api<{items:SweepJob[]}>('/sweeps?wallet_id='+encodeURIComponent(wid),'GET',undefined,{signal:request.signal});if(!readable()||!jobRequests.isCurrent(request))return;jobs.value=value.items;jobsError.value=''}
-    catch(reason){if(readable()&&jobRequests.isCurrent(request)&&!isCancelled(reason))jobsError.value=t((reason as Error).message)}
+    catch(reason){if(readable()&&jobRequests.isCurrent(request)&&!isCancelled(reason))jobsError.value=errorMessage(reason)}
     finally{if(jobRequests.isCurrent(request)){jobsLoading.value=false;jobFlight=undefined}}
   })();
   jobFlight=flight;return flight;
@@ -106,7 +106,7 @@ async function open(kind:'sweep'|'retry'|'cancel',job?:SweepJob){
   if(busy.value||!wallet.value||wallet.value.mode!=='hot')return;
   withdrawalError.value='';
   let frozen:SweepPreview|undefined;
-  if(kind==='sweep')try{body();frozen=estimator.freeze();if(!frozen)throw new Error(t('请等待有效费用预估后再核对转账'))}catch(reason){withdrawalError.value=t((reason as Error).message);return}
+  if(kind==='sweep')try{body();frozen=estimator.freeze();if(!frozen)throw new Error(t('请等待有效费用预估后再核对转账'))}catch(reason){withdrawalError.value=errorMessage(reason);return}
   withdrawalDialog.value?.close();withdrawalOpen.value=false;
   generation++;action.value=kind;retryJob.value=job;formError.value='';password.value='';preview.value=frozen;quoteReady.value=!!frozen;pending=undefined;estimator.cancel();
   trigger=kind==='sweep'?drawerTrigger||document.activeElement as HTMLElement:document.activeElement as HTMLElement;drawerTrigger=null;await nextTick();dialog.value?.showModal();
@@ -123,7 +123,7 @@ async function estimate(){
     const frozen=estimator.freeze();
     if(!frozen)throw new Error(t(estimator.getState().error||draftPreview.value?.unavailable_reason||'暂不满足提取条件'));
     preview.value=frozen;quoteReady.value=true;now.value=Date.now()/1000;
-  }catch(reason){if(!disposed&&context===generation&&!isCancelled(reason))formError.value=t((reason as Error).message)}
+  }catch(reason){if(!disposed&&context===generation&&!isCancelled(reason))formError.value=errorMessage(reason)}
   finally{if(context===generation)previewLoading.value=false}
 }
 async function submit(){
@@ -145,7 +145,7 @@ async function submit(){
     pending=undefined;if(context===generation)close();
     notice.value=kind==='cancel'?t('任务已安全结束，历史交易与实际费用记录会保留。'):t('提取任务已提交，链上最终确认后才会显示完成。');
     await loadJobs();
-  }catch(reason){if(!disposed&&context===generation&&!isCancelled(reason)){formError.value=t((reason as Error).message);if(reason instanceof ApiError&&reason.status<500)pending=undefined;void loadJobs()}}
+  }catch(reason){if(!disposed&&context===generation&&!isCancelled(reason)){formError.value=errorMessage(reason);if(reason instanceof ApiError&&reason.status<500)pending=undefined;void loadJobs()}}
   finally{password.value='';busy.value=false}
 }
 async function copy(value:string){try{await navigator.clipboard.writeText(value);copyError.value='';notice.value=t('已复制')}catch{copyError.value=t('复制失败，请手动选择内容')}}

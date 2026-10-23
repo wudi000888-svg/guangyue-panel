@@ -3961,5 +3961,6 @@
   "请选择费用档位": "Choose a fee option",
   "Gas 单价必须大于零": "Gas price must be greater than zero",
   "归集与 Gas 规则": "Collection and Gas rules",
-  "费用说明": "Fee details"
+  "费用说明": "Fee details",
+  "网络连接失败，请检查网络后重试": "Network connection failed. Check your network and try again."
 }

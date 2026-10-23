@@ -7,7 +7,7 @@ import { Mail, Globe2, KeyRound, LayoutDashboard, Database, QrCode, RadioTower, 
 import { bytes, date, duration, exitName } from "../lib/format";
 import { useSubscription } from "./useSubscription";
 import { useSidebarCustomization } from './useSidebarCustomization';
-import { useApi, ApiError, downloadBlob, invalidateSession, onSessionExpired, isCancelled, setRemoteSite, getRemoteSite, requestGeneration } from "../lib/api";
+import { useApi, ApiError, downloadBlob, invalidateSession, onSessionExpired, isCancelled, setRemoteSite, getRemoteSite, requestGeneration, errorMessage } from "../lib/api";
 import { runQueued } from "../lib/tasks";
 import { latestRequest, serialPoll } from "../lib/requests";
 import { NodeSaveUncertain, saveNodeRecovering, upsertSavedNode } from "../lib/nodeSave";
@@ -55,7 +55,7 @@ const userSearch = ref(""),
   modal = ref(""),
   editingID = ref(0);
 const plans=ref<Plan[]>([]),nodeGroups=ref<NodeGroup[]>([]),groupMembers=ref<Record<string,import("../types").GroupMember[]>>({});
-async function loadEntitlements(){try{const [p,g]=await Promise.all([api<{plans:Plan[]}>("/plans"),api<{groups:NodeGroup[];members:Record<string,import("../types").GroupMember[]>}>("/node-groups")]);plans.value=p.plans;nodeGroups.value=g.groups;groupMembers.value=g.members;}catch(e){if(!isCancelled(e))error.value=(e as Error).message;}}
+async function loadEntitlements(){try{const [p,g]=await Promise.all([api<{plans:Plan[]}>("/plans"),api<{groups:NodeGroup[];members:Record<string,import("../types").GroupMember[]>}>("/node-groups")]);plans.value=p.plans;nodeGroups.value=g.groups;groupMembers.value=g.members;}catch(e){if(!isCancelled(e))error.value=errorMessage(e);}}
 const userForm = reactive({
  plan_id:"",
   username: "",
@@ -225,7 +225,7 @@ async function loadPrivateSources() {
   privateSourcesLoading.value = true;
   privateSourcesRequest = (async () => {
     try { receivePrivateSources((await api('/import-sources')).items); }
-    catch (e) { if (!isCancelled(e)) privateSourcesError.value = (e as Error).message; }
+    catch (e) { if (!isCancelled(e)) privateSourcesError.value = errorMessage(e); }
     finally { privateSourcesLoading.value = false; privateSourcesRequest = null; }
   })();
   return privateSourcesRequest;
@@ -511,7 +511,7 @@ async function refresh(silent = false) {
     if (stateRequest.isCurrent(request) && !subUser.value && state.value) subUser.value = state.value.me.id;
     return true;
   } catch (e) {
-    if (!isCancelled(e) && !silent && state.value) error.value = (e as Error).message;
+    if (!isCancelled(e) && !silent && state.value) error.value = errorMessage(e);
     return false;
   } finally {
     if (stateRequest.isCurrent(request)) ready.value = true;
@@ -548,7 +548,7 @@ async function task(fn: () => Promise<void>) {
   try {
     await fn();
   } catch (e) {
-    if (generation===requestGeneration() && !isCancelled(e)) error.value = (e as Error).message;
+    if (generation===requestGeneration() && !isCancelled(e)) error.value = errorMessage(e);
   } finally {
     if(generation===requestGeneration()) busy.value = false;
   }

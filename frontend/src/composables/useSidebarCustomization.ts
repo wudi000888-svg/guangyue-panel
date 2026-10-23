@@ -1,5 +1,5 @@
 import { computed, onScopeDispose, ref, shallowRef, watch, type Ref } from 'vue';
-import { ApiError, isCancelled, type api as panelAPI } from '../lib/api';
+import { ApiError, isCancelled, type api as panelAPI, errorMessage } from '../lib/api';
 import { DEFAULT_ADMIN_SIDEBAR, DEFAULT_MEMBER_SIDEBAR } from '../lib/navigation';
 import { t } from '../i18n';
 import type { SiteSettings } from '../types';
@@ -97,7 +97,7 @@ export function useSidebarCustomization(options: {
         const values = remaining(change);
         if (Object.keys(values).length) {
           failed.push({ ...change, values });
-          error.value = t(confirmed ? '侧边栏保存失败，已恢复已确认的入口。' : '侧边栏保存未确认，请重试。') + ' ' + (reason instanceof Error ? reason.message : String(reason));
+          error.value = t(confirmed ? '侧边栏保存失败，已恢复已确认的入口。' : '侧边栏保存未确认，请重试。') + ' ' + (errorMessage(reason));
         }
       }
     } finally {

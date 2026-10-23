@@ -5,7 +5,7 @@ import { usePanelContext } from '../composables/panelContext';
 import { serialPoll } from '../lib/requests';
 import { stamp } from '../lib/commerce';
 import { hasSettlingDelivery } from '../lib/email';
-import { isCancelled } from '../lib/api';
+import { isCancelled, errorMessage } from '../lib/api';
 import { t } from '../i18n';
 type MailConfig = { enabled: boolean; host: string; port: number; tls_mode: 'tls' | 'starttls'; username: string; from_email: string; from_name: string; has_password: boolean; registration_verification: boolean; order_notifications: boolean; version: number };
 type Delivery = { id: string; to: string; kind: string; state: string; attempts: number; next_attempt: number; last_error: string; created: number; sent_at: number };
@@ -13,7 +13,7 @@ const { api } = usePanelContext();
 const form = ref<MailConfig | null>(null), smtpPassword = ref(''), adminPassword = ref(''), recipient = ref('');
 const deliveries = ref<Delivery[]>([]), error = ref(''), notice = ref(''), busy = ref(false), loading = ref(true);
 let disposed = false;
-function fail(e: unknown) { if (!isCancelled(e) && !disposed) error.value = t(e instanceof Error ? e.message : '请求失败'); }
+function fail(e: unknown) { if (!isCancelled(e) && !disposed) error.value = errorMessage(e); }
 async function history() { try { const v = await api<{ items: Delivery[] }>('/email/deliveries'); if (!disposed) deliveries.value = v.items; } catch (e) { fail(e); } }
 // Only poll while a delivery can still change state, and never in a hidden tab.
 const poll = serialPoll(async () => { if (!document.hidden && !busy.value && hasSettlingDelivery(deliveries.value)) await history(); }, () => 5000);

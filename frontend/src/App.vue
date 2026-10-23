@@ -17,7 +17,7 @@ import { router } from "./router";
 import LanguageSwitcher from "./LanguageSwitcher.vue";
 const RegistrationCaptcha = defineAsyncComponent(() => import("./components/RegistrationCaptcha.vue"));
 const AccessBlocked = defineAsyncComponent(() => import("./components/AccessBlocked.vue"));
-import { onAccessDenied, isSiteAccessStatus, isCancelled, type AccessDenial, type SiteAccessStatus } from "./lib/api";
+import { onAccessDenied, isSiteAccessStatus, isCancelled, type AccessDenial, type SiteAccessStatus, errorMessage } from "./lib/api";
 import { readEmailProof, clearEmailProof } from './lib/email';
 
 const panel = usePanel();
@@ -44,7 +44,7 @@ async function sendRegistrationEmail() {
   try {
     const v = await api<{message:string}>('/email/registration', 'POST', { email: registration.email });
     emailNotice.value = t(v.message);
-  } catch (e) { error.value = t((e as Error).message); }
+  } catch (e) { error.value = errorMessage(e); }
   finally { sendingEmail.value = false; }
 }
 async function emailAvailability() {
@@ -77,7 +77,7 @@ async function retryAccess() {
     if (!isSiteAccessStatus(status)) throw new Error(t('服务器响应无效，请稍后重试'));
     if (status.allowed) window.location.reload();
     else accessDenial.value = { ...status, access_denied: true } as AccessDenial;
-  } catch (reason) { accessError.value = reason instanceof Error ? reason.message : t('请求失败'); }
+  } catch (reason) { accessError.value = errorMessage(reason); }
   finally { accessRetrying.value = false; }
 }
 const permittedNav = computed(() => nav.value.filter(item => allowedRoute(router.resolve('/' + item.id).meta, {
@@ -135,7 +135,7 @@ async function refreshPanel() {
   if (refreshing.value) return;
   refreshing.value = true;
   try { await refresh(); }
-  catch (reason) { error.value = reason instanceof Error ? reason.message : String(reason); }
+  catch (reason) { error.value = errorMessage(reason); }
   finally { refreshing.value = false; }
 }
 watch(registerMode, () => { showPassword.value = false; showConfirmPassword.value = false; error.value = ''; });

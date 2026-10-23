@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useApi, isCancelled } from "./lib/api";
+import { useApi, isCancelled, errorMessage } from "./lib/api";
 const api = useApi();
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { Activity, ArrowUpRight, CalendarDays, CheckCircle2, Clock3, Database, Download, Globe2, RadioTower, RefreshCw, Layers3, Network, Server, ShieldCheck, TriangleAlert, Users, Zap } from 'lucide-vue-next';
@@ -64,7 +64,7 @@ const inspected=computed(()=>activePoint.value===null?null:buckets.value[activeP
 const labels=computed(()=>[0,.25,.5,.75,1].map(p=>buckets.value[Math.round(p*(buckets.value.length-1))]?.at).filter((v):v is number=>v!==undefined));
 const auditName=(action:string)=>t(({initialize:'初始化',fetch_public_sources:'抓取公共来源',public_pool_cycle:'公共代理筛选',public_pool_settings:'公共采集策略',save_ip:'保存 IP 资源',delete_ip:'删除 IP 资源',save_node:'应用节点',delete_node:'删除节点',create_user:'创建成员',delete_user:'删除成员','refresh-import-source':'订阅来源自动更新','create-import-source':'添加订阅来源','delete-import-source':'删除订阅来源','update-settings':'更新系统设置',quality_test:'IP 质量检测',speed_test:'出口测速','send-message':'发送站内信'} as Record<string,string>)[action]|| (action.startsWith('update_user')?'更新成员':action));
 let controller:AbortController|undefined,timer:ReturnType<typeof setInterval>|undefined,sequence=0;
-async function load(){const seq=++sequence;controller?.abort();controller=new AbortController();loading.value=true;error.value='';try{const value=await api<Data>('/dashboard?range='+period.value+'&tz='+(-new Date().getTimezoneOffset()),'GET',undefined,{signal:controller.signal});if(seq===sequence)data.value=value;}catch(e){if(seq===sequence&&!isCancelled(e))error.value=(e as Error).message}finally{if(seq===sequence)loading.value=false}}
+async function load(){const seq=++sequence;controller?.abort();controller=new AbortController();loading.value=true;error.value='';try{const value=await api<Data>('/dashboard?range='+period.value+'&tz='+(-new Date().getTimezoneOffset()),'GET',undefined,{signal:controller.signal});if(seq===sequence)data.value=value;}catch(e){if(seq===sequence&&!isCancelled(e))error.value=errorMessage(e)}finally{if(seq===sequence)loading.value=false}}
 watch(period,()=>{activePoint.value=null;load()});
 onMounted(()=>{load();timer=setInterval(()=>{if(!document.hidden&&!loading.value)load()},30000)});
 onUnmounted(()=>{sequence++;controller?.abort();clearInterval(timer)});

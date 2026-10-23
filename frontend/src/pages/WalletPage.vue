@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { errorMessage } from '../lib/api';
 import { useRoute } from 'vue-router';
 import PageHeading from '../components/PageHeading.vue';
 import { supportsPaymentPurpose } from '../lib/cryptoPayments';
@@ -25,20 +26,20 @@ let sequence=0,paymentSequence=0,disposed=false,expanded=false;
 async function load(manual=true){const current=++sequence,user=selected.value;if(manual){loading.value=true;error.value=''}try{const [w,v]=await Promise.all([read<Wallet>('/wallet?user_id='+user),read<{items:MoneyTransaction[]}>('/transactions?user_id='+user)]);if(current===sequence&&!disposed){if(w)wallet.value=w;if(v){items.value=mergeHistory(items.value,v.items);if(!expanded)hasMore.value=v.items.length>=50}}}finally{if(current===sequence)loading.value=false}}
 async function more(){if(!items.value.length||loadingMore.value)return;const current=sequence,user=selected.value;loadingMore.value=true;try{const v=await read<{items:MoneyTransaction[]}>('/transactions?user_id='+user+'&before='+encodeURIComponent(items.value.at(-1)!.id));if(v&&selected.value===user&&current===sequence&&!disposed){items.value=mergeHistory(items.value,v.items);hasMore.value=v.items.length>=50;expanded=true}}finally{loadingMore.value=false}}
 async function redeem(){if(!moduleEnabled.value)return;const v=await run('/redeem',{code:code.value});if(v){code.value='';notice.value=t('兑换成功，余额已到账');const ownID=state.value?.me.id||selected.value;if(selected.value===ownID)await load();else selected.value=ownID}}
-async function adjust(){let value:string;try{value=cents(amount.value)}catch(e){error.value=(e as Error).message;return}const v=await run('/adjust',{user_id:selected.value,amount:value,kind:kind.value,reason:reason.value});if(v){amount.value='';reason.value='';notice.value=t('余额调整已完成');await load()}}
+async function adjust(){let value:string;try{value=cents(amount.value)}catch(e){error.value=errorMessage(e);return}const v=await run('/adjust',{user_id:selected.value,amount:value,kind:kind.value,reason:reason.value});if(v){amount.value='';reason.value='';notice.value=t('余额调整已完成');await load()}}
 async function loadPayments(){const current=++paymentSequence;checkingPayments.value=true;try{const result=await read<{items:PaymentAttempt[]}>('/payments');if(!result||disposed||current!==paymentSequence)return;const completed=result.items.some(p=>p.purpose==='topup'&&p.user_id===state.value?.me.id&&p.state==='completed'&&payments.value.some(old=>old.id===p.id&&old.state!=='completed'));payments.value=result.items;paymentsLoaded.value=true;if(completed){walletRevision.value++;notice.value=t('在线充值已到账');paymentURL.value='';await load(false)}}finally{if(current===paymentSequence)checkingPayments.value=false}}
 async function loadMethods(){const result=await read<{items:PaymentMethod[]}>('/payment-methods');if(result&&!disposed){methodsLoaded.value=true;methods.value=result.items.filter(p=>p.enabled&&p.checkout&&!p.archived&&supportsPaymentPurpose(p,'topup'));if(!methods.value.some(p=>p.id===paymentMethod.value))paymentMethod.value=methods.value[0]?.id||''}}
-function resume(payment:PaymentAttempt){if(busy.value||!moduleEnabled.value||!ownWallet.value||!canResumePayment(payment)||!payment.checkout_url)return;try{paymentURL.value=paymentCheckoutURL(payment.checkout_url);preparePaymentWindow().open(paymentURL.value);notice.value=t('请在支付页面完成付款，到账后余额会自动更新。')}catch(e){error.value=(e as Error).message}}
+function resume(payment:PaymentAttempt){if(busy.value||!moduleEnabled.value||!ownWallet.value||!canResumePayment(payment)||!payment.checkout_url)return;try{paymentURL.value=paymentCheckoutURL(payment.checkout_url);preparePaymentWindow().open(paymentURL.value);notice.value=t('请在支付页面完成付款，到账后余额会自动更新。')}catch(e){error.value=errorMessage(e)}}
 async function topup(){
  if(busy.value||!moduleEnabled.value||!ownWallet.value||!paymentMethod.value)return;
- let value:string;try{value=cents(topupAmount.value)}catch(e){error.value=(e as Error).message;return}
+ let value:string;try{value=cents(topupAmount.value)}catch(e){error.value=errorMessage(e);return}
  const existing=topups.value.find(p=>p.provider_id===paymentMethod.value&&p.amount===value&&canResumePayment(p)&&p.checkout_url);
  if(existing){resume(existing);return}
  const popup=preparePaymentWindow();paymentURL.value='';
  try{const result=await run<PaymentCheckout>('/wallet/topup',{amount:value,payment_method:paymentMethod.value});if(!result){popup.close();return}payments.value=mergeHistory(payments.value,[result.attempt]);paymentsLoaded.value=true;
   if(canResumePayment(result.attempt)&&result.checkout_url){paymentURL.value=paymentCheckoutURL(result.checkout_url);popup.open(paymentURL.value);notice.value=t('请在支付页面完成付款，到账后余额会自动更新。')}else{popup.close();notice.value=paymentStateText(result.attempt.state);if(result.attempt.state==='completed'){walletRevision.value++;await load(false)}}
   await loadPayments();
- }catch(e){popup.close();error.value=(e as Error).message}
+ }catch(e){popup.close();error.value=errorMessage(e)}
 }
 async function refreshWallet(){await Promise.all([load(),loadMethods(),loadPayments(),refreshModule()])}
 function returnToWallet(){if(!document.hidden&&!busy.value&&!checkingPayments.value&&!disposed){void loadPayments();void load(false)}}

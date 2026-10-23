@@ -244,3 +244,27 @@ describe('site access denial', () => {
     expect(isSiteAccessStatus({ allowed: true })).toBe(false);
   });
 });
+
+describe('errorMessage', () => {
+  it('maps browser fetch failures to a readable network message', async () => {
+    const { errorMessage, isNetworkError } = await import('./api');
+    for (const message of ['Failed to fetch', 'NetworkError when attempting to fetch resource.', 'Load failed']) {
+      expect(isNetworkError(new TypeError(message))).toBe(true);
+      expect(errorMessage(new TypeError(message))).toBe('网络连接失败，请检查网络后重试');
+    }
+    expect(isNetworkError(new TypeError('x is undefined'))).toBe(false);
+  });
+  it('translates server errors and falls back for unknown values', async () => {
+    const { errorMessage } = await import('./api');
+    const { locale, loadLocaleMessages } = await import('../i18n');
+    await loadLocaleMessages('en');
+    locale.value = 'en';
+    try {
+      expect(errorMessage(new Error('请求失败'))).toBe('Request failed');
+      expect(errorMessage(new ApiError(400, { error: '请求失败' })).toString()).toBe('Request failed');
+      expect(errorMessage(new Error('custom detail'))).toBe('custom detail');
+      expect(errorMessage(undefined)).toBe('Request failed');
+      expect(errorMessage(new TypeError('Failed to fetch'))).toBe('Network connection failed. Check your network and try again.');
+    } finally { locale.value = 'zh-CN'; }
+  });
+});

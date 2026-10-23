@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useApi, isCancelled } from "./lib/api";
+import { useApi, isCancelled, errorMessage } from "./lib/api";
 import { latestRequest } from "./lib/requests";
 const api = useApi("/import-sources");
 const loadRequest = latestRequest();
@@ -24,9 +24,9 @@ const date=(v:number)=>v?new Date(v*1000).toLocaleString(locale.value):t('尚未
 async function load(){
  const request=loadRequest.start();
  try{const result=await api('','GET',undefined,{signal:request.signal});if(!loadRequest.isCurrent(request))return;rows.value=result.items;ready.value=true;error.value='';emit('loaded',rows.value);}
- catch(e){if(loadRequest.isCurrent(request)&&!isCancelled(e))error.value=(e as Error).message;}
+ catch(e){if(loadRequest.isCurrent(request)&&!isCancelled(e))error.value=errorMessage(e);}
 }
-async function action(fn:()=>Promise<void>){if(busy.value)return;busy.value=true;error.value='';notice.value='';deleteResult.value=null;try{await fn();await load();emit('refresh');}catch(e){if(!isCancelled(e))error.value=(e as Error).message;}finally{busy.value=false;}}
+async function action(fn:()=>Promise<void>){if(busy.value)return;busy.value=true;error.value='';notice.value='';deleteResult.value=null;try{await fn();await load();emit('refresh');}catch(e){if(!isCancelled(e))error.value=errorMessage(e);}finally{busy.value=false;}}
 function edit(source?:Source){Object.assign(form,{id:source?.id||'',name:source?.name||'',url:'',enabled:source?.enabled??true,revision:source?.revision||''});editing.value=true;error.value='';}
 async function save(){await action(async()=>{await api(form.id?'/'+form.id:'',form.id?'PUT':'POST',{name:form.name,url:form.url,enabled:form.enabled,revision:form.revision});editing.value=false;form.url='';notice.value=form.id?'订阅来源已保存':'订阅来源已保存，首次更新已排队';});}
 async function refresh(source:Source){await action(async()=>{await api('/'+source.id+'/refresh','POST',{});notice.value='更新已排队，后台将依次执行';});}

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
+import { errorMessage } from '../lib/api';
 import { ArrowRight, Globe2, LoaderCircle, RefreshCw, Search, Tag } from 'lucide-vue-next';
 import { usePanelContext } from '../composables/panelContext';
 import PageHeading from '../components/PageHeading.vue';
@@ -18,7 +19,7 @@ async function load() {
   try {
     const response = await api<{ nodes: SquareNode[] }>('/node-square');
     nodes.value = response.nodes || [];
-  } catch (reason) { error.value = reason instanceof Error ? reason.message : t('请求失败'); }
+  } catch (reason) { error.value = errorMessage(reason); }
   finally { loading.value = false; }
 }
 function nodeKey(node: SquareNode) { return `${node.site_id}:${node.id}`; }
@@ -34,7 +35,7 @@ async function updateVisibility(node: SquareNode, value: boolean) {
     await load();
   } catch (reason) {
     node.square_visible = previous;
-    error.value = reason instanceof Error ? reason.message : t('请求失败');
+    error.value = errorMessage(reason);
   } finally {
     const next = { ...updating.value };
     delete next[key];

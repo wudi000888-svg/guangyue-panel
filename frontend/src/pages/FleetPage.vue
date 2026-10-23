@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
 import { KeyRound, Trash2, Copy, X, Power } from 'lucide-vue-next';
-import { useApi, isCancelled } from '../lib/api';
+import { useApi, isCancelled, errorMessage } from '../lib/api';
 import NodeSharing from '../components/NodeSharing.vue';
 import {useModalFocus} from '../composables/useModalFocus';
 import '../styles/admin-ui.css';
@@ -16,11 +16,11 @@ const removal=ref<Token|null>(null),sharingToken=ref<Token|null>(null);
 const dialog=ref<HTMLElement|null>(null);
 useModalFocus(computed(()=>creating.value||!!removal.value||controlling.value),dialog,close);
 const form=reactive({name:'Pro 主站',scope:'manage',days:90,forever:true});
-async function load(){try{const [out,service]=await Promise.all([api<{site_id:string;tokens:Token[]}>(),local<SiteStatus>("/site-status")]);tokens.value=out.tokens;siteID.value=out.site_id;status.value=service;loaded.value=true;error.value='';}catch(e){if(!isCancelled(e))error.value=(e as Error).message;}}
+async function load(){try{const [out,service]=await Promise.all([api<{site_id:string;tokens:Token[]}>(),local<SiteStatus>("/site-status")]);tokens.value=out.tokens;siteID.value=out.site_id;status.value=service;loaded.value=true;error.value='';}catch(e){if(!isCancelled(e))error.value=errorMessage(e);}}
 function close(){if(busy.value)return;creating.value=false;newToken.value='';copied.value=false;removal.value=null;controlling.value=false;error.value='';}
-async function create(){if(busy.value)return;busy.value=true;error.value='';try{const out=await api<{connection_token:string}>('/tokens','POST',form);newToken.value=out.connection_token;await load();}catch(e){if(!isCancelled(e))error.value=(e as Error).message;}finally{busy.value=false;}}
-async function remove(){if(!removal.value)return;busy.value=true;error.value='';try{await api('/tokens/'+removal.value.id,'DELETE',{});removal.value=null;await load();}catch(e){if(!isCancelled(e))error.value=(e as Error).message;}finally{busy.value=false;}}
-async function control(){if(!status.value)return;busy.value=true;error.value='';try{status.value=await local<SiteStatus>('/site-control','PUT',{paused:!status.value.paused});controlling.value=false;}catch(e){if(!isCancelled(e))error.value=(e as Error).message;}finally{busy.value=false;}}
+async function create(){if(busy.value)return;busy.value=true;error.value='';try{const out=await api<{connection_token:string}>('/tokens','POST',form);newToken.value=out.connection_token;await load();}catch(e){if(!isCancelled(e))error.value=errorMessage(e);}finally{busy.value=false;}}
+async function remove(){if(!removal.value)return;busy.value=true;error.value='';try{await api('/tokens/'+removal.value.id,'DELETE',{});removal.value=null;await load();}catch(e){if(!isCancelled(e))error.value=errorMessage(e);}finally{busy.value=false;}}
+async function control(){if(!status.value)return;busy.value=true;error.value='';try{status.value=await local<SiteStatus>('/site-control','PUT',{paused:!status.value.paused});controlling.value=false;}catch(e){if(!isCancelled(e))error.value=errorMessage(e);}finally{busy.value=false;}}
 async function copy(){try{await navigator.clipboard.writeText(newToken.value);copied.value=true;}catch{error.value=t('剪贴板不可用，请选择内容复制');}}
 onMounted(load);onUnmounted(()=>{newToken.value='';});
 </script>
