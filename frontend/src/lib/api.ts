@@ -124,10 +124,12 @@ async function request<T>(url: string, options: RequestInit, decode: (r: Respons
     options.signal?.removeEventListener('abort', cancel);
   }
 }
+// The control plane's CSRF check requires both headers (plus same Origin) on writes.
+export const JSON_REQUEST_HEADERS: Readonly<Record<string, string>> = { 'Content-Type': 'application/json', 'X-Requested-With': 'guangyue' };
 export function api<T = any>(path: string, method = 'GET', body?: unknown, options: RequestInit = {}): Promise<T> {
   return request('/api' + path, {
     ...options, method,
-    headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'guangyue', ...options.headers },
+    headers: { ...JSON_REQUEST_HEADERS, ...options.headers },
     body: body === undefined ? undefined : JSON.stringify(body),
   }, response => response.json());
 }

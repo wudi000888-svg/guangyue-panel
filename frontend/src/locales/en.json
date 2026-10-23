@@ -3993,5 +3993,6 @@
   "正在读取最近一次预检结果。": "Loading the latest pre-check result.",
   "Pro 主站": "Pro master",
   "这里会实时显示套餐节点权限；成员的流量额度与到期时间保持不变。": "Plan node access is shown here live; member quotas and expiry dates stay unchanged.",
-  "更新订阅": "Update subscription"
+  "更新订阅": "Update subscription",
+  "下载前请验证管理员当前密码。": "Verify the current administrator password to download."
 }

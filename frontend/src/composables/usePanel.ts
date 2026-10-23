@@ -7,7 +7,7 @@ import { Mail, Globe2, KeyRound, LayoutDashboard, Database, QrCode, RadioTower, 
 import { bytes, date, duration, exitName } from "../lib/format";
 import { useSubscription } from "./useSubscription";
 import { useSidebarCustomization } from './useSidebarCustomization';
-import { useApi, ApiError, downloadBlob, invalidateSession, onSessionExpired, isCancelled, setRemoteSite, getRemoteSite, requestGeneration, errorMessage } from "../lib/api";
+import { useApi, ApiError, downloadBlob, JSON_REQUEST_HEADERS, invalidateSession, onSessionExpired, isCancelled, setRemoteSite, getRemoteSite, requestGeneration, errorMessage } from "../lib/api";
 import { runQueued } from "../lib/tasks";
 import { latestRequest, serialPoll } from "../lib/requests";
 import { NodeSaveUncertain, saveNodeRecovering, upsertSavedNode } from "../lib/nodeSave";
@@ -374,7 +374,9 @@ const displayedNodeName = computed(
 const confirmation = ref<{
   title: string;
   detail: string;
-  action: () => Promise<void>;
+  /** Ask for the current administrator password and pass it to action(). */
+  password?: boolean;
+  action: (password: string) => Promise<void>;
 } | null>(null);
 const owner = computed(() => state.value?.me.role === "owner");
 const defaultRealitySNI = computed(() => state.value?.system.reality_sni || "www.cloudflare.com");
@@ -706,9 +708,9 @@ function confirmUser(u: User, action: string) {
     },
   };
 }
-async function confirmed() {
+async function confirmed(password = "") {
   await task(async () => {
-    await confirmation.value?.action();
+    await confirmation.value?.action(password);
     confirmation.value = null;
   });
 }
@@ -975,10 +977,11 @@ async function backup() {
  if(selectedSite.value){error.value=t("请在目标站点直接下载备份");return;}
   confirmation.value = {
     title: t("下载完整备份"),
-    detail: t("备份含账号、节点凭据与恢复密钥，请仅保存在可信设备。"),
-    action: async () => {
+    detail: t("备份含账号、节点凭据与恢复密钥，请仅保存在可信设备。") + " " + t("下载前请验证管理员当前密码。"),
+    password: true,
+    action: async (password: string) => {
       download(
-        await downloadBlob("/api/backup"),
+        await downloadBlob("/api/backup", { method: "POST", headers: JSON_REQUEST_HEADERS, body: JSON.stringify({ password }) }),
         "guangyue-backup-" + new Date().toISOString().slice(0, 10) + ".tar.gz",
       );
       toast(t("备份已下载"));

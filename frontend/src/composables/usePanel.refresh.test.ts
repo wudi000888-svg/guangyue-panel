@@ -72,3 +72,22 @@ it('patches polled fields without invalidating list computeds', async () => {
   expect(panel.users.value).toBe(users);
   expect(panel.filteredNodes.value).toBe(nodes);
 });
+
+it('downloads the backup with the verified administrator password', async () => {
+  const click = vi.fn();
+  vi.stubGlobal('document', {title: '', hidden: false, documentElement: {dataset: {}}, createElement: () => ({click})});
+  vi.stubGlobal('URL', {createObjectURL: () => 'blob:x', revokeObjectURL() {}});
+  const fetch = vi.fn(async (url: string, options: RequestInit) => url === '/api/backup' ? (JSON.parse(String(options.body)).password === 'secret' ? new Response(new Blob(['tar'])) : Response.json({error: '请验证管理员当前密码'}, {status: 403})) : Response.json(fixture()));
+  vi.stubGlobal('fetch', fetch);
+  await panel.refresh(true);
+  await panel.backup();
+  expect(panel.confirmation.value?.password).toBe(true);
+  await panel.confirmed('wrong');
+  expect(panel.error.value).toBe('请验证管理员当前密码');
+  expect(panel.confirmation.value).not.toBeNull();
+  await panel.confirmed('secret');
+  const call = fetch.mock.calls.find(([url, options]) => url === '/api/backup' && JSON.parse(String(options.body)).password === 'secret')!;
+  expect(call[1]).toMatchObject({method: 'POST', headers: {'Content-Type': 'application/json', 'X-Requested-With': 'guangyue'}});
+  expect(click).toHaveBeenCalledTimes(1);
+  expect(panel.confirmation.value).toBeNull();
+});
