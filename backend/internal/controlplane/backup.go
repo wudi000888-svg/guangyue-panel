@@ -34,11 +34,11 @@ func fileDigest(path string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-// Hold the control-plane lock only while capturing the database and its key.
-// Hashing, compression and slow-client writes use files and bounded buffers.
+// The database snapshot is transactionally consistent on its own and the
+// master key never changes after first start, so the control lock is not
+// held: a large Pro database no longer freezes every request for minutes.
+// heavyMu (taken by the caller) keeps backups from running concurrently.
 func (a *App) backupSnapshot(dir string) error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	if err := a.store.db.Snapshot(ctx, filepath.Join(dir, "panel.db")); err != nil {
