@@ -494,10 +494,12 @@ func (a *App) runPaymentWorker(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		a.mu.Lock()
-		_ = a.paymentWork()
-		a.mu.Unlock()
-		_ = a.paymentRefundWork(ctx)
+		a.runWorker("支付到账处理", func() error {
+			a.mu.Lock()
+			defer a.mu.Unlock()
+			return a.paymentWork()
+		})
+		a.runWorker("原路退款", func() error { return a.paymentRefundWork(ctx) })
 		select {
 		case <-ctx.Done():
 			return

@@ -26,8 +26,8 @@ func (a *App) runCryptoPaymentWorker(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		_ = a.refreshCryptoAutoRates(ctx)
-		_ = a.cryptoPaymentWork(ctx)
+		a.runWorker("加密汇率刷新", func() error { return a.refreshCryptoAutoRates(ctx) })
+		a.runWorker("加密收款扫描", func() error { return a.cryptoPaymentWork(ctx) })
 		select {
 		case <-ctx.Done():
 			return
@@ -81,7 +81,7 @@ func (a *App) cryptoPaymentWork(ctx context.Context) error {
 			defer func() { <-slots }()
 			scanCtx, cancel := context.WithTimeout(ctx, 45*time.Second)
 			defer cancel()
-			e := a.scanCryptoInvoice(scanCtx, v)
+			e := safeCall("加密订单扫描", func() error { return a.scanCryptoInvoice(scanCtx, v) })
 			if e != nil {
 				_, _ = a.store.db.Exec("UPDATE crypto_invoices SET last_scan=?,scan_error=? WHERE id=?", time.Now().Unix(), "网络核验暂未完成，款项记录保留并继续重试", v.ID)
 			}
@@ -339,6 +339,9 @@ func (a *App) applyCryptoScan(id string, chainID, from int64, to uint64, next in
 		if chainID == cryptoSolanaChainID {
 			sender = l.Topics[1]
 		} else {
+			if len(l.Topics) < 2 || len(l.Topics[1]) < 42 {
+				return errors.New("转账日志缺少发送方")
+			}
 			sender = "0x" + l.Topics[1][len(l.Topics[1])-40:]
 			recipient = strings.ToLower(v.Address)
 		}

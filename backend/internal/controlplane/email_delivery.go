@@ -256,7 +256,7 @@ func (a *App) runEmailWorker(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		_ = a.emailTick(ctx)
+		a.runWorker("邮件发送", func() error { return a.emailTick(ctx) })
 		select {
 		case <-ctx.Done():
 			return

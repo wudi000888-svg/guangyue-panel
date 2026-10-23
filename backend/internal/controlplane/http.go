@@ -327,7 +327,9 @@ func (a *App) state(w http.ResponseWriter, r *http.Request, actor Record) {
 		system["node_save_receipts"] = true
 		system["reality_sni"] = a.cfg.RealitySNI
 		system["hy2_old_connections"] = a.oldHYConnections
-		system["services"] = []object{{"name": "Xray", "active": a.cfg.Dev || corePID("guangyue-xray.service") > 0}, {"name": "Hysteria2", "active": a.cfg.Dev || corePID("guangyue-hy2.service") > 0}, a.gatewayServiceStatus()}
+		xrayUp, hy2Up := a.coreServicesActive()
+		system["services"] = []object{{"name": "Xray", "active": a.cfg.Dev || xrayUp}, {"name": "Hysteria2", "active": a.cfg.Dev || hy2Up}, a.gatewayServiceStatus()}
+		system["worker_errors"] = a.workers.snapshot()
 	}
 	history := []object{}
 	query := "SELECT hour,SUM(upload),SUM(download) FROM traffic WHERE hour>=?"

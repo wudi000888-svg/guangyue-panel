@@ -446,6 +446,21 @@ func (a *App) hyRequest(method, path string, body any) ([]byte, error) {
 	return io.ReadAll(io.LimitReader(resp.Body, 2<<20))
 }
 
+type coreServiceState struct {
+	xray, hy2 bool
+	at        time.Time
+}
+
+// coreServicesActive reports whether Xray and HY2 are running, reusing the
+// control loop's reading when it is recent instead of spawning systemctl
+// for every dashboard request.
+func (a *App) coreServicesActive() (bool, bool) {
+	if s := a.coreServices.Load(); s != nil && time.Since(s.at) < 15*time.Second {
+		return s.xray, s.hy2
+	}
+	return corePID("guangyue-xray.service") > 0, corePID("guangyue-hy2.service") > 0
+}
+
 // counterSample is one read of the cores' cumulative traffic counters.
 type counterSample struct {
 	counters []Counter
@@ -582,6 +597,10 @@ func (a *App) gatherCounters() counterSample {
 		}
 	}
 	live.at, live.counters = time.Now(), counters
+	if coreprocess.ContainerMode() {
+		xPID, hyPID = corePID("guangyue-xray.service"), corePID("guangyue-hy2.service")
+	}
+	a.coreServices.Store(&coreServiceState{xray: xPID > 0, hy2: hyPID > 0, at: time.Now()})
 	return counterSample{counters: counters, live: live, errs: errs}
 }
 
