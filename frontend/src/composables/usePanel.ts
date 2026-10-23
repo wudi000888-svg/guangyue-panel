@@ -43,7 +43,7 @@ const state = ref<State | null>(null),
   page = ref("overview"),
   mobileNav = ref(false);
 const access=useAccessStore();
-watch(state,v=>{access.role=v?.me.role||null;access.edition=v?.system.edition||'lite';},{flush:'sync'});
+watch(()=>[state.value?.me.role,state.value?.system.edition] as const,([role,edition])=>{access.role=role||null;access.edition=edition||'lite';},{flush:'sync'});
 const site = ref<SiteSettings>({panel_name:'广月面板',organization:'跨境电商工作区',default_locale:'zh-CN',support_email:'',login_notice:'',registration_enabled:false,registration_captcha:false,revision:'',sidebar_admin:[...DEFAULT_ADMIN_SIDEBAR],sidebar_member:[...DEFAULT_MEMBER_SIDEBAR],client_download_relay:false,country_access_enabled:false,country_access_blocked:[],country_access_reason:''});
 watch([site, locale], () => { document.title=site.value.panel_name+' · '+t('月庭'); }, {deep:true,immediate:true});
 const login = reactive({ username: "", password: "" });
@@ -268,7 +268,16 @@ function viewSourceResources(ids: string[], name: string) {
   nextTick(() => window.scrollTo({ top: 0, behavior: 'instant' }));
 }
 async function sourceChanged() { await refresh(true); await loadPrivateSources(); }
-watch(page, value => { if (state.value) void refresh(true); if (value === 'ips') loadPrivateSources(); });
+// Navigation only refetches /state when the last full refresh is stale; the
+// 10 s operations poll keeps runtime counters current in between.
+const NAVIGATION_REFRESH_AGE = 15000;
+let lastRefreshAt = 0;
+watch(page, value => {
+  const refreshing = !!state.value && Date.now() - lastRefreshAt >= NAVIGATION_REFRESH_AGE;
+  if (refreshing) void refresh(true);
+  // refresh() already loads private sources for these tabs; avoid a second request.
+  if (value === 'ips' && !(refreshing && !['sources','subsites'].includes(privateTab.value))) loadPrivateSources();
+});
 const selectedIP = computed(() =>
   ipPool.value.find((p) => p.id === nodeForm.exit_id),
 );
@@ -494,6 +503,7 @@ async function refresh(silent = false) {
     const result = await api<State>("/state", "GET", undefined, { signal: request.signal });
     if (!stateRequest.isCurrent(request)) return false;
     state.value = result;
+    lastRefreshAt = Date.now();
     needsNodeRefresh = false;
     site.value = result.site;
     applyDefaultLocale(site.value.default_locale);
@@ -508,7 +518,7 @@ async function refresh(silent = false) {
   }
 }
 function clearSession() {
- needsNodeRefresh=false;nodeSaveRequestID="";
+ needsNodeRefresh=false;nodeSaveRequestID="";lastRefreshAt=0;
  busy.value=false;speedRunning.value="";qualityRunning.value="";
  setRemoteSite("");selectedSite.value="";selectedSiteName.value="";
   stateRequest.cancel();
@@ -1008,13 +1018,15 @@ const actionName = (s: string) =>
       speed_test: t("出口测速"),
     }) as Record<string, string>
   )[s] || (s.startsWith("update_user") ? t("更新成员") : s);
-let lastFullRefresh=0;
 const poll = serialPoll(async () => {
  if(!state.value||busy.value||document.hidden)return;
- if(needsNodeRefresh||Date.now()-lastFullRefresh>60000){if(await refresh(true))lastFullRefresh=Date.now();return;}
+ if(needsNodeRefresh||Date.now()-lastRefreshAt>60000){await refresh(true);return;}
  const value=await api<{system:Partial<State['system']>;me:User;site:SiteSettings;runtime:State['runtime'];unread_messages:number}>('/operations');
- if(!state.value)return;
- state.value={...state.value,me:value.me,site:value.site,runtime:value.runtime,unread_messages:value.unread_messages,system:{...state.value.system,...value.system}};
+ const current=state.value;
+ if(!current)return;
+ // Patch only the polled fields so computeds over users/nodes/ip_pool stay cached.
+ current.me=value.me;current.site=value.site;current.runtime=value.runtime;current.unread_messages=value.unread_messages;
+ Object.assign(current.system,value.system);
 },()=>10000);
 let mounted = true;
 watch(() => route.fullPath, async (path, previous) => {
