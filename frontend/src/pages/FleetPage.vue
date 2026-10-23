@@ -15,7 +15,7 @@ const tokens=ref<Token[]>([]),siteID=ref(''),error=ref(''),busy=ref(false),creat
 const removal=ref<Token|null>(null),sharingToken=ref<Token|null>(null);
 const dialog=ref<HTMLElement|null>(null);
 useModalFocus(computed(()=>creating.value||!!removal.value||controlling.value),dialog,close);
-const form=reactive({name:'Pro 主站',scope:'manage',days:90,forever:true});
+const form=reactive({name:t('Pro 主站'),scope:'manage',days:90,forever:true});
 async function load(){try{const [out,service]=await Promise.all([api<{site_id:string;tokens:Token[]}>(),local<SiteStatus>("/site-status")]);tokens.value=out.tokens;siteID.value=out.site_id;status.value=service;loaded.value=true;error.value='';}catch(e){if(!isCancelled(e))error.value=errorMessage(e);}}
 function close(){if(busy.value)return;creating.value=false;newToken.value='';copied.value=false;removal.value=null;controlling.value=false;error.value='';}
 async function create(){if(busy.value)return;busy.value=true;error.value='';try{const out=await api<{connection_token:string}>('/tokens','POST',form);newToken.value=out.connection_token;await load();}catch(e){if(!isCancelled(e))error.value=errorMessage(e);}finally{busy.value=false;}}

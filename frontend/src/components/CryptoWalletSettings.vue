@@ -180,7 +180,7 @@ async function submit() {
   } catch (reason) {
     if (current() && !isCancelled(reason)) {
       if ((kind === 'hot'||kind==='mnemonic') && creationSubmitted && !(reason instanceof ApiError)) { close(); error.value = t('创建结果尚未确认，已刷新钱包列表，请先核对是否已创建成功。'); }
-      else if(kind==='delete'&&!(reason instanceof ApiError)){formError.value=t('操作结果尚未确认，已重新读取钱包列表；请先核对状态，再使用同一次操作重试。')}else if(reason instanceof ApiError&&reason.status===409&&reason.message.includes('钱包已变化'))formError.value=t('钱包已被更新，请关闭窗口后重新打开，核对状态再确认。');else formError.value = errorMessage(reason);
+      else if(kind==='delete'&&!(reason instanceof ApiError)){formError.value=t('操作结果尚未确认，已重新读取钱包列表；请先核对状态，再使用同一次操作重试。')}else if(reason instanceof ApiError&&reason.status===409&&reason.data.error?.includes('钱包已变化'))formError.value=t('钱包已被更新，请关闭窗口后重新打开，核对状态再确认。');else formError.value = errorMessage(reason);
     }
     if (reason instanceof ApiError && reason.status < 500) formOperation = undefined;
     // A lost response may follow a successful commit. Never retry with another seed under the old key.
