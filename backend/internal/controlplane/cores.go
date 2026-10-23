@@ -445,17 +445,37 @@ func (a *App) hyRequest(method, path string, body any) ([]byte, error) {
 	}
 	return io.ReadAll(io.LimitReader(resp.Body, 2<<20))
 }
+
+// counterSample is one read of the cores' cumulative traffic counters.
+type counterSample struct {
+	counters []Counter
+	live     liveInput
+	errs     []error
+	dev      bool
+}
+
+// collect reads and records traffic. Callers hold the control lock.
 func (a *App) collect() error {
+	return a.applyCounters(a.gatherCounters())
+}
+
+// gatherCounters only talks to the cores (CLI, HTTP, systemd) and may run
+// without the control lock. A core restart during the read makes the sample
+// unusable, because its values would be booked against the wrong generation.
+func (a *App) gatherCounters() counterSample {
 	if a.cfg.Dev {
-		return nil
+		return counterSample{dev: true}
 	}
 	counters := []Counter{}
 	live := liveInput{counts: [2]map[int64]int64{{}, {}}}
 	var errs []error
 	// A non-reset query includes the capability marker and session gauges.
 	xGeneration := ""
+	xPID := 0
 	if coreprocess.ContainerMode() {
 		xGeneration = coreprocess.Generation("guangyue-xray.service")
+	} else {
+		xPID = corePID("guangyue-xray.service")
 	}
 	b, err := a.xapi("statsquery")
 	if err == nil && coreprocess.ContainerMode() && (xGeneration == "" || xGeneration != coreprocess.Generation("guangyue-xray.service")) {
@@ -470,11 +490,15 @@ func (a *App) collect() error {
 		}
 		err = json.Unmarshal(b, &result)
 		if err == nil {
-			generation := strconv.Itoa(corePID("guangyue-xray.service"))
+			pid := corePID("guangyue-xray.service")
+			generation := strconv.Itoa(pid)
 			if coreprocess.ContainerMode() {
 				generation = xGeneration
+			} else if pid != xPID {
+				err = errors.New("Xray restarted during traffic query")
+				result.Stat = nil
 			}
-			live.generation[0], live.traffic[0] = generation, true
+			live.generation[0], live.traffic[0] = generation, err == nil
 			for _, s := range result.Stat {
 				value, e := s.Value.Int64()
 				if e != nil || value < 0 {
@@ -504,8 +528,11 @@ func (a *App) collect() error {
 		errs = append(errs, errors.New("Xray traffic unavailable"))
 	}
 	hyGeneration := ""
+	hyPID := 0
 	if coreprocess.ContainerMode() {
 		hyGeneration = coreprocess.Generation("guangyue-hy2.service")
+	} else {
+		hyPID = corePID("guangyue-hy2.service")
 	}
 	b, err = a.hyRequest("GET", "/traffic", nil)
 	if err == nil && coreprocess.ContainerMode() && (hyGeneration == "" || hyGeneration != coreprocess.Generation("guangyue-hy2.service")) {
@@ -518,11 +545,15 @@ func (a *App) collect() error {
 		}
 		err = json.Unmarshal(b, &result)
 		if err == nil {
-			generation := strconv.Itoa(corePID("guangyue-hy2.service"))
+			pid := corePID("guangyue-hy2.service")
+			generation := strconv.Itoa(pid)
 			if coreprocess.ContainerMode() {
 				generation = hyGeneration
+			} else if pid != hyPID {
+				err = errors.New("HY2 restarted during traffic query")
+				result = nil
 			}
-			live.generation[1], live.traffic[1] = generation, true
+			live.generation[1], live.traffic[1] = generation, err == nil
 			for id, s := range result {
 				uid, _ := strconv.ParseInt(strings.TrimPrefix(strings.SplitN(id, ".", 2)[0], "u"), 10, 64)
 				// Negative IDs are reserved for a child site's local owner. Their
@@ -551,11 +582,20 @@ func (a *App) collect() error {
 		}
 	}
 	live.at, live.counters = time.Now(), counters
-	a.monitor.sample(live)
-	if err = a.store.account(counters); err != nil {
+	return counterSample{counters: counters, live: live, errs: errs}
+}
+
+// applyCounters books a sample. Callers hold the control lock.
+func (a *App) applyCounters(sample counterSample) error {
+	if sample.dev {
+		return nil
+	}
+	a.collectSeq++
+	a.monitor.sample(sample.live)
+	if err := a.store.account(sample.counters); err != nil {
 		return err
 	}
-	return errors.Join(errs...)
+	return errors.Join(sample.errs...)
 }
 
 func validateNode(n Node) error {

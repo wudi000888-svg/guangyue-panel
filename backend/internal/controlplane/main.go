@@ -58,6 +58,7 @@ type App struct {
 	cfg                    Config
 	store                  *Store
 	mu                     sync.Mutex
+	collectSeq             uint64 // applied counter samples; guarded by mu
 	fleetMigrationMu       sync.Mutex
 	restart                context.CancelFunc
 	realityProbeMu         sync.Mutex
@@ -310,11 +311,20 @@ func (a *App) loop(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
+		// Reading the cores spawns a CLI and makes HTTP calls; do it before
+		// taking the lock. Counters are cumulative, so a sample is simply
+		// dropped if another collect was booked meanwhile.
 		a.mu.Lock()
-		if err := a.collect(); err != nil {
-			a.trafficError = err.Error()
-		} else {
-			a.trafficError = ""
+		seq := a.collectSeq
+		a.mu.Unlock()
+		sample := a.gatherCounters()
+		a.mu.Lock()
+		if a.collectSeq == seq {
+			if err := a.applyCounters(sample); err != nil {
+				a.trafficError = err.Error()
+			} else {
+				a.trafficError = ""
+			}
 		}
 		commerceErr := a.commerceWork(time.Now().Unix())
 		err := a.advanceQuotaPeriods(time.Now().Unix())
