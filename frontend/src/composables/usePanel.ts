@@ -7,6 +7,7 @@ import { bytes, date, duration, exitName } from "../lib/format";
 import { useSubscription } from "./useSubscription";
 import { useToast } from "./panel/useToast";
 import { usePanelNavigation } from "./panel/usePanelNavigation";
+import { useUserDirectory } from "./panel/useUserDirectory";
 import { useSidebarCustomization } from './useSidebarCustomization';
 import { useApi, ApiError, downloadBlob, JSON_REQUEST_HEADERS, invalidateSession, onSessionExpired, isCancelled, setRemoteSite, requestGeneration, errorMessage } from "../lib/api";
 import { runQueued } from "../lib/tasks";
@@ -50,10 +51,7 @@ watch([site, locale], () => { document.title=site.value.panel_name+' · '+t('月
 const login = reactive({ username: "", password: "" });
 const registration = reactive({ username: "", password: "", confirm_password: "", captcha_token: "", email: "", email_token: "" });
 const registrationReset = ref(0);
-const userSearch = ref(""),
-  userFilter = ref("all"),
-  userRole = ref("all"),
-  modal = ref(""),
+const modal = ref(""),
   editingID = ref(0);
 const plans=ref<Plan[]>([]),nodeGroups=ref<NodeGroup[]>([]),groupMembers=ref<Record<string,import("../types").GroupMember[]>>({});
 async function loadEntitlements(){try{const [p,g]=await Promise.all([api<{plans:Plan[]}>("/plans"),api<{groups:NodeGroup[];members:Record<string,import("../types").GroupMember[]>}>("/node-groups")]);plans.value=p.plans;nodeGroups.value=g.groups;groupMembers.value=g.members;}catch(e){if(!isCancelled(e))error.value=errorMessage(e);}}
@@ -204,6 +202,7 @@ async function speedTest(n: Node, pool = false) {
     }
   });
 }
+const { userSearch, userFilter, userRole, expiringUsers, active, userStatus, users, usage } = useUserDirectory(state);
 const ipSearch = ref(""),
   ipType = ref("all"),
   ipState = ref("all");
@@ -323,14 +322,6 @@ const filteredIPs = computed(() =>
 const nodePoolLabel = (n: Node) =>
   state.value?.ip_pool.find((p) => p.id === n.exit_id)?.label ||
   (n.exit === "direct" ? t("本机直连") : exitName(n.exit));
-const expiringUsers = computed(
-  () =>
-    (state.value?.users || []).filter(
-      (u) =>
-        !u.mount_access && u.expires > Date.now() / 1000 &&
-        u.expires < Date.now() / 1000 + 7 * 86400,
-    ).length,
-);
 const passwordForm = reactive({ current: "", password: "", confirm: "" });
 const probeResult = ref("");
 const detecting = ref("");
@@ -400,38 +391,7 @@ const sidebarCustomization = useSidebarCustomization({
 watch(() => nav.value.map(item => item.id).join(","), () => {
   if (state.value && !nav.value.some(item => item.id === page.value)) go(owner.value ? "overview" : "subscription");
 });
-const active = (u: User) =>
-  u.enabled &&
-  (!u.expires || u.expires > Date.now() / 1000) &&
-  (!u.quota || quotaUsed(u) < u.quota) && !u.meter?.pending_reset && (!u.meter?.end || u.meter.end > Date.now()/1000);
-const userStatus = (u: User) =>
- u.archived ? t("已归档") :
- u.meter?.pending_reset || (u.meter?.end && u.meter.end<=Date.now()/1000) ? t("周期切换中") :
-  !u.enabled
-    ? t("已停用")
-    : u.expires && u.expires <= Date.now() / 1000
-      ? t("已到期")
-      : u.quota && quotaUsed(u) >= u.quota
-        ? t("额度用尽")
-        : t("正常");
-const users = computed(() =>
-  (state.value?.users || []).filter(
-    (u) =>
-      !u.mount_access && u.username.toLowerCase().includes(userSearch.value.toLowerCase()) &&
-      (userRole.value === "all" || u.role === userRole.value) &&
-      (userFilter.value === "all" ||
-        (userFilter.value === "active"
-          ? active(u)
-          : userFilter.value === "disabled"
-            ? !u.enabled
-            : userFilter.value === "expired"
-              ? !!u.expires && u.expires <= Date.now() / 1000
-              : !!u.quota && quotaUsed(u) >= u.quota)),
-  ),
-);
 const {sub,subUser,format,subProtocol,subSource,qr,qrError,subLoading,subError,subURL,clearSubscription,loadSub,showSub,downloadSub} = useSubscription({state,page,owner,publicSubPage,active,task,go});
-const usage = (u: User) =>
-  u.quota ? Math.min(100, (quotaUsed(u) / u.quota) * 100) : 0;
 async function refresh(silent = false) {
   const request = stateRequest.start();
   try {
