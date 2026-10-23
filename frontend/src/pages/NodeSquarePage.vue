@@ -4,7 +4,7 @@ import { errorMessage } from '../lib/api';
 import { ArrowRight, Globe2, LoaderCircle, RefreshCw, Search, Tag } from 'lucide-vue-next';
 import { usePanelContext } from '../composables/panelContext';
 import PageHeading from '../components/PageHeading.vue';
-import CountryMark from '../CountryMark.vue';
+import CountryMark from '../components/CountryMark.vue';
 import { t } from '../i18n';
 import '../styles/member-ui.css';
 

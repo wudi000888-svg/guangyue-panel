@@ -1,5 +1,4 @@
 import type { IPQuality } from "./quality";
-import type { SubscriptionNode } from "./NodeSubscriptionCards.vue";
 export type SiteSettings = {
   panel_name: string; organization: string; default_locale: string; support_email: string;
   login_notice: string; registration_enabled: boolean; registration_captcha: boolean; revision: string;
@@ -120,3 +119,21 @@ export type State = {
   audit: { at: number; actor: string; action: string; target: string }[];
 };
 export type Sub = { url: string; raw: string; active: boolean; user: User; pool: "private" | "public" | "all" | "local" | "mounted" | "subsite" | "mixed"; nodes: SubscriptionNode[] };
+
+// A node entry in a member subscription (rendered by NodeSubscriptionCards).
+export type SubscriptionNode = {
+ mounted?:boolean;source?:string;group_ids?:string[];
+ rate_milli?:number;
+  dns?: {mode: string; doh?: string; ipv6?: string};
+  site_id?: string;
+  site_name?: string;
+  id: string;
+  name: string;
+  protocol: 'vless' | 'hy2';
+  uri: string;
+  probe_ip: string;
+  country: string;
+  country_code: string;
+  checked_at: number;
+  quality: IPQuality | null;
+};

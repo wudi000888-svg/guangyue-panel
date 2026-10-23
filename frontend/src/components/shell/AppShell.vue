@@ -10,7 +10,7 @@ import { groupNavigation, sidebarNavigation, MEMBER_NAVIGATION_LABELS } from "..
 import { allowedRoute } from "../../lib/access";
 import { router } from "../../router";
 import { t } from "../../i18n";
-import LanguageSwitcher from "../../LanguageSwitcher.vue";
+import LanguageSwitcher from "../LanguageSwitcher.vue";
 import CommandPalette from "./CommandPalette.vue";
 import MobileTools from "./MobileTools.vue";
 const PanelUpdater = defineAsyncComponent(() => import("../PanelUpdater.vue"));

@@ -1,14 +1,14 @@
 <script setup lang="ts">
-import { useApi, isCancelled, errorMessage } from "./lib/api";
+import { useApi, isCancelled, errorMessage } from "../lib/api";
 const api = useApi();
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { Activity, ArrowUpRight, CalendarDays, CheckCircle2, Clock3, Database, Download, Globe2, RadioTower, RefreshCw, Layers3, Network, Server, ShieldCheck, TriangleAlert, Users, Zap } from 'lucide-vue-next';
-import { t, locale } from './i18n';
-import PageHeading from './components/PageHeading.vue';
-import {usePanelContext} from './composables/panelContext';
-import {quotaUsed} from './lib/quota';
-import type {User} from './types';
-import './styles/admin-ui.css';
+import { t, locale } from '../i18n';
+import PageHeading from './PageHeading.vue';
+import {usePanelContext} from '../composables/panelContext';
+import {quotaUsed} from '../lib/quota';
+import type {User} from '../types';
+import '../styles/admin-ui.css';
 const {canMountSubsites,selectedSite}=usePanelContext();
 import CountryMark from './CountryMark.vue';
 type Node={id:string;name:string;protocol:string;enabled:boolean;managed_by?:string;probe_ip:string;probe_error:string;country:string;country_code:string};

@@ -7,7 +7,7 @@ import { usePanelContext } from "../../composables/panelContext";
 import { errorMessage, isCancelled } from "../../lib/api";
 import { readEmailProof, clearEmailProof } from "../../lib/email";
 import { t } from "../../i18n";
-import LanguageSwitcher from "../../LanguageSwitcher.vue";
+import LanguageSwitcher from "../LanguageSwitcher.vue";
 const RegistrationCaptcha = defineAsyncComponent(() => import("../RegistrationCaptcha.vue"));
 
 // Kept by the parent so the chosen form survives sign-out like before.

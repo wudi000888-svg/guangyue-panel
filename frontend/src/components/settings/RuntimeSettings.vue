@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { useApi, isCancelled, errorMessage } from "./lib/api";
+import { useApi, isCancelled, errorMessage } from "../../lib/api";
 const api = useApi();
-import { latestRequest } from "./lib/requests";
+import { latestRequest } from "../../lib/requests";
 const loadRequest = latestRequest();
 onUnmounted(()=>loadRequest.cancel());
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { Activity, Check, LoaderCircle, Save, ShieldCheck } from 'lucide-vue-next';
-import { t } from './i18n';
+import { t } from '../../i18n';
 type RuntimeMode = 'normal' | 'no_logs';
 type RuntimeSettings = {mode:RuntimeMode;revision:string;applied:boolean;changed_at:number;audit_enabled:boolean;traffic_history_enabled:boolean;subscription_access_enabled:boolean;application_logs_enabled:boolean;core_logs_enabled:boolean};
 const emit=defineEmits<{updated:[]}>();

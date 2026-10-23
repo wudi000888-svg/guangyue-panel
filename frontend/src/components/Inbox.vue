@@ -1,14 +1,14 @@
 <script setup lang="ts">
-import { useApi, isCancelled, errorMessage } from "./lib/api";
-import { latestRequest } from "./lib/requests";
+import { useApi, isCancelled, errorMessage } from "../lib/api";
+import { latestRequest } from "../lib/requests";
 const api = useApi("/messages");
 const loadRequest = latestRequest();
 import { computed, nextTick, ref, reactive, onMounted, onUnmounted, watch } from 'vue';
 import { Mail, Send, CheckCheck, Plus, ArrowLeft, Trash2, X, Inbox as InboxIcon } from 'lucide-vue-next';
-import PageHeading from './components/PageHeading.vue';
-import EmptyState from './components/EmptyState.vue';
-import {useModalFocus} from './composables/useModalFocus';
-import { t, locale } from './i18n';
+import PageHeading from './PageHeading.vue';
+import EmptyState from './EmptyState.vue';
+import {useModalFocus} from '../composables/useModalFocus';
+import { t, locale } from '../i18n';
 type Message={id:number;sender:string;title:string;body:string;category:string;created:number;read_at:number;recipients:number;read_count:number};
 const props=defineProps<{owner:boolean;users:{id:number;username:string}[];me:number;supportEmail:string;unread:number}>();
 const emit=defineEmits<{refresh:[]}>();

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, onBeforeUnmount, ref } from 'vue';
 import { Gauge, RefreshCw, Check, LoaderCircle } from 'lucide-vue-next';
-import { useApi, isCancelled, errorMessage } from './lib/api';
-import { t } from './i18n';
+import { useApi, isCancelled, errorMessage } from '../../lib/api';
+import { t } from '../../i18n';
 const api = useApi();
 type NetworkState = {available:boolean;retry_after?:number;error?:string;revision:string;managed:boolean;desired:{bbr:boolean;hy2:boolean};bbr_supported:boolean;actual:{bbr:boolean;hy2:boolean;hy2_running:boolean;congestion_control:string;default_qdisc:string;rmem_max:string;wmem_max:string};operation?:{stage:string;error?:string}};
 const state=ref<NetworkState|null>(null),bbr=ref(false),hy2=ref(false),busy=ref(false),error=ref(''),saved=ref(false);

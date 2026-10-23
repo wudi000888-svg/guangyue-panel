@@ -1,6 +1,6 @@
 import {describe, expect, it} from 'vitest';
 import {mergePanelSettings} from './PanelSettings.vue';
-import type {SiteSettings} from './types';
+import type {SiteSettings} from '../../types';
 
 const settings = (): SiteSettings => ({
  panel_name:'My site', organization:'Team', default_locale:'zh-CN', support_email:'', login_notice:'',

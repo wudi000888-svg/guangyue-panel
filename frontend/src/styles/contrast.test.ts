@@ -5,9 +5,9 @@ const source = (path: string) => readFileSync(new URL(path, import.meta.url), 'u
 const tokensCSS = source('./tokens.css');
 const themeCSS = source('./pearl-river-theme.css');
 const shellCSS = source('./shell.css');
-const runtimeCSS = source('../RuntimeSettings.vue');
+const runtimeCSS = source('../components/settings/RuntimeSettings.vue');
 const updaterCSS = source('../components/PanelUpdater.vue');
-const dashboardCSS = source('../Dashboard.vue');
+const dashboardCSS = source('../components/Dashboard.vue');
 const plansCSS = source('../pages/PlansPage.vue');
 
 type Color = { rgb: number[]; alpha: number };

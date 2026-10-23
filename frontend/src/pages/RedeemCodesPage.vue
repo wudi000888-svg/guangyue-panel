@@ -7,7 +7,7 @@ import {onMounted,ref} from 'vue';
 import {useCommerce,cents,money,stamp,stateText,type Redemption} from '../lib/commerce';
 import {download} from '../lib/download';
 import {t} from '../i18n';
-import '../commerce.css';
+import '../styles/commerce.css';
 
 type CodeItem={id:string;code?:string;available:boolean;reason?:string};
 const {read,run,busy,error,notice}=useCommerce();

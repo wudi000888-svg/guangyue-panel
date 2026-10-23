@@ -8,7 +8,7 @@ import { t } from '../i18n';
 import PageHeading from '../components/PageHeading.vue';
 import ConnectionGuide from '../components/member/ConnectionGuide.vue';
 import UsageDetails from '../components/UsageDetails.vue';
-import NodeSubscriptionCards from '../NodeSubscriptionCards.vue';
+import NodeSubscriptionCards from '../components/member/NodeSubscriptionCards.vue';
 import '../styles/member-ui.css';
 const route = useRoute();
 const { state, site, selectedSite, busy, sub, subUser, format, subProtocol, subSource, qr, qrError, subLoading, subError, owner, publicSubPage, userStatus, subURL, bytes, date, confirmUser, loadSub, copy, downloadSub } = usePanelContext();

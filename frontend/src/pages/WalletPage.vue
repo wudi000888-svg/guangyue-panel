@@ -12,7 +12,7 @@ import { useCommerce, money, cents, stamp, stateText, paymentStateText, canResum
 import { mergeHistory } from '../components/member/flow';
 import { serialPoll } from '../lib/requests';
 import { t } from '../i18n';
-import '../commerce.css';
+import '../styles/commerce.css';
 import '../styles/member-ui.css';
 const route=useRoute();
 const returnOrder=computed(()=>String(route.query.return_order||''));

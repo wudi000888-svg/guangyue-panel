@@ -1,15 +1,15 @@
 <script setup lang="ts">
-import { useApi, isCancelled, errorMessage } from "./lib/api";
-import { latestRequest } from "./lib/requests";
+import { useApi, isCancelled, errorMessage } from "../../lib/api";
+import { latestRequest } from "../../lib/requests";
 const api = useApi("/import-sources");
 const loadRequest = latestRequest();
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
 import { Plus, RefreshCw, Link2, Pencil, Trash2, Clock3, Database, X, ShieldCheck, LoaderCircle } from 'lucide-vue-next';
-import PageHeading from './components/PageHeading.vue';
-import EmptyState from './components/EmptyState.vue';
-import {useModalFocus} from './composables/useModalFocus';
-import './styles/admin-ui.css';
-import { t, locale } from './i18n';
+import PageHeading from '../PageHeading.vue';
+import EmptyState from '../EmptyState.vue';
+import {useModalFocus} from '../../composables/useModalFocus';
+import '../../styles/admin-ui.css';
+import { t, locale } from '../../i18n';
 type Source={id:string;name:string;address:string;enabled:boolean;queued:boolean;revision:string;last_attempt:number;last_success:number;next_at:number;failures:number;error:string;resource_ids:string[];added:number;removed:number;retained:number;warnings:{index:number;reason:string}[]};
 type Row={resource_ids:string[];source:Source;running:boolean;resources:number;stale:number};
 defineProps<{embedded?:boolean}>();

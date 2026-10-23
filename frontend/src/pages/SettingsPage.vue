@@ -10,13 +10,13 @@ import {useRoute} from 'vue-router';
 const route=useRoute();
 import {allowedRoute} from '../lib/access';
 import {groupNavigation,sidebarNavigation,MEMBER_NAVIGATION_LABELS} from '../lib/navigation';
-import LanguageSwitcher from '../LanguageSwitcher.vue';
+import LanguageSwitcher from '../components/LanguageSwitcher.vue';
 // Sections load on first visit; only the visible one is mounted (form
 // sections stay alive in <KeepAlive> so unsaved edits survive tab switches).
 const CommerceSettings=defineAsyncComponent(()=>import('../components/CommerceSettings.vue'));
-const PanelSettings=defineAsyncComponent(()=>import('../PanelSettings.vue'));
-const RuntimeSettings=defineAsyncComponent(()=>import('../RuntimeSettings.vue'));
-const NetworkSettings=defineAsyncComponent(()=>import('../NetworkSettings.vue'));
+const PanelSettings=defineAsyncComponent(()=>import('../components/settings/PanelSettings.vue'));
+const RuntimeSettings=defineAsyncComponent(()=>import('../components/settings/RuntimeSettings.vue'));
+const NetworkSettings=defineAsyncComponent(()=>import('../components/settings/NetworkSettings.vue'));
 const AccountEmail=defineAsyncComponent(()=>import('../components/AccountEmail.vue'));
 import '../styles/integrations.css';
 const {state,owner,selectedSite,publicFeaturesEnabled,refresh,nav,pageDescriptions,go,theme,toggleTheme,modal,error,sidebarCustomization}=usePanelContext();

@@ -1,6 +1,6 @@
 <script lang="ts">
-import type { SiteSettings } from './types';
-export type { SiteSettings } from './types';
+import type { SiteSettings } from '../../types';
+export type { SiteSettings } from '../../types';
 
 /** Merge automatic navigation writes without accepting stale changes to other settings. */
 export function mergePanelSettings(baseline: SiteSettings, draft: SiteSettings, current: SiteSettings): SiteSettings {
@@ -15,14 +15,14 @@ export function mergePanelSettings(baseline: SiteSettings, draft: SiteSettings, 
 }
 </script>
 <script setup lang="ts">
-import { useApi, isCancelled, errorMessage } from "./lib/api";
-import { latestRequest } from "./lib/requests";
+import { useApi, isCancelled, errorMessage } from "../../lib/api";
+import { latestRequest } from "../../lib/requests";
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { Save, Building2, ShieldCheck, Navigation, Download, Globe2, Search, RefreshCw, TriangleAlert, CheckCircle2, LoaderCircle } from 'lucide-vue-next';
-import { t, locale } from './i18n';
-import { DEFAULT_ADMIN_SIDEBAR, DEFAULT_MEMBER_SIDEBAR, MEMBER_NAVIGATION, type NavigationItem } from './lib/navigation';
-import { countryOptions } from './lib/countries';
-import { usePanelContext } from './composables/panelContext';
+import { t, locale } from '../../i18n';
+import { DEFAULT_ADMIN_SIDEBAR, DEFAULT_MEMBER_SIDEBAR, MEMBER_NAVIGATION, type NavigationItem } from '../../lib/navigation';
+import { countryOptions } from '../../lib/countries';
+import { usePanelContext } from '../../composables/panelContext';
 const api = useApi();
 const loadRequest = latestRequest();
 onUnmounted(()=>loadRequest.cancel());

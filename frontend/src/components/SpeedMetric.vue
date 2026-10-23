@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { t } from "./i18n";
+import { t } from "../i18n";
 import { Gauge, LoaderCircle } from "lucide-vue-next";
 defineProps<{
   result?: {

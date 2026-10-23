@@ -7,7 +7,7 @@ import { notifyPaymentModuleChanged, type CommerceSettings as CommerceSettingsVa
 import { t } from '../i18n';
 import PaymentSettings from './PaymentSettings.vue';
 import MailSettings from './MailSettings.vue';
-import '../commerce.css';
+import '../styles/commerce.css';
 import '../styles/integrations.css';
 const props=defineProps<{ active?: boolean }>();
 const { read, api, busy, error, notice } = useCommerce();

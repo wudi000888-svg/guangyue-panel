@@ -6,7 +6,7 @@ import { useApi, invalidateSession, errorMessage } from '../lib/api';
 import { saveEmailProof } from '../lib/email';
 import { usePanelContext } from '../composables/panelContext';
 import { t } from '../i18n';
-import LanguageSwitcher from '../LanguageSwitcher.vue';
+import LanguageSwitcher from '../components/LanguageSwitcher.vue';
 import '../styles/integrations.css';
 const route = useRoute(), router = useRouter(), api = useApi();
 const { clearSession } = usePanelContext();

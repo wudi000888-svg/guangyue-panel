@@ -12,7 +12,7 @@ import { offerState } from '../components/member/flow';
 import { t } from '../i18n';
 import { usePaymentModule } from '../lib/paymentModule';
 const {enabled:moduleEnabled,error:moduleError,loaded:moduleLoaded,refresh:refreshModule}=usePaymentModule();
-import '../commerce.css';
+import '../styles/commerce.css';
 import '../styles/member-ui.css';
 const router=useRouter(),{owner,state}=usePanelContext(),{read,run,api,busy,error,notice}=useCommerce(),panelApi=useApi();
 const offers=ref<Offer[]>([]),plans=ref<Plan[]>([]),selected=ref(''),price=ref(''),enabled=ref(true),purchaseLimit=ref(0),editing=ref<Offer|null>(null),category=ref(''),loading=ref(true),ordering=ref('');

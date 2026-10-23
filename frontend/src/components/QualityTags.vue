@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, nextTick, onUnmounted, ref } from 'vue';
 import { Activity, ArrowUpRight, ChevronRight, Clock3, Database, Globe2, RefreshCw, Server, ShieldCheck, ShieldAlert, X } from 'lucide-vue-next';
-import { t, locale } from './i18n';
+import { t, locale } from '../i18n';
 import CountryMark from './CountryMark.vue';
-import type { IPQuality, QualityTag } from './quality';
+import type { IPQuality, QualityTag } from '../quality';
 const props=defineProps<{value?:IPQuality;name:string;running?:boolean;readOnly?:boolean}>();
 const emit=defineEmits<{run:[]}>();
 const open=ref(false),dialog=ref<HTMLElement|null>(null),trigger=ref<HTMLButtonElement|null>(null);
