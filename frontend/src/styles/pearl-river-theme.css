@@ -1,6 +1,5 @@
 /* Pearl River Night theme: visual layer only. */
 
-
 html, body { background: var(--canvas); }
 body { color: var(--text); }
 
@@ -93,14 +92,14 @@ input, select, textarea { background: var(--input); border-color: var(--input-bo
 input:focus, select:focus, textarea:focus, .search:focus-within { border-color: var(--accent); box-shadow: var(--gy-focus); }
 input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 
-.panel, .chart-card, .network-card, .settings-card, .node-card, .plan-card, .site-card,
+.panel, .settings-card, .node-card, .plan-card, .site-card,
 .metrics > div, .import-report, .resource-membership-notice, .mobile-tools-panel {
   background: var(--surface);
   border-color: var(--border);
   box-shadow: var(--gy-shadow);
 }
 .metrics > div { min-height: 130px; }
-.metric-icon { background: var(--accent-soft); color: var(--accent-text); }
+
 .section-heading, .page-heading { color: var(--text); }
 .ui-page-heading p, .page-context, .page-breadcrumb, .table-caption { color: var(--muted); }
 .header-balance { background: var(--surface-raised); border-color: var(--border); color: var(--accent-text); }
