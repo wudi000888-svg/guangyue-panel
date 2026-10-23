@@ -20,6 +20,7 @@ from render import wallet_restore_location
 import update_state as updates
 import deployment_mode
 import maintenance_gate
+import backup_retention
 
 NGINX_PANEL = Path('/etc/nginx/sites-enabled/guangyue-panel.conf')
 
@@ -135,7 +136,7 @@ def _clear_helper_caches(directory):
 
 
 def backup_current(config):
-    backup_root = Path('/root/guangyue-backups')
+    backup_root = backup_retention.BACKUPS
     backup_root.mkdir(mode=0o700, exist_ok=True); backup_root.chmod(0o700)
     backup = Path(tempfile.mkdtemp(prefix='upgrade-' + time.strftime('%Y%m%d-%H%M%S') + '-', dir=backup_root))
     shutil.copytree(STATE, backup / 'state', symlinks=True)
@@ -269,15 +270,36 @@ def transaction(change, target, new_config, progress=lambda stage: None, provisi
                 maintenance_gate.finish()
             updates.write('transaction.json', None)
         raise
+    prune_backups(new_config, backup)
     return backup
 
 
-def upgrade(bundle, edition=None, site_id=None, infrastructure_file=None, progress=lambda stage: None):
+def prune_backups(config, keep_backup=None, override=None, dry_run=False):
+    """Apply backup retention after a commit. Never fails the committed change."""
+    try:
+        keep = backup_retention.keep_count(config, override)
+        journal = updates.read('transaction.json') or {}
+        history = updates.read('history.json', [])
+        protected = [keep_backup, journal.get('backup') if isinstance(journal, dict) else None]
+        if dry_run:
+            return backup_retention.plan(backup_retention.BACKUPS, keep, updates.current(), protected, history)[1]
+        removed = backup_retention.prune(backup_retention.BACKUPS, keep, updates.current(), protected, history)
+        if removed: updates.write('history.json', backup_retention.without_removed(history, removed))
+        return removed
+    except (ValueError, OSError) as exc:
+        if dry_run: raise
+        print('Backup pruning skipped: ' + (str(exc) if isinstance(exc, ValueError) else type(exc).__name__))
+        return []
+
+
+def upgrade(bundle, edition=None, site_id=None, infrastructure_file=None, progress=lambda stage: None, keep_backups=None):
     bundle = Path(bundle).resolve()
     old_config = json.loads(CONFIG.read_text())
     new_config = edition_config(old_config, edition or old_config.get('edition', 'lite'), site_id or old_config.get('site_id', 'default'), infrastructure_file, existing=True)
     if old_config.get('edition') == 'pro' and (new_config['site_id'] != old_config.get('site_id', 'default') or new_config['database'] != old_config.get('database')):
         raise ValueError('changing an existing Pro site ID or database requires a separate site migration')
+    if keep_backups is not None:
+        new_config[backup_retention.CONFIG_KEY] = backup_retention.keep_count(override=keep_backups)
     migrating = old_config.get('edition', 'lite') == 'lite' and new_config['edition'] == 'pro'
     target = (bundle / 'VERSION').read_text().strip()
     updates.require_floor(target)
@@ -456,7 +478,9 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--bundle', type=Path, required=True)
     p.add_argument('--edition', choices=['lite', 'pro']); p.add_argument('--site-id'); p.add_argument('--infrastructure-file', type=Path)
+    p.add_argument('--keep-backups', type=int, metavar='N', help='keep the newest N upgrade backups (1-100, default 5); saved as backup_retention in the root config')
     p.add_argument('--apply', action='store_true'); args = p.parse_args()
+    if args.keep_backups is not None: backup_retention.keep_count(override=args.keep_backups)
     with deployment_lock() if args.apply else contextlib.nullcontext():
         preflight(args.bundle)
         config = json.loads(CONFIG.read_text())
@@ -466,7 +490,7 @@ def main():
         if updates.version((args.bundle / 'VERSION').read_text().strip()) < updates.version(floor): raise ValueError('不能回退到安装基线之前的版本')
         if args.apply:
             prime_helper_recovery(args.bundle)
-            upgrade(args.bundle, args.edition, args.site_id, args.infrastructure_file)
+            upgrade(args.bundle, args.edition, args.site_id, args.infrastructure_file, keep_backups=args.keep_backups)
         else: print('Upgrade preflight passed. Add --apply for a brief service interruption.')
 
 

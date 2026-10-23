@@ -1064,7 +1064,26 @@ def transaction(change,target,progress):
         else:
             start_application(marker);health(marker,marker['version']);complete_gate(marker['version'])
         raise
+    prune_backups(keep_backup=backup)
     return backup
+
+
+def prune_backups(keep_backup=None,override=None,dry_run=False):
+    """Apply backup retention after a committed Docker change; never fails it."""
+    import backup_retention
+    try:
+        keep=backup_retention.keep_count(read_config(),override);marker=load()
+        pending=safe_json(transaction_file(),missing=True)
+        rows=safe_json(history_path(),missing=True) or []
+        protected=[keep_backup,pending.get('backup') if isinstance(pending,dict) else None]
+        if dry_run:return backup_retention.plan(BACKUPS,keep,marker['version'],protected,rows)[1]
+        removed=backup_retention.prune(BACKUPS,keep,marker['version'],protected,rows)
+        if removed:atomic_json(history_path(),backup_retention.without_removed(rows,removed))
+        return removed
+    except (ValueError,OSError) as exc:
+        if dry_run:raise
+        print('Backup pruning skipped: '+(str(exc) if isinstance(exc,ValueError) else type(exc).__name__))
+        return []
 
 
 def upgrade(bundle,progress=lambda stage:None,*,test_assets_dir=None):
