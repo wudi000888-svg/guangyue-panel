@@ -46,7 +46,7 @@ const fetchableSelected=computed(()=>(info.value?.settings.sources||[]).filter(i
 async function load(reset=false){
  const request=loadRequest.start();
  try {
-  const result=await api('/public-pool','GET',undefined,{signal:request.signal});
+  const result=await api<NonNullable<typeof info.value>>('/public-pool','GET',undefined,{signal:request.signal});
   if(!loadRequest.isCurrent(request))return;
   info.value=result;error.value='';
   if(reset&&info.value)Object.assign(form,info.value.settings,{sources:[...info.value.settings.sources]});
@@ -66,7 +66,7 @@ function editSource(source?:PublicSource){Object.assign(sourceForm,{id:source?.i
 function closeSource(){if(busy.value)return;sourceModal.value=false;sourceDelete.value=null;sourceForm.url='';sourceForm.text='';sourceError.value='';}
 async function readSourceFile(event:Event){const input=event.target as HTMLInputElement,file=input.files?.[0];if(!file)return;try{if(file.size>1048576)throw new Error(t('文件不能超过 1 MiB'));sourceForm.text=await file.text();sourceMode.value='text';sourceError.value='';}catch(e){sourceError.value=errorMessage(e);}finally{input.value='';}}
 async function saveCustomSource(){if(busy.value)return;const restoreDraft=retainSourceDraft();busy.value=true;sourceError.value='';try{
- const result=await api('/public-pool/sources'+(sourceForm.id?'/'+sourceForm.id:''),sourceForm.id?'PUT':'POST',sourceForm.id?{name:sourceForm.name,enabled:sourceForm.enabled,revision:sourceForm.revision}:{name:sourceForm.name,enabled:sourceForm.enabled,protocol:sourceForm.protocol,...(sourceMode.value==='url'?{url:sourceForm.url}:{text:sourceForm.text})});
+ const result=await api<{entries?:number;queued:boolean;screening_pending:boolean}>('/public-pool/sources'+(sourceForm.id?'/'+sourceForm.id:''),sourceForm.id?'PUT':'POST',sourceForm.id?{name:sourceForm.name,enabled:sourceForm.enabled,revision:sourceForm.revision}:{name:sourceForm.name,enabled:sourceForm.enabled,protocol:sourceForm.protocol,...(sourceMode.value==='url'?{url:sourceForm.url}:{text:sourceForm.text})});
  if(!sourceForm.id)sourceResult.value={entries:result.entries||0,queued:result.queued,screening_pending:result.screening_pending};
  sourceModal.value=false;sourceForm.url='';sourceForm.text='';await load();restoreDraft();saved.value=t('公开来源已保存');
 }catch(e){sourceError.value=errorMessage(e);}finally{busy.value=false;}}

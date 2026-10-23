@@ -12,7 +12,7 @@ const offer: Offer = {
   },
 };
 const user: User = {
-  id: 2, username: 'member', role: 'member', enabled: true, vless: true, hy2: true,
+  id: 2, username: 'member', role: 'user', enabled: true, vless: true, hy2: true,
   expires: 2000, quota: 1000, upload: 0, download: 0, vless_traffic: 0, hy2_traffic: 0,
   created: 1, last_sub: 0,
   entitlement: { plan_id: 'plan-a', version: 3, name: 'Plan A', group_ids: [], node_ids: [],

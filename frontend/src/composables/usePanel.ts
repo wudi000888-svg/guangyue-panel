@@ -455,7 +455,7 @@ function editNode(n?: Node, protocol = "vless") {
 }
 async function probe() {
   await task(async () => {
-    const r = await api("/nodes/probe", "POST", {
+    const r = await api<{ name: string; warning?: string }>("/nodes/probe", "POST", {
       id: nodeForm.id,
       protocol: nodeForm.protocol,
       exit_id: editingDefaultDirect.value ? "" : nodeForm.exit_id,
@@ -468,7 +468,7 @@ async function detectNode(n: Node) {
   await task(async () => {
     detecting.value = n.id;
     try {
-      const result = await api("/nodes/" + n.id + "/detect", "POST", {});
+      const result = await api<{ probe_error?: string }>("/nodes/" + n.id + "/detect", "POST", {});
       toast(result.probe_error || t("出口名称已更新"));
     } finally {
       detecting.value = "";
@@ -609,7 +609,7 @@ function batchAction(kind: 'ips'|'nodes', action: 'delete'|'enable'|'disable') {
     title: (action==='delete'?t('批量删除'):action==='enable'?t('批量启用'):t('批量停用'))+' · '+ids.length,
     detail: action==='delete' ? t('同时删除绑定节点')+' '+bound+' · '+t('对应链接将从所有用户订阅移除。') : action==='disable'&&kind==='ips' ? t('停用出口会同时停用绑定节点。') : kind==='ips'?t('启用出口后，可按需启用对应节点。'):t('将一次性应用所选节点状态。'),
     action: async()=>{
-      const result=await api('/'+kind+'/batch','POST',{ids,action});
+      const result=await api<{ selected: number }>('/'+kind+'/batch','POST',{ids,action});
       if(kind==='ips')selectedIPIDs.value=[];else selectedNodeIDs.value=[];
       await refresh();toast(t('批量操作已完成')+' · '+result.selected);
     }

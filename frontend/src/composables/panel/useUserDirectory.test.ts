@@ -4,7 +4,7 @@ import { useUserDirectory } from './useUserDirectory';
 import type { State, User } from '../../types';
 
 const now = Date.now() / 1000;
-const user = (id: number, extra: Partial<User>) => ({ id, username: 'u' + id, role: 'member', enabled: true, expires: 0, quota: 0, ...extra }) as User;
+const user = (id: number, extra: Partial<User>) => ({ id, username: 'u' + id, role: 'user', enabled: true, expires: 0, quota: 0, ...extra }) as User;
 
 it('filters members and reports their status', () => {
   const state = ref({ users: [user(1, {}), user(2, { enabled: false }), user(3, { expires: now - 10 }), user(4, { expires: now + 86400 }), user(5, { mount_access: { site_id: "x" } } as unknown as Partial<User>)] } as unknown as State);

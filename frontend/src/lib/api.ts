@@ -126,7 +126,7 @@ async function request<T>(url: string, options: RequestInit, decode: (r: Respons
 }
 // The control plane's CSRF check requires both headers (plus same Origin) on writes.
 export const JSON_REQUEST_HEADERS: Readonly<Record<string, string>> = { 'Content-Type': 'application/json', 'X-Requested-With': 'guangyue' };
-export function api<T = any>(path: string, method = 'GET', body?: unknown, options: RequestInit = {}): Promise<T> {
+export function api<T = unknown>(path: string, method = 'GET', body?: unknown, options: RequestInit = {}): Promise<T> {
   return request('/api' + path, {
     ...options, method,
     headers: { ...JSON_REQUEST_HEADERS, ...options.headers },
@@ -141,7 +141,7 @@ export function downloadBlob(url: string, options: RequestInit = {}): Promise<Bl
 export function useApi(prefix = '') {
   const scope = new AbortController();
   onScopeDispose(() => scope.abort());
-  return <T = any>(path = '', method = 'GET', body?: unknown, options: RequestInit = {}) => api<T>(prefix + path, method, body, {
+  return <T = unknown>(path = '', method = 'GET', body?: unknown, options: RequestInit = {}) => api<T>(prefix + path, method, body, {
     ...options, signal: options.signal ? AbortSignal.any([scope.signal, options.signal]) : scope.signal,
   });
 }

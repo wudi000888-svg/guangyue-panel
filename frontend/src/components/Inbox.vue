@@ -23,7 +23,7 @@ const category=(v:string)=>t(({notice:'通知',maintenance:'维护',account:'账
 const date=(v:number)=>new Date(v*1000).toLocaleString(locale.value);
 async function load(more=false){
  const request=loadRequest.start();loading.value=true;error.value='';
- try{const v=await api('?folder='+folder.value+(folder.value==='inbox'&&unreadOnly.value?'&unread=1':'')+(more?'&before='+next.value:''),'GET',undefined,{signal:request.signal});if(!loadRequest.isCurrent(request))return;items.value=more?[...items.value,...v.items]:v.items;next.value=v.next_before;}
+ try{const v=await api<{items:Message[];next_before:number}>('?folder='+folder.value+(folder.value==='inbox'&&unreadOnly.value?'&unread=1':'')+(more?'&before='+next.value:''),'GET',undefined,{signal:request.signal});if(!loadRequest.isCurrent(request))return;items.value=more?[...items.value,...v.items]:v.items;next.value=v.next_before;}
  catch(e){if(loadRequest.isCurrent(request)&&!isCancelled(e))error.value=errorMessage(e);}
  finally{if(loadRequest.isCurrent(request))loading.value=false;}
 }

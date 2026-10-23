@@ -75,14 +75,14 @@ async function importSubscription() {
     importIssues.value = [];
     let result;
     try {
-      result = await api("/ips/import", "POST", importMode.value === "url"
+      result = await api<{ queued?: boolean; added: number; duplicates: number; warnings?: unknown }>("/ips/import", "POST", importMode.value === "url"
         ? { url: importForm.url }
         : { content: importMode.value === "file" ? importFileContent : importForm.content, plain_protocol: importForm.plain_protocol });
     } catch (error) {
       if (error instanceof ApiError) importIssues.value = error.data.warnings || [];
       throw error;
     }
-    importReport.value = { ...result, warnings: Array.isArray(result.warnings) ? result.warnings : [] };
+    importReport.value = { ...result, warnings: Array.isArray(result.warnings) ? result.warnings as { index: number; reason: string }[] : [] };
     importForm.url = "";
     importForm.content = "";
     modal.value = "";
@@ -111,7 +111,7 @@ async function loadPrivateSources() {
   if (privateSourcesRequest) return privateSourcesRequest;
   privateSourcesLoading.value = true;
   privateSourcesRequest = (async () => {
-    try { receivePrivateSources((await api('/import-sources')).items); }
+    try { receivePrivateSources((await api<{ items: PrivateSourceSummary[] }>('/import-sources')).items); }
     catch (e) { if (!isCancelled(e)) privateSourcesError.value = errorMessage(e); }
     finally { privateSourcesLoading.value = false; privateSourcesRequest = null; }
   })();

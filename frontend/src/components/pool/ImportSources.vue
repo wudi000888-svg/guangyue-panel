@@ -23,7 +23,7 @@ const form=reactive({id:'',name:'',url:'',enabled:true,revision:''});
 const date=(v:number)=>v?new Date(v*1000).toLocaleString(locale.value):t('尚未执行');
 async function load(){
  const request=loadRequest.start();
- try{const result=await api('','GET',undefined,{signal:request.signal});if(!loadRequest.isCurrent(request))return;rows.value=result.items;ready.value=true;error.value='';emit('loaded',rows.value);}
+ try{const result=await api<{items:Row[]}>('','GET',undefined,{signal:request.signal});if(!loadRequest.isCurrent(request))return;rows.value=result.items;ready.value=true;error.value='';emit('loaded',rows.value);}
  catch(e){if(loadRequest.isCurrent(request)&&!isCancelled(e))error.value=errorMessage(e);}
 }
 async function action(fn:()=>Promise<void>){if(busy.value)return;busy.value=true;error.value='';notice.value='';deleteResult.value=null;try{await fn();await load();emit('refresh');}catch(e){if(!isCancelled(e))error.value=errorMessage(e);}finally{busy.value=false;}}
@@ -32,7 +32,7 @@ async function save(){await action(async()=>{await api(form.id?'/'+form.id:'',fo
 async function refresh(source:Source){await action(async()=>{await api('/'+source.id+'/refresh','POST',{});notice.value='更新已排队，后台将依次执行';});}
 function confirmDelete(source:Source){if(busy.value)return;error.value='';deleting.value=source;}
 function closeDialog(){if(busy.value)return;editing.value=false;deleting.value=null;form.url='';}
-async function remove(){if(!deleting.value||busy.value)return;const source=deleting.value;await action(async()=>{const result=await api('/'+source.id,'DELETE',{});if(Number.isInteger(result.resources_deleted)&&Number.isInteger(result.nodes_deleted))deleteResult.value={resources:result.resources_deleted,nodes:result.nodes_deleted,shared:Number.isInteger(result.shared_resources_retained)?result.shared_resources_retained:0};rows.value=rows.value.filter(row=>row.source.id!==source.id);emit('loaded',rows.value);deleting.value=null;notice.value='订阅来源已删除';});}
+async function remove(){if(!deleting.value||busy.value)return;const source=deleting.value;await action(async()=>{const result=await api<{resources_deleted?:number;nodes_deleted?:number;shared_resources_retained?:number}>('/'+source.id,'DELETE',{});if(Number.isInteger(result.resources_deleted)&&Number.isInteger(result.nodes_deleted))deleteResult.value={resources:result.resources_deleted!,nodes:result.nodes_deleted!,shared:Number.isInteger(result.shared_resources_retained)?result.shared_resources_retained!:0};rows.value=rows.value.filter(row=>row.source.id!==source.id);emit('loaded',rows.value);deleting.value=null;notice.value='订阅来源已删除';});}
 let timer:ReturnType<typeof setTimeout>|undefined,alive=true;
 async function poll(){if(!document.hidden&&!busy.value)await load();if(alive)timer=setTimeout(poll,rows.value.some(r=>r.running||r.source.queued)?5000:30000);}
 onMounted(async()=>{await load();if(alive)timer=setTimeout(poll,5000)});onUnmounted(()=>{alive=false;loadRequest.cancel();clearTimeout(timer)});
