@@ -162,6 +162,10 @@ func (s *Store) saveCommerceRequest(tx *persistence.Tx, actor int64, id string, 
 	_, e = tx.Exec("INSERT INTO commerce_requests(id,user_id,fingerprint,response,created) VALUES(?,?,?,?,?)", id, actor, digest(string(jsonBytes(request))), b, time.Now().Unix())
 	return e
 }
+// txUser overwrites the whole user document without a version check. Unlike
+// wallet postings and payment rows (conditional SQL), user documents are
+// read-modify-written by many paths, and their only serialisation is that
+// every writer holds App.mu. A new writer that skips App.mu loses updates.
 func txUser(tx *persistence.Tx, user domain.User) error {
 	r, e := tx.Exec("UPDATE users SET doc=? WHERE id=?", jsonBytes(user), user.ID)
 	if e == nil {
