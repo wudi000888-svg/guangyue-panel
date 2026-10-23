@@ -103,7 +103,23 @@ func appendBackupEntry(tw *tar.Writer, path, name string) error {
 	_, err = io.Copy(tw, f)
 	return err
 }
+// The archive holds the master key and every sealed secret, including the
+// wallet seed, so it needs the same password re-check as revealing the seed.
 func (a *App) backup(w http.ResponseWriter, r *http.Request, actor Record) {
+	var input struct {
+		Password string `json:"password"`
+	}
+	if !decode(w, r, &input) {
+		return
+	}
+	if _, err := a.commerceActor(actor, true, input.Password); err != nil {
+		failure(w, 403, "请验证管理员当前密码")
+		return
+	}
+	a.streamBackup(w, actor)
+}
+
+func (a *App) streamBackup(w http.ResponseWriter, actor Record) {
 	if !a.heavyMu.TryLock() {
 		failure(w, 409, "后台任务繁忙，请稍后重试")
 		return

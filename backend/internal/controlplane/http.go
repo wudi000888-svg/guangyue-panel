@@ -402,8 +402,8 @@ func (a *App) password(w http.ResponseWriter, r *http.Request, actor Record) {
 	if !decode(w, r, &input) {
 		return
 	}
-	if len(input.Password) == 0 || len(input.Password) > 72 {
-		failure(w, 400, "密码不能为空，且不能超过 72 个字节")
+	if len(input.Password) < 8 || len(input.Password) > 72 {
+		failure(w, 400, "密码需为 8–72 个字节")
 		return
 	}
 	if bcrypt.CompareHashAndPassword(actor.Password, []byte(input.Current)) != nil {
@@ -533,7 +533,7 @@ func (a *App) admin(w http.ResponseWriter, r *http.Request, actor Record) {
 		a.status = "pending"
 		a.mu.Unlock()
 		jsonResponse(w, 202, object{"ok": true})
-	case r.Method == "GET" && r.URL.Path == "/api/backup":
+	case r.Method == "POST" && r.URL.Path == "/api/backup":
 		a.backup(w, r, actor)
 	default:
 		failure(w, 404, "接口不存在")

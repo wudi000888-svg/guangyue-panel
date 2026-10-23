@@ -71,13 +71,16 @@ func TestShortPasswordChangeAndAdminReset(t *testing.T) {
 	if sessionStatus(old) != 200 {
 		t.Fatal("failed change invalidated session")
 	}
-	if w := req(t, a, member, "POST", "/api/password", object{"current": "test-password-123456", "password": "1"}); w.Code != 200 {
-		t.Fatalf("short self change: %d", w.Code)
+	if w := req(t, a, member, "POST", "/api/password", object{"current": "test-password-123456", "password": "1"}); w.Code != 400 {
+		t.Fatalf("short self change accepted: %d", w.Code)
+	}
+	if w := req(t, a, member, "POST", "/api/password", object{"current": "test-password-123456", "password": "member-pass-1"}); w.Code != 200 {
+		t.Fatalf("self change: %d", w.Code)
 	}
 	if sessionStatus(old) != 401 {
 		t.Fatal("old session survived password change")
 	}
-	current := login("1")
+	current := login("member-pass-1")
 	path := fmt.Sprintf("/api/users/%d", member.ID)
 	// Empty on the edit endpoint means preserve, never assign an empty password.
 	if w := req(t, a, owner, "PUT", path, userInput{Username: "member", Enabled: true}); w.Code != 200 {
@@ -86,7 +89,7 @@ func TestShortPasswordChangeAndAdminReset(t *testing.T) {
 	if sessionStatus(current) != 200 {
 		t.Fatal("blank edit invalidated session")
 	}
-	login("1")
+	login("member-pass-1")
 	if w := req(t, a, owner, "PUT", path, userInput{Username: "member", Password: "2", Enabled: true}); w.Code != 200 {
 		t.Fatalf("admin short reset: %d", w.Code)
 	}

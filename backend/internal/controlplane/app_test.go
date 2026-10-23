@@ -91,7 +91,7 @@ func TestUserIsolationAndCSRF(t *testing.T) {
 	for _, test := range []struct {
 		method, path string
 		want         int
-	}{{"GET", "/api/subscription?user_id=1", 403}, {"GET", "/api/backup", 403}, {"POST", "/api/users", 403}, {"DELETE", "/api/users/3", 403}} {
+	}{{"GET", "/api/subscription?user_id=1", 403}, {"POST", "/api/backup", 403}, {"POST", "/api/users", 403}, {"DELETE", "/api/users/3", 403}} {
 		w := req(t, a, alice, test.method, test.path, object{})
 		if w.Code != test.want {
 			t.Fatalf("%s %s: %d", test.method, test.path, w.Code)
@@ -198,7 +198,7 @@ func TestBackupRestorePreservesEncryptedCredentialsAndRevocations(t *testing.T) 
 	if err := a.store.queueKick(99); err != nil {
 		t.Fatal(err)
 	}
-	w := req(t, a, u, "GET", "/api/backup", nil)
+	w := req(t, a, u, "POST", "/api/backup", object{"password": commerceTestPassword})
 	if w.Code != 200 {
 		t.Fatalf("backup: %s", w.Body.String())
 	}
