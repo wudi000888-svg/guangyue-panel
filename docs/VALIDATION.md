@@ -37,7 +37,7 @@
 
 ## Go 构建与依赖漏洞扫描
 
-CI 与源码构建固定使用 Go 1.26.10，发布包包含 Go BSD-3-Clause 许可证。
+CI 与源码构建固定使用 Go 1.26.10（来自 `backend/go.mod` 的 `toolchain` 指令，`scripts/release-check.py` 校验本行一致），发布包包含 Go BSD-3-Clause 许可证。
 
 `govulncheck v1.1.4`（Go 1.26.10）未发现被本面板调用的漏洞，也未发现被导入包的漏洞。模块级别提示 GO-2026-5932：`golang.org/x/crypto/openpgp` 已停止维护；本面板不导入该包，使用同模块的 bcrypt 等维护包。此结果不等于所有第三方代理核心都经过完整安全审计。
 
