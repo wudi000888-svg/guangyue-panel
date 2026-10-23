@@ -4,6 +4,7 @@ import { Mail, Send, ShieldCheck, RefreshCw, LoaderCircle } from 'lucide-vue-nex
 import { usePanelContext } from '../composables/panelContext';
 import { serialPoll } from '../lib/requests';
 import { stamp } from '../lib/commerce';
+import { hasSettlingDelivery } from '../lib/email';
 import { isCancelled } from '../lib/api';
 import { t } from '../i18n';
 type MailConfig = { enabled: boolean; host: string; port: number; tls_mode: 'tls' | 'starttls'; username: string; from_email: string; from_name: string; has_password: boolean; registration_verification: boolean; order_notifications: boolean; version: number };
@@ -14,7 +15,8 @@ const deliveries = ref<Delivery[]>([]), error = ref(''), notice = ref(''), busy 
 let disposed = false;
 function fail(e: unknown) { if (!isCancelled(e) && !disposed) error.value = t(e instanceof Error ? e.message : '请求失败'); }
 async function history() { try { const v = await api<{ items: Delivery[] }>('/email/deliveries'); if (!disposed) deliveries.value = v.items; } catch (e) { fail(e); } }
-const poll = serialPoll(history, () => 5000);
+// Only poll while a delivery can still change state, and never in a hidden tab.
+const poll = serialPoll(async () => { if (!document.hidden && !busy.value && hasSettlingDelivery(deliveries.value)) await history(); }, () => 5000);
 async function load() { loading.value = true; error.value = ''; try { const v = await api<MailConfig>('/email/settings'); if (!disposed) form.value = v; await history(); } catch (e) { fail(e); } finally { if (!disposed) loading.value = false; } }
 async function save() {
   if (!form.value || busy.value) return; busy.value = true; error.value = ''; notice.value = '';

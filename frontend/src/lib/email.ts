@@ -19,3 +19,9 @@ export function readEmailProof(): EmailProof | null {
     return value;
   } catch { clearEmailProof(); return null; }
 }
+// Deliveries in these states can still change without user action; the mail
+// settings page polls only while one exists.
+const settlingDeliveryStates = new Set(['pending', 'sending', 'retry']);
+export function hasSettlingDelivery(items: readonly { state: string }[]): boolean {
+  return items.some(item => settlingDeliveryStates.has(item.state));
+}
