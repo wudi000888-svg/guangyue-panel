@@ -6,6 +6,19 @@ test "$(git rev-parse HEAD)" = "$TESTED_SHA"
 git fetch origin main --tags
 git config user.name 'github-actions[bot]'
 git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+repo=${GITHUB_REPOSITORY:?}
+
+# Dispatches occasionally fail transiently, or race a branch that was just
+# pushed; a lost dispatch would stall the release, so retry a few times.
+dispatch() {
+  local attempt
+  for attempt in 1 2 3 4 5; do
+    gh workflow run "$@" && return 0
+    printf 'gh workflow run %s failed (attempt %s); retrying\n' "$*" "$attempt" >&2
+    sleep $((attempt * 10))
+  done
+  return 1
+}
 
 # Default GITHUB_TOKEN writes do not trigger push/PR workflows. Dispatch CI
 # explicitly at both transitions, then resume here only after it succeeds.
@@ -14,8 +27,10 @@ if [[ "$TESTED_BRANCH" == codex/auto-release-* ]]; then
   pr=$(gh pr list --base main --head "$TESTED_BRANCH" --state open --json number --jq '.[0].number // empty')
   test -n "$pr" || exit 0
   test "$(gh pr view "$pr" --json headRefOid --jq .headRefOid)" = "$TESTED_SHA" || exit 0
-  gh pr merge "$pr" --squash --match-head-commit "$TESTED_SHA" --subject "release: v$(cat VERSION) [skip release]"
-  gh workflow run ci.yml --ref main
+  # -R keeps gh from touching the detached local checkout; only the remote
+  # bump branch is deleted.
+  gh pr merge "$pr" -R "$repo" --squash --delete-branch --match-head-commit "$TESTED_SHA" --subject "release: v$(cat VERSION) [skip release]"
+  dispatch ci.yml --ref main
   exit 0
 fi
 
@@ -35,7 +50,7 @@ if [[ "$subject" == "release: v${version} [skip release]"* ]]; then
   fi
   # Published releases are immutable; a repeated CI completion is a no-op.
   if test "$(gh release view "$tag" --json isDraft --jq .isDraft 2>/dev/null || true)" != false; then
-    gh workflow run release.yml --ref main -f tag="$tag"
+    dispatch release.yml --ref main -f tag="$tag"
   fi
   exit 0
 fi
@@ -51,10 +66,18 @@ if test -z "$pr"; then
   body=$(mktemp)
   trap 'rm -f "$body"' EXIT
   cat > "$body" <<BODY
-Bump the tested main commit to v${version}. Main remains protected: this PR must pass the complete build, security and Lite/Pro installation checks before merging.
+Bump the tested main commit to v${version}. CI on this branch verifies that the diff is exactly \`scripts/bump-version.py\` applied to main and runs the release tree checks; the required checks report from that run.
 
-CI is explicitly dispatched because PRs created by GITHUB_TOKEN do not trigger workflows. After merging, complete CI runs on main again; only its exact artifacts may be published.
+CI is explicitly dispatched because PRs created by GITHUB_TOKEN do not trigger workflows. After merging, complete CI (build, security and every installation test) runs on main again; only its exact artifacts may be published.
 BODY
   gh pr create --base main --head "$branch" --title "release: v${version} [skip release]" --body-file "$body"
 fi
-gh workflow run ci.yml --ref "$branch"
+# Only the newest tested main commit should be released; close older bump PRs.
+gh pr list -R "$repo" --base main --state open --json number,headRefName,isCrossRepository \
+  --jq '.[] | select(.isCrossRepository | not) | select(.headRefName | startswith("codex/auto-release-")) | "\(.number) \(.headRefName)"' |
+  while read -r stale stale_branch; do
+    test "$stale_branch" != "$branch" || continue
+    gh pr close "$stale" -R "$repo" --delete-branch --comment "Superseded by \`$branch\` for the newer main commit ${TESTED_SHA:0:12}." ||
+      printf 'Could not close superseded release PR #%s; continuing\n' "$stale" >&2
+  done
+dispatch ci.yml --ref "$branch"
