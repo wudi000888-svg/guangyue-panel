@@ -103,6 +103,7 @@ func appendBackupEntry(tw *tar.Writer, path, name string) error {
 	_, err = io.Copy(tw, f)
 	return err
 }
+
 // The archive holds the master key and every sealed secret, including the
 // wallet seed, so it needs the same password re-check as revealing the seed.
 func (a *App) backup(w http.ResponseWriter, r *http.Request, actor Record) {
