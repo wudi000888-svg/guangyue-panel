@@ -167,6 +167,7 @@ func (a *App) serveSubscription(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", "attachment; filename="+map[bool]string{true: "guangyue-public.", false: "guangyue."}[public]+map[bool]string{true: "yaml", false: "txt"}[r.URL.Query().Get("format") == "mihomo"])
 	w.Write(b)
 }
+
 // markSubscriptionAccess re-reads the user under the control lock so the
 // access time never overwrites a newer document written meanwhile. The time
 // is informational: while the control loop is busy it is skipped rather than
@@ -193,23 +194,9 @@ func (a *App) hyAuth(w http.ResponseWriter, r *http.Request) {
 		jsonResponse(w, 200, object{"ok": false})
 		return
 	}
-	records, err := a.coreRecords()
-	nodes, e := a.store.nodes()
-	if err == nil && e == nil {
-		for _, record := range records {
-			if !record.Active() || !record.HY2 {
-				continue
-			}
-			for _, node := range nodes {
-				if node.Protocol != "hy2" || !memberMayUseNode(record, node) {
-					continue
-				}
-				if subtle.ConstantTimeCompare([]byte(input.Auth), []byte(hyNodePassword(record, node))) == 1 {
-					jsonResponse(w, 200, object{"ok": true, "id": hyNodeIdentity(record, node)})
-					return
-				}
-			}
-		}
+	if identity, ok := a.hyAuthenticate(input.Auth); ok {
+		jsonResponse(w, 200, object{"ok": true, "id": identity})
+		return
 	}
 	jsonResponse(w, 200, object{"ok": false})
 }

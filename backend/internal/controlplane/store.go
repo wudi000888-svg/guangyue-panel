@@ -222,6 +222,17 @@ func (s *Store) nodes() ([]Node, error) {
 	}
 	return out, rows.Err()
 }
+func (s *Store) node(id string) (Node, error) {
+	var b []byte
+	if err := s.db.QueryRow("SELECT doc FROM nodes WHERE id=?", id).Scan(&b); err != nil {
+		return Node{}, err
+	}
+	var n Node
+	if err := s.vault.open(b, &n); err != nil {
+		return Node{}, err
+	}
+	return normalizeNodePolicy(n), nil
+}
 func (s *Store) saveNode(n Node) error {
 	b, err := s.vault.seal(normalizeNodePolicy(n))
 	if err != nil {

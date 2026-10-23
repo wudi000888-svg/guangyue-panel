@@ -59,6 +59,7 @@ type App struct {
 	store                  *Store
 	mu                     sync.Mutex
 	collectSeq             uint64 // applied counter samples; guarded by mu
+	hyAuthCache            hyAuthCache
 	fleetMigrationMu       sync.Mutex
 	restart                context.CancelFunc
 	realityProbeMu         sync.Mutex
