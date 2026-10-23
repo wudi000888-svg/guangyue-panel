@@ -13,6 +13,20 @@ from urllib.parse import quote
 
 root = Path(__file__).resolve().parent.parent
 out = root / 'build/notices'
+
+
+def pinned_versions():
+    """Read scripts/versions.env, the single source of pinned core versions."""
+    values = {}
+    for line in (root / 'scripts/versions.env').read_text().splitlines():
+        line = line.strip()
+        if line and not line.startswith('#'):
+            key, value = line.split('=', 1)
+            values[key] = value.split(' #', 1)[0].strip()
+    return values
+
+
+pins = pinned_versions()
 out.mkdir(parents=True, exist_ok=True)
 packages = {}
 texts = []
@@ -132,15 +146,15 @@ collect('golang-go', go_version, goroot, 'generic', 'BSD-3-Clause')
 (out / 'GO-LICENSE.txt').write_text((Path(goroot) / 'LICENSE').read_text())
 go_modules(root / 'backend')
 mihomo_source = root / '.cache/mihomo-source'
-collect('github.com/MetaCubeX/mihomo', 'v1.19.30', mihomo_source, 'golang', 'GPL-3.0')
+collect('github.com/MetaCubeX/mihomo', pins['MIHOMO_VERSION'], mihomo_source, 'golang', 'GPL-3.0')
 go_modules(mihomo_source)
-packages['golang:github.com/MetaCubeX/mihomo@v1.19.30'].update(
-    downloadLocation='https://github.com/MetaCubeX/mihomo/tree/ac017cdd246ce8bd547653d927e7bf77d7ee73d5',
+packages['golang:github.com/MetaCubeX/mihomo@' + pins['MIHOMO_VERSION']].update(
+    downloadLocation='https://github.com/MetaCubeX/mihomo/tree/' + pins['MIHOMO_COMMIT'],
     sourceInfo='Unmodified official amd64-compatible executable. Fixed complete upstream source, build scripts, Go module locks and GPL license are included as licenses/mihomo-source.tar.gz and MIHOMO-SOURCE.json.',
-    checksums=[{'algorithm': 'SHA256', 'checksumValue': '8ad44e28fe72be4640254b96741b677f4074991b99186cc4486a1c28ded02b1a'}],
+    checksums=[{'algorithm': 'SHA256', 'checksumValue': pins['MIHOMO_BINARY_SHA256']}],
 )
 xray_source = root / '.cache/xray-monitor-source'
-collect('github.com/xtls/xray-core', 'v26.3.27-guangyue-sessions1', xray_source, 'golang', 'MPL-2.0')
+collect('github.com/xtls/xray-core', pins['XRAY_VERSION'] + '-guangyue-sessions1', xray_source, 'golang', 'MPL-2.0')
 go_modules(xray_source)
 for source in sorted((root / '.cache').glob('hysteria-node-*')):
     if (source / 'app/go.mod').is_file():
