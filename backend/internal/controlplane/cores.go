@@ -25,10 +25,32 @@ type object = map[string]any
 
 var errNoNodes = errors.New("no authorized nodes")
 
+// Member traffic must never reach the server itself or its private networks:
+// loopback hosts the unauthenticated Xray API and the panel, and link-local
+// covers cloud metadata. Both cores resolve hostnames before matching, so a
+// domain pointing at one of these ranges is refused as well.
+var blockedEgress = []string{
+	"0.0.0.0/8", "10.0.0.0/8", "100.64.0.0/10", "127.0.0.0/8", "169.254.0.0/16",
+	"172.16.0.0/12", "192.0.0.0/24", "192.168.0.0/16", "224.0.0.0/3",
+	"::/128", "::1/128", "64:ff9b:1::/48", "fc00::/7", "fe80::/10", "ff00::/8",
+}
+
+func hy2EgressACL() []string {
+	rules := []string{"reject(localhost)"}
+	for _, cidr := range blockedEgress {
+		rules = append(rules, "reject("+cidr+")")
+	}
+	return append(rules, "exit(all)")
+}
+
 func xrayConfig(c Config, records []Record, nodes []Node) object {
 	clients := map[string][]object{}
 	outbounds := []object{{"tag": "block", "protocol": "blackhole"}, {"tag": "direct", "protocol": "freedom", "settings": object{"domainStrategy": "UseIPv4"}}}
-	rules := []object{{"type": "field", "inboundTag": []string{"api"}, "outboundTag": "api"}}
+	rules := []object{
+		{"type": "field", "inboundTag": []string{"api"}, "outboundTag": "api"},
+		{"type": "field", "domain": []string{"full:localhost"}, "outboundTag": "block"},
+		{"type": "field", "ip": blockedEgress, "outboundTag": "block"},
+	}
 	for _, n := range nodes {
 		if n.Protocol != "vless" || !n.Enabled {
 			continue
@@ -78,7 +100,7 @@ func xrayConfig(c Config, records []Record, nodes []Node) object {
 		inbounds = append(inbounds, inbound)
 	}
 	inbounds = append(inbounds, object{"tag": "api", "listen": "127.0.0.1", "port": 19185, "protocol": "dokodemo-door", "settings": object{"address": "127.0.0.1"}})
-	return object{"log": object{"loglevel": "warning", "access": "none"}, "api": object{"tag": "api", "services": []string{"HandlerService", "StatsService", "RoutingService"}}, "stats": object{}, "policy": object{"levels": object{"0": object{"statsUserUplink": true, "statsUserDownlink": true, "connIdle": 300, "bufferSize": 32}}}, "inbounds": inbounds, "outbounds": outbounds, "routing": object{"domainStrategy": "AsIs", "rules": rules}}
+	return object{"log": object{"loglevel": "warning", "access": "none"}, "api": object{"tag": "api", "services": []string{"HandlerService", "StatsService", "RoutingService"}}, "stats": object{}, "policy": object{"levels": object{"0": object{"statsUserUplink": true, "statsUserDownlink": true, "connIdle": 300, "bufferSize": 32}}}, "inbounds": inbounds, "outbounds": outbounds, "routing": object{"domainStrategy": "IPOnDemand", "rules": rules}}
 }
 func hy2Outbound(n Node) object {
 	n = effectiveExit(n)
@@ -108,7 +130,7 @@ func hy2Config(c Config, nodes []Node) object {
 			routes[n.ID] = hy2Outbound(coreExit(c, n))
 		}
 	}
-	result := object{"listen": ":443", "tls": object{"cert": c.Cert, "key": c.CertKey}, "auth": object{"type": "http", "http": object{"url": "http://" + c.InternalListen + "/auth"}}, "trafficStats": object{"listen": "127.0.0.1:19199", "secret": c.StatsSecret}, "quic": object{"initStreamReceiveWindow": 2097152, "maxStreamReceiveWindow": 2097152, "initConnReceiveWindow": 5242880, "maxConnReceiveWindow": 5242880, "maxConcurrentIncomingStreams": 256}, "outbounds": []object{hy2Outbound(Node{Exit: "direct"})}, "nodeRouting": true, "nodeOutbounds": routes, "masquerade": object{"type": "string", "string": object{"content": "Not Found", "statusCode": 404}}}
+	result := object{"listen": ":443", "tls": object{"cert": c.Cert, "key": c.CertKey}, "auth": object{"type": "http", "http": object{"url": "http://" + c.InternalListen + "/auth"}}, "trafficStats": object{"listen": "127.0.0.1:19199", "secret": c.StatsSecret}, "quic": object{"initStreamReceiveWindow": 2097152, "maxStreamReceiveWindow": 2097152, "initConnReceiveWindow": 5242880, "maxConnReceiveWindow": 5242880, "maxConcurrentIncomingStreams": 256}, "outbounds": []object{hy2Outbound(Node{Exit: "direct"})}, "acl": object{"inline": hy2EgressACL()}, "nodeRouting": true, "nodeOutbounds": routes, "masquerade": object{"type": "string", "string": object{"content": "Not Found", "statusCode": 404}}}
 	if c.HY2Optimized {
 		result["ignoreClientBandwidth"] = true
 		result["congestion"] = object{"type": "bbr", "bbrProfile": "standard"}
@@ -251,6 +273,19 @@ func nodeHash(nodes []Node, protocol string) string {
 	return digest(string(b))
 }
 
+// coreTemplate changes whenever generated core settings change in a way that
+// cannot be hot-applied (Xray routing domain strategy, HY2 ACL). Mixing it into
+// the restart hashes makes the first apply after an upgrade restart both cores.
+const coreTemplate = "egress-block-1"
+
+func xrayRestartHash(nodes []Node) string {
+	return digest(nodeHash(nodes, "vless") + ":" + coreTemplate)
+}
+
+func hy2RestartHash(nodes []Node, optimized bool) string {
+	return digest(hy2NodeHash(nodes, optimized) + ":" + coreTemplate)
+}
+
 func hy2NodeHash(nodes []Node, optimized bool) string {
 	hash := nodeHash(nodes, "hy2")
 	if optimized {
@@ -282,7 +317,7 @@ func (a *App) applyCoreConfiguration() error {
 	if a.cfg.Dev {
 		return a.prepare()
 	}
-	xhash, hhash := nodeHash(nodes, "vless"), nodeHash(nodes, "hy2")
+	xhash := xrayRestartHash(nodes)
 	previousX, err := a.store.readMeta("x_nodes")
 	if err != nil {
 		return err
@@ -292,7 +327,7 @@ func (a *App) applyCoreConfiguration() error {
 		return err
 	}
 	xchange := previousX != xhash
-	hhash = hy2NodeHash(nodes, a.cfg.HY2Optimized)
+	hhash := hy2RestartHash(nodes, a.cfg.HY2Optimized)
 	hchange := previousHY != hhash
 	if xchange {
 		candidate := filepath.Join(a.cfg.StateDir, "candidate-xray.json")

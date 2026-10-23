@@ -391,8 +391,8 @@ func TestXrayZeroExitStillRequiresUserReadback(t *testing.T) {
 		t.Fatal(err)
 	}
 	nodes, _ := a.store.nodes()
-	_ = a.store.setMeta("x_nodes", nodeHash(nodes, "vless"))
-	_ = a.store.setMeta("hy_nodes", nodeHash(nodes, "hy2"))
+	_ = a.store.setMeta("x_nodes", xrayRestartHash(nodes))
+	_ = a.store.setMeta("hy_nodes", hy2RestartHash(nodes, false))
 	err = a.reconcile()
 	if err == nil || !strings.Contains(err.Error(), "verification mismatch") {
 		t.Fatalf("zero-exit CLI failure reported success: %v", err)

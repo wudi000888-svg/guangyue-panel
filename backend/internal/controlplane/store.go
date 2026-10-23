@@ -374,9 +374,9 @@ func (s *Store) markPreparedNodes(hyOptimized bool) error {
 	}
 	defer tx.Rollback()
 	for key, protocol := range map[string]string{"x_nodes": "vless", "hy_nodes": "hy2"} {
-		value := nodeHash(nodes, protocol)
+		value := xrayRestartHash(nodes)
 		if protocol == "hy2" {
-			value = hy2NodeHash(nodes, hyOptimized)
+			value = hy2RestartHash(nodes, hyOptimized)
 		}
 		if _, err = tx.Exec("INSERT INTO meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", key, value); err != nil {
 			return err
