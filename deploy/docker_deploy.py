@@ -481,6 +481,25 @@ def volumes(source, target, readonly=False):
             'bind': {'create_host_path': False}}
 
 
+# Container healthchecks only report state (docker ps / inspect); restarts and
+# upgrade health gates are unchanged. The image ships Debian bash, so the panel
+# probe uses bash's /dev/tcp builtin with no curl/wget and no `$` that Compose
+# would interpolate. The gateway reuses its read-only -wait-ready probe.
+PANEL_HEALTHCHECK = {'test': ['CMD', '/bin/bash', '-c',
+                              "exec 3<>/dev/tcp/127.0.0.1/19100 && printf 'GET /api/health HTTP/1.0\\r\\nHost: 127.0.0.1\\r\\n\\r\\n' >&3 && head -n 1 <&3 | grep -q '^HTTP/1\\.[01] 200 '"],
+                     'interval': '30s', 'timeout': '5s', 'retries': 3, 'start_period': '60s'}
+GATEWAY_HEALTHCHECK = {'test': ['CMD', '/opt/guangyue-personal/bin/guangyue-gateway', '-config', '/etc/guangyue-gateway.json', '-wait-ready', '5s'],
+                       'interval': '30s', 'timeout': '8s', 'retries': 3, 'start_period': '60s'}
+
+
+def with_healthchecks(value):
+    """Add app healthchecks to a composition, including pre-0.42 installations."""
+    services = value['services']
+    services['gateway'].setdefault('healthcheck', dict(GATEWAY_HEALTHCHECK))
+    services['panel'].setdefault('healthcheck', dict(PANEL_HEALTHCHECK))
+    return value
+
+
 def composition(marker, config, fixture=False):
     uid, gid = marker['uid'], marker['gid']; labels = {'org.guangyue.install-id': marker['id']}
     common = {'image': marker['images']['app'], 'user': f'{uid}:{gid}', 'init': True, 'restart': 'unless-stopped',
@@ -515,7 +534,7 @@ def composition(marker, config, fixture=False):
                             'pids_limit': 32, 'mem_limit': '128m', 'command': ['redis-server', '/usr/local/etc/redis/redis.conf'],
                             'tmpfs': ['/data:rw,noexec,nosuid,size=2m,mode=0700,uid=999,gid=999'],
                             'volumes': [volumes(ROOT / 'redis.conf', '/usr/local/etc/redis/redis.conf', True)]}
-    return {'name': marker['project'], 'services': services, 'networks': {'default': {'labels': labels}}}
+    return with_healthchecks({'name': marker['project'], 'services': services, 'networks': {'default': {'labels': labels}}})
 
 
 def read_config():
@@ -1064,7 +1083,26 @@ def transaction(change,target,progress):
         else:
             start_application(marker);health(marker,marker['version']);complete_gate(marker['version'])
         raise
+    prune_backups(keep_backup=backup)
     return backup
+
+
+def prune_backups(keep_backup=None,override=None,dry_run=False):
+    """Apply backup retention after a committed Docker change; never fails it."""
+    import backup_retention
+    try:
+        keep=backup_retention.keep_count(read_config(),override);marker=load()
+        pending=safe_json(transaction_file(),missing=True)
+        rows=safe_json(history_path(),missing=True) or []
+        protected=[keep_backup,pending.get('backup') if isinstance(pending,dict) else None]
+        if dry_run:return backup_retention.plan(BACKUPS,keep,marker['version'],protected,rows)[1]
+        removed=backup_retention.prune(BACKUPS,keep,marker['version'],protected,rows)
+        if removed:atomic_json(history_path(),backup_retention.without_removed(rows,removed))
+        return removed
+    except (ValueError,OSError) as exc:
+        if dry_run:raise
+        print('Backup pruning skipped: '+(str(exc) if isinstance(exc,ValueError) else type(exc).__name__))
+        return []
 
 
 def upgrade(bundle,progress=lambda stage:None,*,test_assets_dir=None):
@@ -1080,7 +1118,7 @@ def upgrade(bundle,progress=lambda stage:None,*,test_assets_dir=None):
     def change(marker,config):
         copy_application(bundle)
         new={**marker,'version':target,'images':{k:v['id'] for k,v in manifest['images'].items()}}
-        comp=safe_json(ROOT/'compose.json');comp['services']['gateway']['image']=new['images']['app'];comp['services']['panel']['image']=new['images']['app']
+        comp=with_healthchecks(safe_json(ROOT/'compose.json'));comp['services']['gateway']['image']=new['images']['app'];comp['services']['panel']['image']=new['images']['app']
         atomic_json(ROOT/'DOCKER_IMAGES.json',manifest);activate(new,comp,provision=True)
     return transaction(change,target,progress)
 

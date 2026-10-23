@@ -2,13 +2,15 @@
 # Fixed upstream source plus the MPL-2.0 user session gauge extension.
 set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
+# shellcheck source=versions.env
+. "$root/scripts/versions.env"
 source_dir="$root/.cache/xray-monitor-source"
 patch="$root/core-patches/xray-user-sessions.patch"
-commit=d2758a023cd7f4174a5a5fa4ff66e487d4342ba0
+commit=$XRAY_COMMIT
 go_bin=${GY_GO:-go}
 mkdir -p "$root/.cache" "$root/build/bin"
 if ! test -d "$source_dir"; then
-  git clone --depth 1 --branch v26.3.27 https://github.com/XTLS/Xray-core.git "$source_dir"
+  git clone --depth 1 --branch "$XRAY_VERSION" https://github.com/XTLS/Xray-core.git "$source_dir"
 fi
 test "$(git -C "$source_dir" rev-parse HEAD)" = "$commit"
 if git -C "$source_dir" apply --check "$patch" 2>/dev/null; then
@@ -38,4 +40,4 @@ with destination.open('wb') as output, gzip.GzipFile(filename='', mode='wb', fil
         info.uname = info.gname = 'root'
         with path.open('rb') as content: archive.addfile(info, content)
 PY
-printf 'Built Xray 26.3.27 + user session gauges\n'
+printf 'Built Xray %s + user session gauges\n' "${XRAY_VERSION#v}"

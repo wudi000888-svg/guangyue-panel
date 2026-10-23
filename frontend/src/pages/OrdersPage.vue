@@ -14,7 +14,7 @@ import { bytes } from '../lib/format';
 import { isCancelled } from '../lib/api';
 import { serialPoll } from '../lib/requests';
 import { t } from '../i18n';
-import '../commerce.css';
+import '../styles/commerce.css';
 import '../styles/member-ui.css';
 const route=useRoute(),router=useRouter(),{owner,state,refresh}=usePanelContext();
 const {api,read,run,busy,error,notice}=useCommerce();

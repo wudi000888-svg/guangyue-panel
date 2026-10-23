@@ -165,7 +165,7 @@ func TestFleetReadonlyGatewayAndLocalAuthorization(t *testing.T) {
 	if w := invoke("DELETE", "/api/nodes/vless-main"); w.Code != 403 {
 		t.Fatal("readonly mutation")
 	}
-	if w := invoke("GET", "/api/backup"); w.Code != 403 {
+	if w := invoke("POST", "/api/backup"); w.Code != 403 {
 		t.Fatal("recovery material exposed")
 	}
 	if w := invoke("GET", "/api/operations"); w.Code != 200 {

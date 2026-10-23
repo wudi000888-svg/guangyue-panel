@@ -51,7 +51,7 @@
 - `/var/lib/guangyue-maintenance/pending`：新部署的持久维护冻结标记。未提交操作完成恢复前仅放行健康检查，不能手工删除。
 - `guangyue-updater.socket` / `guangyue-updater.service`：按需启动，空闲约两分钟后退出释放内存；开机检查未完成操作的恢复记录。
 
-迁移服务器时同时备份更新记录、匹配离线备份、面板状态与配置。不要只复制数据库后把旧版本当作新安装来重建下限。删除某个升级备份后对应回退选项不再可用；请保留至少最近一次已知可用备份。
+迁移服务器时同时备份更新记录、匹配离线备份、面板状态与配置。不要只复制数据库后把旧版本当作新安装来重建下限。0.42.0 起，更新成功后自动保留最新 5 个快照，并始终保留当前版本、上一个版本及未完成操作引用的快照；可用 `/etc/guangyue-personal.json` 的 `backup_retention` 调整，详见[运维：备份与磁盘](OPERATIONS.md#备份与磁盘)。删除某个升级备份后对应回退选项不再可用；请保留至少最近一次已知可用备份。
 
 ```bash
 sudo systemctl status guangyue-updater.socket guangyue-updater.service

@@ -2,7 +2,7 @@
 import {computed,onMounted,ref,watch} from 'vue';
 import {X,ArrowRight,Package,ShieldCheck} from 'lucide-vue-next';
 import type {Plan,User} from '../types';
-import {useApi,isCancelled} from '../lib/api';
+import {useApi,isCancelled, errorMessage } from '../lib/api';
 import {bytes,date} from '../lib/format';
 import {quotaUsed} from '../lib/quota';
 import {t} from '../i18n';
@@ -15,9 +15,9 @@ const preview=ref<{effects:Effect[];expected:string}|null>(null);
 useModalFocus(computed(()=>true),dialog,()=>{if(!busy.value)emit('close');});
 watch([action,planID,days],()=>preview.value=null);
 const body=()=>({ids:props.users.map(u=>u.id),action:action.value,plan_id:planID.value,days:days.value,operation_id:operationID});
-async function submit(){busy.value=true;error.value='';try{if(!preview.value){preview.value=await api('/entitlements/batch','POST',{...body(),preview:true});}else{await api('/entitlements/batch','POST',{...body(),expected:preview.value.expected});emit('updated');emit('close');}}catch(e){if(!isCancelled(e)){error.value=(e as Error).message;preview.value=null;}}finally{busy.value=false;}}
+async function submit(){busy.value=true;error.value='';try{if(!preview.value){preview.value=await api('/entitlements/batch','POST',{...body(),preview:true});}else{await api('/entitlements/batch','POST',{...body(),expected:preview.value.expected});emit('updated');emit('close');}}catch(e){if(!isCancelled(e)){error.value=errorMessage(e);preview.value=null;}}finally{busy.value=false;}}
 const groupsChanged=(e:Effect)=>{const old=userNodeGroups(e.before),next=userNodeGroups(e.after);return {added:next.filter(g=>!old.includes(g)).length,removed:old.filter(g=>!next.includes(g)).length};};
-onMounted(async()=>{try{plans.value=(await api<{plans:Plan[]}>('/plans')).plans.filter(p=>!p.archived);}catch(e){if(!isCancelled(e))error.value=(e as Error).message;}});
+onMounted(async()=>{try{plans.value=(await api<{plans:Plan[]}>('/plans')).plans.filter(p=>!p.archived);}catch(e){if(!isCancelled(e))error.value=errorMessage(e);}});
 </script>
 <template>
 <Teleport to="body"><div class="modal-shade" @click.self="!busy&&emit('close')"><form class="modal entitlement-dialog" ref="dialog" tabindex="-1" role="dialog" aria-modal="true" :aria-label="t('套餐与权益')" @submit.prevent="submit"><div class="modal-head"><h2><Package :size="19"/>{{t('套餐与权益')}}</h2><button type="button" class="icon" :disabled="busy" :aria-label="t('关闭')" @click="emit('close')"><X :size="20"/></button></div><p class="field-help">{{t('已选择')}} {{users.length}} {{t('位成员')}} · {{users.map(u=>u.username).join('、')}}</p>

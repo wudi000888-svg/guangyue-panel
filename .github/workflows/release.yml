@@ -31,8 +31,9 @@ jobs:
           [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
           test "$RELEASE_TAG" = "v$(cat VERSION)"
           commit=$(git rev-parse HEAD)
-          run_id=$(gh run list --workflow ci.yml --commit "$commit" --status success --limit 20 --json databaseId --jq '.[0].databaseId // empty')
-          test -n "$run_id" || { echo 'Run full CI, including installation tests, successfully before publishing this tag.'; exit 1; }
+          run_id=$(gh run list --workflow ci.yml --branch main --commit "$commit" --status success --limit 20 --json databaseId --jq '.[0].databaseId // empty')
+          # Only main runs are full runs (PR and auto-release branch runs may be partial).
+          test -n "$run_id" || { echo 'Run full CI on main, including installation tests, successfully before publishing this tag.'; exit 1; }
           gh run download "$run_id" --name linux-amd64 --dir build/native-artifact
           gh run download "$run_id" --name docker-linux-amd64 --dir build/docker-artifact
           python3 scripts/merge-release-assets.py "$(cat VERSION)" build/native-artifact build/docker-artifact build/releases

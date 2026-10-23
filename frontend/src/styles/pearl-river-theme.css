@@ -1,118 +1,4 @@
 /* Pearl River Night theme: visual layer only. */
-:root {
-  --canvas: #e7edf5;
-  --bg: var(--canvas);
-  --surface: rgba(249, 251, 255, 0.94);
-  --surface-raised: rgba(239, 245, 253, 0.96);
-  --surface-soft: rgba(247, 250, 255, 0.92);
-  --surface-muted: rgba(231, 238, 247, 0.94);
-  --surface-hover: rgba(226, 236, 248, 0.98);
-  --surface-table: rgba(251, 253, 255, 0.98);
-  --text: #152238;
-  --secondary: #52637c;
-  --muted: #53647c;
-  --border: rgba(37, 63, 96, 0.18);
-  --input: rgba(246, 249, 253, 0.98);
-  --input-bg: var(--input);
-  --input-border: #73839b;
-  --accent: #285fa9;
-  --accent-text: #214f8d;
-  --accent-soft: rgba(40, 95, 169, 0.12);
-  --accent-contrast: #ffffff;
-  --green: var(--accent);
-  --red: #ab303e;
-  --warning: #805200;
-  --info: #2c6794;
-  --success: var(--accent-text);
-  --danger: var(--red);
-  --overlay: rgba(11, 18, 32, 0.54);
-  --success-soft: rgba(30, 102, 69, 0.12);
-  --danger-soft: rgba(171, 48, 62, 0.1);
-  --warning-soft: rgba(128, 82, 0, 0.11);
-  --info-soft: rgba(44, 103, 148, 0.1);
-  --nav-bg: rgba(12, 20, 34, 0.96);
-  --nav-text: #d7e1ee;
-  --nav-muted: #aab8cc;
-  --nav-selected: #f1f6fd;
-  --nav-hover: rgba(131, 185, 255, 0.08);
-  --nav-active: rgba(131, 185, 255, 0.16);
-  --nav-border: rgba(185, 204, 231, 0.16);
-  --topbar-bg: rgba(15, 24, 40, 0.9);
-  --gy-night: #0b1220;
-  --gy-night-deep: #101827;
-  --gy-moon: #d6c097;
-  --gy-jade: #285fa9;
-  --gy-cinnabar: #ab303e;
-  --gy-seal: var(--gy-cinnabar);
-  --gy-bronze: #80602d;
-  --gy-gold: #80602d;
-  --gy-ink: var(--text);
-  --gy-paper: #f4f8fc;
-  --shadow-card: 0 12px 30px rgba(24, 47, 79, 0.12);
-  --shadow-popover: 0 18px 50px rgba(12, 25, 46, 0.24);
-  --gy-shadow: var(--shadow-card);
-  --gy-focus: 0 0 0 3px rgba(40, 95, 169, 0.24);
-  --wallpaper-overlay: linear-gradient(90deg, rgba(232, 239, 248, 0.95) 0%, rgba(232, 239, 248, 0.93) 38%, rgba(232, 239, 248, 0.9) 100%), linear-gradient(180deg, rgba(224, 234, 245, 0.42), rgba(224, 234, 245, 0.78));
-  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-  color-scheme: light;
-}
-
-:root[data-theme="dark"] {
-  --canvas: #0b1220;
-  --bg: var(--canvas);
-  --surface: rgba(21, 31, 49, 0.9);
-  --surface-raised: rgba(27, 40, 61, 0.96);
-  --surface-soft: rgba(21, 31, 49, 0.84);
-  --surface-muted: rgba(31, 45, 68, 0.94);
-  --surface-hover: rgba(33, 50, 76, 0.98);
-  --surface-table: rgba(18, 28, 44, 0.97);
-  --text: #eaf0f7;
-  --secondary: #b5c3d6;
-  --muted: #96a7bd;
-  --border: rgba(185, 204, 231, 0.16);
-  --input: rgba(12, 21, 35, 0.96);
-  --input-bg: var(--input);
-  --input-border: #7386a3;
-  --accent: #83b9ff;
-  --accent-text: #a9ceff;
-  --accent-soft: rgba(131, 185, 255, 0.16);
-  --accent-contrast: #08182d;
-  --green: var(--accent);
-  --red: #ffabb0;
-  --warning: #f4cc83;
-  --info: #a9d0f2;
-  --success: var(--accent-text);
-  --danger: var(--red);
-  --overlay: rgba(4, 9, 18, 0.76);
-  --success-soft: rgba(67, 149, 105, 0.18);
-  --danger-soft: rgba(153, 61, 76, 0.22);
-  --warning-soft: rgba(164, 112, 46, 0.2);
-  --info-soft: rgba(60, 108, 151, 0.22);
-  --nav-bg: rgba(12, 20, 34, 0.96);
-  --nav-text: #dce8f7;
-  --nav-muted: #aab8cc;
-  --nav-selected: #f3f7fd;
-  --nav-hover: rgba(131, 185, 255, 0.08);
-  --nav-active: rgba(131, 185, 255, 0.16);
-  --nav-border: rgba(185, 204, 231, 0.16);
-  --topbar-bg: rgba(15, 24, 40, 0.9);
-  --gy-night: #0b1220;
-  --gy-night-deep: #101827;
-  --gy-moon: #d6c097;
-  --gy-jade: #83b9ff;
-  --gy-cinnabar: #ffabb0;
-  --gy-seal: var(--gy-cinnabar);
-  --gy-bronze: #d6c097;
-  --gy-gold: #d6c097;
-  --gy-ink: var(--text);
-  --gy-paper: #eaf0f7;
-  --shadow-card: 0 14px 34px rgba(0, 0, 0, 0.2);
-  --shadow-popover: 0 18px 52px rgba(0, 0, 0, 0.46);
-  --gy-shadow: var(--shadow-card);
-  --gy-focus: 0 0 0 3px rgba(131, 185, 255, 0.28);
-  --wallpaper-overlay: linear-gradient(90deg, rgba(7, 14, 25, 0.88) 0%, rgba(7, 14, 25, 0.72) 35%, rgba(7, 14, 25, 0.58) 60%, rgba(7, 14, 25, 0.76) 100%), linear-gradient(180deg, rgba(8, 15, 27, 0.16), rgba(8, 15, 27, 0.84));
-  color-scheme: dark;
-}
 
 html, body { background: var(--canvas); }
 body { color: var(--text); }
@@ -206,14 +92,14 @@ input, select, textarea { background: var(--input); border-color: var(--input-bo
 input:focus, select:focus, textarea:focus, .search:focus-within { border-color: var(--accent); box-shadow: var(--gy-focus); }
 input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 
-.panel, .chart-card, .network-card, .settings-card, .node-card, .plan-card, .site-card,
+.panel, .settings-card, .node-card, .plan-card, .site-card,
 .metrics > div, .import-report, .resource-membership-notice, .mobile-tools-panel {
   background: var(--surface);
   border-color: var(--border);
   box-shadow: var(--gy-shadow);
 }
 .metrics > div { min-height: 130px; }
-.metric-icon { background: var(--accent-soft); color: var(--accent-text); }
+
 .section-heading, .page-heading { color: var(--text); }
 .ui-page-heading p, .page-context, .page-breadcrumb, .table-caption { color: var(--muted); }
 .header-balance { background: var(--surface-raised); border-color: var(--border); color: var(--accent-text); }

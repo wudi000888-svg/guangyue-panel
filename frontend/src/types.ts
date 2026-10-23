@@ -1,5 +1,4 @@
 import type { IPQuality } from "./quality";
-import type { SubscriptionNode } from "./NodeSubscriptionCards.vue";
 export type SiteSettings = {
   panel_name: string; organization: string; default_locale: string; support_email: string;
   login_notice: string; registration_enabled: boolean; registration_captcha: boolean; revision: string;
@@ -13,6 +12,12 @@ export type PlanSlot = {entitlement:Entitlement;node_rates?:Record<string,number
 export type Plan = {id:string;version:number;name:string;description:string;category:string;notes:string;archived:boolean;sort:number;quota:number;valid_days:number;cycle:string;timezone:string;group_ids:string[];node_ids:string[];node_rates?:Record<string,number>;vless:boolean;hy2:boolean;price?:string;system?:boolean;kind?:string};
 export type NodeGroup = {id:string;name:string;description:string;scope:'private'|'public'|'subsite';enabled:boolean;sort:number;revision:string};
 export type GroupMember = {selection_key?:string;site_id:string;site_name?:string;source?:'local'|'public'|'mounted'|'business';node_id:string;name:string;protocol:string;entry_host?:string;entry_port?:number;exit_ip?:string;enabled?:boolean;status?:'ready'|'disabled'|'pending';rate_milli?:number};
+// Matches the control plane: administrators are 'owner', everyone else 'user'.
+export type UserRole = 'owner' | 'user';
+/** Inbound protocol a node serves. */
+export type NodeProtocol = 'vless' | 'hy2';
+/** How a node or IP resource reaches the internet: directly, through a proxy, or via an imported subscription upstream. */
+export type NodeExit = 'direct' | 'http' | 'socks5' | 'subscription';
 export type User = {
  node_group_ids?:string[];
  mount_access?: {token_id:string;user_id:number};
@@ -22,7 +27,7 @@ export type User = {
   plan_queue?:PlanSlot[];
   id: number;
   username: string;
-  role: string;
+  role: UserRole;
   enabled: boolean;
   vless: boolean;
   hy2: boolean;
@@ -58,9 +63,9 @@ export type Node = {
   exit_id?: string;
   id: string;
   name: string;
-  protocol: string;
+  protocol: NodeProtocol;
   enabled: boolean;
-  exit: string;
+  exit: NodeExit;
   host: string;
   port: number;
   username: string;
@@ -120,3 +125,21 @@ export type State = {
   audit: { at: number; actor: string; action: string; target: string }[];
 };
 export type Sub = { url: string; raw: string; active: boolean; user: User; pool: "private" | "public" | "all" | "local" | "mounted" | "subsite" | "mixed"; nodes: SubscriptionNode[] };
+
+// A node entry in a member subscription (rendered by NodeSubscriptionCards).
+export type SubscriptionNode = {
+ mounted?:boolean;source?:string;group_ids?:string[];
+ rate_milli?:number;
+  dns?: {mode: string; doh?: string; ipv6?: string};
+  site_id?: string;
+  site_name?: string;
+  id: string;
+  name: string;
+  protocol: 'vless' | 'hy2';
+  uri: string;
+  probe_ip: string;
+  country: string;
+  country_code: string;
+  checked_at: number;
+  quality: IPQuality | null;
+};

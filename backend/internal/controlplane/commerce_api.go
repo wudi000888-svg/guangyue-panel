@@ -169,6 +169,10 @@ func (a *App) commerceGet(w http.ResponseWriter, r *http.Request, actor Record, 
 			return e
 		}
 		v.PaymentModuleEnabled = &enabled
+		if actor.Role != "owner" {
+			// Delivery endpoints are operator configuration, not member data.
+			v.PaymentWebhook, v.MailWebhook = "", ""
+		}
 		jsonResponse(w, 200, v)
 	case "wallet":
 		u, e := requestedUser(r, actor)

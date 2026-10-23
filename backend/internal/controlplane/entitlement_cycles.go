@@ -3,8 +3,9 @@ package controlplane
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/wudi000888-svg/guangyue-panel/backend/internal/domain"
 	"time"
+
+	"github.com/wudi000888-svg/guangyue-panel/backend/internal/domain"
 )
 
 func (a *App) validateEntitlementSites(u Record, action string) error {
@@ -42,10 +43,17 @@ func (a *App) advanceQuotaPeriods(now int64) error {
 	if err != nil {
 		return err
 	}
+	pending, err := a.store.commerceBarrierUsers()
+	if err != nil {
+		return err
+	}
+	type dueUser struct {
+		id      int64
+		restore bool
+	}
+	ready := []dueUser{}
 	for _, u := range users {
-		if pending, e := a.store.commerceBarrier(u.ID); e != nil {
-			return e
-		} else if pending {
+		if pending[u.ID] {
 			continue
 		}
 		// A package purchase pauses the previous package.  Once the active
@@ -62,32 +70,49 @@ func (a *App) advanceQuotaPeriods(now int64) error {
 				}
 				continue
 			}
-			waiting := false
-			for _, s := range sites {
-				_, issued := s.Issued[u.ID]
-				waiting = waiting || issued || s.IssuedUnlimited[u.ID]
-				for _, g := range s.SentGrants {
-					if g.UserID == u.ID {
-						waiting = true
-					}
-				}
-			}
-			if waiting {
+			if !grantsSettled(sites, u.ID) {
 				continue
 			}
-			if err = a.reconcile(); err != nil {
+			ready = append(ready, dueUser{u.ID, true})
+			continue
+		}
+		if u.Meter == nil {
+			continue
+		}
+		m := u.Meter
+		if !m.PendingReset && m.End > 0 && now >= m.End {
+			m.PendingReset = true
+			if err = a.store.save(&u); err != nil {
 				return err
 			}
-			if err = a.collect(); err != nil {
-				return err
-			}
-			if err = a.settleHYRevocations(); err != nil {
-				return err
-			}
-			u, err = a.store.record(u.ID)
-			if err != nil {
-				return err
-			}
+		}
+		if !m.PendingReset || !grantsSettled(sites, u.ID) {
+			continue
+		}
+		ready = append(ready, dueUser{u.ID, false})
+	}
+	if len(ready) == 0 {
+		return nil
+	}
+	// Every due user is already stopped (PendingReset). One reconcile, one
+	// final traffic read and one HY2 revocation cover all of them; doing this
+	// per user restarted HY2 once per user at the start of each month.
+	if err = a.reconcile(); err != nil {
+		return err
+	}
+	if err = a.collect(); err != nil {
+		return err
+	}
+	if err = a.settleHYRevocations(); err != nil {
+		return err
+	}
+	restored := false
+	for _, due := range ready {
+		u, err := a.store.record(due.id)
+		if err != nil {
+			return err
+		}
+		if due.restore {
 			oldPeriod := ""
 			oldDocument, _ := json.Marshal(u.User)
 			if u.Meter != nil {
@@ -114,52 +139,13 @@ func (a *App) advanceQuotaPeriods(now int64) error {
 			if e = tx.Commit(); e != nil {
 				return e
 			}
-			if err = a.reconcile(); err != nil {
-				return err
-			}
+			restored = true
 			continue
 		}
-		if u.Meter == nil {
+		if u.Meter == nil || !u.Meter.PendingReset {
 			continue
 		}
 		m := u.Meter
-		if !m.PendingReset && m.End > 0 && now >= m.End {
-			m.PendingReset = true
-			if err = a.store.save(&u); err != nil {
-				return err
-			}
-		}
-		if !m.PendingReset {
-			continue
-		}
-		waiting := false
-		for _, s := range sites {
-			_, issued := s.Issued[u.ID]
-			waiting = waiting || issued || s.IssuedUnlimited[u.ID]
-			for _, g := range s.SentGrants {
-				if g.UserID == u.ID {
-					waiting = true
-				}
-			}
-		}
-		if waiting {
-			continue
-		}
-		if err = a.reconcile(); err != nil {
-			return err
-		}
-		if err = a.collect(); err != nil {
-			return err
-		}
-		if err = a.settleHYRevocations(); err != nil {
-			return err
-		}
-
-		u, err = a.store.record(u.ID)
-		if err != nil {
-			return err
-		}
-		m = u.Meter
 		oldPeriod := m.PeriodID
 		oldDocument, _ := json.Marshal(u.User)
 		start := now
@@ -240,7 +226,26 @@ func (a *App) advanceQuotaPeriods(now int64) error {
 			return e
 		}
 	}
+	if restored {
+		return a.reconcile()
+	}
 	return nil
+}
+
+// grantsSettled reports whether no business site still holds an issued grant
+// for the user; old grants must be withdrawn before a period resets.
+func grantsSettled(sites []BusinessSite, userID int64) bool {
+	for _, s := range sites {
+		if _, issued := s.Issued[userID]; issued || s.IssuedUnlimited[userID] {
+			return false
+		}
+		for _, g := range s.SentGrants {
+			if g.UserID == userID {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // Upstream /kick consumes one marker on a connection's next traffic event.

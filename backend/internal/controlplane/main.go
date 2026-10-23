@@ -5,9 +5,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"flag"
-	cachepkg "github.com/wudi000888-svg/guangyue-panel/backend/internal/cache"
-	"github.com/wudi000888-svg/guangyue-panel/backend/internal/jobs"
-	"github.com/wudi000888-svg/guangyue-panel/backend/internal/persistence"
 	"log"
 	"net/http"
 	"os"
@@ -18,6 +15,10 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+
+	cachepkg "github.com/wudi000888-svg/guangyue-panel/backend/internal/cache"
+	"github.com/wudi000888-svg/guangyue-panel/backend/internal/jobs"
+	"github.com/wudi000888-svg/guangyue-panel/backend/internal/persistence"
 )
 
 type App struct {
@@ -58,6 +59,11 @@ type App struct {
 	cfg                    Config
 	store                  *Store
 	mu                     sync.Mutex
+	collectSeq             uint64 // applied counter samples; guarded by mu
+	hyAuthCache            hyAuthCache
+	workers                workerReport
+	coreServices           atomic.Pointer[coreServiceState]
+	sessionsPruned         time.Time // guarded by mu
 	fleetMigrationMu       sync.Mutex
 	restart                context.CancelFunc
 	realityProbeMu         sync.Mutex
@@ -310,35 +316,55 @@ func (a *App) loop(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		a.mu.Lock()
-		if err := a.collect(); err != nil {
-			a.trafficError = err.Error()
-		} else {
-			a.trafficError = ""
-		}
-		commerceErr := a.commerceWork(time.Now().Unix())
-		err := a.advanceQuotaPeriods(time.Now().Unix())
-		if err == nil {
-			err = a.reconcileIfNeeded()
-			if err == nil {
-				err = a.settleHYRevocations()
-			}
-		}
-		err = errors.Join(err, commerceErr)
-		if err != nil {
-			a.status = "error"
-			a.syncError = err.Error()
-		} else {
-			a.status = "applied"
-			a.syncError = ""
-			a.appliedAt = time.Now().Unix()
-		}
-		_, _ = a.store.db.Exec("DELETE FROM sessions WHERE expires<?", time.Now().Unix())
-		a.mu.Unlock()
+		a.runWorker("控制循环", a.loopTick)
 		select {
 		case <-ctx.Done():
 			return
 		case <-t.C:
 		}
 	}
+}
+
+// loopTick is one control-loop iteration. Locks are released by defer so a
+// recovered panic cannot leave the control lock held.
+func (a *App) loopTick() error {
+	// Reading the cores spawns a CLI and makes HTTP calls; do it before
+	// taking the lock. Counters are cumulative, so a sample is simply
+	// dropped if another collect was booked meanwhile.
+	a.mu.Lock()
+	seq := a.collectSeq
+	a.mu.Unlock()
+	sample := a.gatherCounters()
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.collectSeq == seq {
+		if err := a.applyCounters(sample); err != nil {
+			a.trafficError = err.Error()
+		} else {
+			a.trafficError = ""
+		}
+	}
+	commerceErr := a.commerceWork(time.Now().Unix())
+	err := a.advanceQuotaPeriods(time.Now().Unix())
+	if err == nil {
+		err = a.reconcileIfNeeded()
+		if err == nil {
+			err = a.settleHYRevocations()
+		}
+	}
+	err = errors.Join(err, commerceErr)
+	if err != nil {
+		a.status = "error"
+		a.syncError = err.Error()
+	} else {
+		a.status = "applied"
+		a.syncError = ""
+		a.appliedAt = time.Now().Unix()
+	}
+	if time.Since(a.sessionsPruned) >= 5*time.Minute {
+		if _, e := a.store.db.Exec("DELETE FROM sessions WHERE expires<?", time.Now().Unix()); e == nil {
+			a.sessionsPruned = time.Now()
+		}
+	}
+	return err
 }

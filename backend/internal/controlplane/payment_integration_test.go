@@ -651,3 +651,76 @@ func TestPaymentCallbacksBypassCountryGateButRequireSignature(t *testing.T) {
 		})
 	}
 }
+
+// A prorated refund must send exactly the recorded amount to Stripe and then
+// settle; sending the full payment both over-refunds and wedges the row.
+func TestStripePartialRefundSendsRecordedAmount(t *testing.T) {
+	a := testApp(t)
+	owner := testUser(t, a, "owner", "owner")
+	user := testUser(t, a, "alice", "user")
+	sent := []string{}
+	a.paymentClient = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		body := ""
+		switch r.URL.Path {
+		case "/v1/account":
+			body = `{"id":"acct_fixture"}`
+		case "/v1/checkout/sessions":
+			body = `{"id":"cs_fixture","url":"https://checkout.stripe.com/c/pay/cs_fixture"}`
+		case "/v1/refunds":
+			if e := r.ParseForm(); e != nil {
+				t.Fatal(e)
+			}
+			sent = append(sent, r.Form.Get("amount"))
+			body = fmt.Sprintf(`{"id":"re_part","status":"succeeded","payment_intent":"pi_part","currency":"cny","amount":%s}`, r.Form.Get("amount"))
+		default:
+			t.Errorf("unexpected Stripe path %s", r.URL.Path)
+		}
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body)), Header: http.Header{}}, nil
+	})}
+	m := decoded[PaymentMethod](t, req(t, a, owner, "POST", "/api/commerce/payment-methods", object{"code": "stripe", "name": "Stripe fixture", "enabled": true, "secret": "sk_test_fake_secret", "webhook_secret": "whsec_fake", "password": commerceTestPassword}), 200)
+	p, _ := a.store.paymentProvider(m.ID)
+	at := paymentTestTopup(t, a, user, p, "1200")
+	_, _ = a.store.db.Exec("UPDATE payment_attempts SET expires=? WHERE id=?", time.Now().Unix()-1, at.ID)
+	event := object{"id": "evt_part", "type": "checkout.session.completed", "livemode": false, "data": object{"object": object{"id": "cs_fixture", "client_reference_id": at.ID, "metadata": object{"attempt_id": at.ID}, "payment_intent": "pi_part", "payment_status": "paid", "currency": "cny", "amount_total": 1200}}}
+	body := jsonBytes(event)
+	r := httptest.NewRequest("POST", "/api/payments/webhook/"+p.ID, bytes.NewReader(body))
+	r.Header.Set("Stripe-Signature", stripeTestSignature(body, "whsec_fake", time.Now().Unix()))
+	w := httptest.NewRecorder()
+	a.routes().ServeHTTP(w, r)
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	receipt := paymentTestReceipt(t, a, "pi_part")
+	w = req(t, a, owner, "POST", "/api/commerce/payment-refunds", object{"receipt_id": receipt.ID, "action": "request", "reason": "按比例退款", "password": commerceTestPassword, "operation_id": randomToken(24)})
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	// The amount recorded at request time is what an order refund prorated.
+	if _, e := a.store.db.Exec("UPDATE payment_refunds SET amount=500 WHERE receipt_id=?", receipt.ID); e != nil {
+		t.Fatal(e)
+	}
+	if e := a.paymentRefundWork(context.Background()); e != nil {
+		t.Fatal(e)
+	}
+	if len(sent) != 1 || sent[0] != "500" {
+		t.Fatalf("Stripe refund amounts %v, want [500]", sent)
+	}
+	receipt = paymentTestReceipt(t, a, "pi_part")
+	if receipt.State != "refunded" {
+		t.Fatal("partial refund did not settle", receipt.State)
+	}
+	assertLedger(t, a)
+}
+
+func TestStripeRefundAmountBounds(t *testing.T) {
+	receipt := PaymentReceipt{Amount: 1200}
+	for _, c := range []struct {
+		stored, want int64
+		fail         bool
+	}{{0, 1200, false}, {500, 500, false}, {1200, 1200, false}, {1201, 0, true}} {
+		got, err := stripeRefundAmount(PaymentRefund{Amount: c.stored}, receipt)
+		if (err != nil) != c.fail || got != c.want {
+			t.Fatalf("stored %d: got %d err %v", c.stored, got, err)
+		}
+	}
+}

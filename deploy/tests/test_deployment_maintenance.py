@@ -173,7 +173,7 @@ class MaintenanceTests(unittest.TestCase):
         def owned_path(value):
             if str(value) == '/root/guangyue-backups': return self.root / 'backups'
             return Path(value)
-        with patch.object(upgrade, 'APP', app), patch.object(upgrade, 'STATE', data), patch.object(upgrade, 'CONFIG', config), patch.object(upgrade.updates, 'HELPER', helper), patch.object(upgrade, 'NGINX_PANEL', self.root / 'no-nginx-panel'), patch.object(deployment_mode, 'private_gateway', return_value=True), patch.object(upgrade, 'Path', side_effect=owned_path), patch.object(upgrade.shutil, 'copy2', side_effect=copy_owned), patch.object(upgrade.shutil, 'chown'), patch.object(upgrade, 'restore_units'), patch.object(upgrade, 'run'), patch.object(upgrade, 'health') as health:
+        with patch.object(upgrade, 'APP', app), patch.object(upgrade, 'STATE', data), patch.object(upgrade, 'CONFIG', config), patch.object(upgrade.updates, 'HELPER', helper), patch.object(upgrade, 'NGINX_PANEL', self.root / 'no-nginx-panel'), patch.object(deployment_mode, 'private_gateway', return_value=True), patch.object(upgrade, 'Path', side_effect=owned_path), patch.object(upgrade.backup_retention, 'BACKUPS', self.root / 'backups'), patch.object(upgrade.shutil, 'copy2', side_effect=copy_owned), patch.object(upgrade.shutil, 'chown'), patch.object(upgrade, 'restore_units'), patch.object(upgrade, 'run'), patch.object(upgrade, 'health') as health:
             backup = upgrade.backup_current(json.loads(config.read_text()))
             self.assertFalse((backup / 'helper/__pycache__').exists())
             self.assertFalse(list((backup / 'helper').glob('*.pyc')))

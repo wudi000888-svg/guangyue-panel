@@ -187,7 +187,7 @@ func cryptoParallel(n int, work func(int) error) error {
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			if e := work(i); e != nil {
+			if e := safeCall("加密并行任务", func() error { return work(i) }); e != nil {
 				errs <- e
 			}
 		}(i)

@@ -2,7 +2,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
 import { CreditCard, Plus, ShieldCheck, RefreshCw, Copy, LoaderCircle, X } from 'lucide-vue-next';
 import { useCommerce, money, stamp, paymentStateText, type PaymentMethod, type PaymentAttempt, type PaymentReceipt, type PaymentDiagnostic } from '../lib/commerce';
-import { isCancelled } from '../lib/api';
+import { isCancelled, errorMessage } from '../lib/api';
 import { t } from '../i18n';
 import { usePaymentModule } from '../lib/paymentModule';
 const props=defineProps<{ active?: boolean }>();
@@ -34,23 +34,23 @@ async function edit(method?:PaymentMethod) {
 async function save() {
   if(busy.value)return;if(form.value.enabled&&!moduleEnabled.value){error.value=t('支付模块已关闭，请先启用支付模块。');return}busy.value=true;error.value='';notice.value='';
   try{await api('/payment-methods','POST',{...form.value,id:editing.value?.id||'',version:editing.value?.version||0,password:adminPassword.value});closeForm();notice.value=t('支付方式已保存');await load()}
-  catch(e){if(!isCancelled(e))error.value=t((e as Error).message)}finally{clearSecrets();busy.value=false}
+  catch(e){if(!isCancelled(e))error.value=errorMessage(e)}finally{clearSecrets();busy.value=false}
 }
 async function setEnabled(method:PaymentMethod) {
   if(busy.value)return;if(!method.enabled&&!moduleEnabled.value){error.value=t('支付模块已关闭，请先启用支付模块。');return}busy.value=true;error.value='';notice.value='';
   try{await api('/payment-methods','POST',{id:method.id,version:method.version,code:method.code,name:method.name,enabled:!method.enabled,base_url:method.base_url||'',merchant_id:method.merchant_id||'',channel:method.channel||'',secret:'',webhook_secret:'',password:adminPassword.value});notice.value=t('支付方式已更新');await load()}
-  catch(e){if(!isCancelled(e))error.value=t((e as Error).message)}finally{adminPassword.value='';busy.value=false}
+  catch(e){if(!isCancelled(e))error.value=errorMessage(e)}finally{adminPassword.value='';busy.value=false}
 }
 async function remove(method:PaymentMethod) {
   if(busy.value||!window.confirm(t('移除此支付方式？已有付款和回调记录会保留，历史支付仍可处理。')))return;
   busy.value=true;error.value='';notice.value='';
   try{const result=await api<{archived:boolean}>('/payment-methods/delete','POST',{id:method.id,version:method.version,password:adminPassword.value});notice.value=result.archived?t('支付方式已归档，历史记录保留'):t('支付方式已删除');await load()}
-  catch(e){if(!isCancelled(e))error.value=t((e as Error).message)}finally{adminPassword.value='';busy.value=false}
+  catch(e){if(!isCancelled(e))error.value=errorMessage(e)}finally{adminPassword.value='';busy.value=false}
 }
 async function check(method:PaymentMethod) {
   if(busy.value)return;busy.value=true;error.value='';notice.value='';
   try{const result=await api<PaymentDiagnostic>('/payment-methods/check','POST',{id:method.id,password:adminPassword.value});diagnostics.value={...diagnostics.value,[method.id]:result};if(!result.ok)error.value=t(result.message);else notice.value=t(result.message)}
-  catch(e){if(!isCancelled(e))error.value=t((e as Error).message)}finally{adminPassword.value='';busy.value=false}
+  catch(e){if(!isCancelled(e))error.value=errorMessage(e)}finally{adminPassword.value='';busy.value=false}
 }
 function closeRefund(){refundTarget.value=null;refundReason.value='';refundReference.value='';manualConfirmed.value=false;adminPassword.value=''}
 async function reviewRefund(receipt:PaymentReceipt){if(busy.value)return;closeForm();closeRefund();refundTarget.value=receipt;error.value='';notice.value='';await nextTick();refundElement.value?.scrollIntoView({block:'center',behavior:window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});refundElement.value?.querySelector('input')?.focus({preventScroll:true})}

@@ -1,4 +1,5 @@
 import type {NativeFiatQuote} from './cryptoFiat';
+import { errorMessage } from './api';
 import {nativeDecimals,SOLANA_CHAIN_ID} from './cryptoNetworks';
 import {tokenAmount} from './cryptoPayments';
 export interface CryptoGasSnapshot extends NativeFiatQuote {
@@ -38,7 +39,7 @@ export function createGasReader(api: GasReadAPI, publish: (value: GasReadState) 
     if (current !== generation || request.signal.aborted) return;
     if (value.wallet_id !== wid || value.chain_id !== cid) throw new Error('Gas response does not match requested wallet and network');
     update({ snapshot: value, error: value.gas_error || '' });
-   } catch (reason) { if (current === generation && !request.signal.aborted) update({ error: reason instanceof Error ? reason.message : String(reason) }); }
+   } catch (reason) { if (current === generation && !request.signal.aborted) update({ error: errorMessage(reason) }); }
    finally { if (current === generation) { controller = undefined; flight = undefined; update({ loading: false }); } }
   })(); flight = run; return run;
  }

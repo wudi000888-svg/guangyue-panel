@@ -8,7 +8,7 @@ import GroupNodeList from '../components/GroupNodeList.vue';
 import {filterGroupMembers} from '../lib/nodeGroups';
 import {Package,Layers3,Plus,Pencil,RefreshCw,X,Search,Trash2,ArrowUpRight,CheckCircle2,ShieldCheck} from 'lucide-vue-next';
 import type {Plan,NodeGroup,GroupMember,User} from '../types';
-import {useApi,isCancelled} from '../lib/api';
+import {useApi,isCancelled, errorMessage } from '../lib/api';
 import {latestRequest} from '../lib/requests';
 import {bytes} from '../lib/format';
 import {cents,money} from '../lib/commerce';
@@ -66,11 +66,11 @@ async function load(){
   ]);
   if(!loadRequest.isCurrent(request))return;
   plans.value=p.plans;groups.value=g.groups;members.value=g.members;loaded.value=true;
- }catch(e){if(loadRequest.isCurrent(request)&&!isCancelled(e))error.value=(e as Error).message;}
+ }catch(e){if(loadRequest.isCurrent(request)&&!isCancelled(e))error.value=errorMessage(e);}
  finally{if(loadRequest.isCurrent(request))loading.value=false;}
 }
 function editPlan(p?:Plan){error.value='';editingPlan.value=p?JSON.parse(JSON.stringify({...p,node_ids:p.node_ids||[],node_rates:p.node_rates||{}})):{id:'',version:0,name:'',description:'',category:'',notes:'',archived:false,sort:0,quota:100*1024**3,valid_days:30,cycle:'30d',timezone:'Asia/Shanghai',group_ids:[],node_ids:[],node_rates:{},vless:true,hy2:true,price:'0',system:false};quotaGB.value=editingPlan.value!.quota/1024**3;unlimited.value=!editingPlan.value!.quota;priceYuan.value=(Number(editingPlan.value!.price||'0')/100).toFixed(2);}
-async function save(){if(busy.value)return;loadRequest.cancel();loading.value=false;busy.value=true;error.value='';try{if(editingPlan.value){const price=priceYuan.value.trim()==='0'||priceYuan.value.trim()==='0.0'||priceYuan.value.trim()==='0.00'?'0':cents(priceYuan.value);const p={...editingPlan.value,node_rates:selectedNodeRates(editingPlan.value),price,quota:unlimited.value?0:Math.round(quotaGB.value*1024**3)};if(!unlimited.value&&p.quota<=0)throw new Error(t('有限额度必须大于 0'));await api('/plans','POST',p);}editingPlan.value=null;notice.value=t('套餐设置已保存，当前成员订阅会立即同步');await refresh();await load();}catch(e){if(!isCancelled(e))error.value=(e as Error).message;}finally{busy.value=false;}}
+async function save(){if(busy.value)return;loadRequest.cancel();loading.value=false;busy.value=true;error.value='';try{if(editingPlan.value){const price=priceYuan.value.trim()==='0'||priceYuan.value.trim()==='0.0'||priceYuan.value.trim()==='0.00'?'0':cents(priceYuan.value);const p={...editingPlan.value,node_rates:selectedNodeRates(editingPlan.value),price,quota:unlimited.value?0:Math.round(quotaGB.value*1024**3)};if(!unlimited.value&&p.quota<=0)throw new Error(t('有限额度必须大于 0'));await api('/plans','POST',p);}editingPlan.value=null;notice.value=t('套餐设置已保存，当前成员订阅会立即同步');await refresh();await load();}catch(e){if(!isCancelled(e))error.value=errorMessage(e);}finally{busy.value=false;}}
 function deletePlan(p:Plan){confirmation.value={title:t('删除套餐')+' · '+p.name,detail:p.id==='plan-admin'?t('管理员套餐不能删除。'):t('删除会立即移除套餐、版本和商品引用；已有用户权益与订单快照不会回滚。'),action:async()=>{await api('/plans/'+encodeURIComponent(p.id),'DELETE');notice.value=t('套餐已删除');await load();}};}
 onMounted(load);
 onUnmounted(()=>loadRequest.cancel());

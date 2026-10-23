@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -32,7 +31,7 @@ func TestSlowBackupDoesNotLockControlPlane(t *testing.T) {
 	a := testApp(t)
 	w := &stalledBackupWriter{http.Header{}, make(chan struct{}, 1), make(chan struct{})}
 	done := make(chan struct{})
-	go func() { defer close(done); a.backup(w, httptest.NewRequest("GET", "/api/backup", nil), Record{}) }()
+	go func() { defer close(done); a.streamBackup(w, Record{}) }()
 	defer func() { close(w.release); <-done }()
 	select {
 	case <-w.entered:
@@ -124,7 +123,7 @@ func TestRestorePreservesNoLogsModeAndRegeneratesConfigs(t *testing.T) {
 	if _, _, err := a.store.changeRuntimeMode(runtimeNoLogs, a.store.runtime.Revision); err != nil {
 		t.Fatal(err)
 	}
-	w := req(t, a, owner, "GET", "/api/backup", nil)
+	w := req(t, a, owner, "POST", "/api/backup", object{"password": commerceTestPassword})
 	if w.Code != 200 {
 		t.Fatal(w.Code)
 	}
@@ -161,5 +160,22 @@ func TestRestoreRejectsInvalidDNSBeforeInstalling(t *testing.T) {
 	s.db.Close()
 	if err = prepareRestore(a.cfg, stage); err == nil {
 		t.Fatal("invalid DNS accepted for restore")
+	}
+}
+
+func TestBackupRequiresCurrentOwnerPassword(t *testing.T) {
+	a := testApp(t)
+	owner := testUser(t, a, "owner", "owner")
+	for _, body := range []any{nil, object{}, object{"password": "wrong-password"}} {
+		if w := req(t, a, owner, "POST", "/api/backup", body); w.Code != 400 && w.Code != 403 {
+			t.Fatalf("backup without the current password: %d", w.Code)
+		}
+	}
+	if w := req(t, a, owner, "GET", "/api/backup", nil); w.Code == 200 {
+		t.Fatal("GET still serves the recovery archive")
+	}
+	w := req(t, a, owner, "POST", "/api/backup", object{"password": commerceTestPassword})
+	if w.Code != 200 || w.Header().Get("Content-Type") != "application/gzip" {
+		t.Fatal(w.Code, w.Body.String())
 	}
 }

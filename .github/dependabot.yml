@@ -1,35 +1,63 @@
 version: 2
+# Minor/patch updates are grouped into one PR per ecosystem. Semver-major
+# updates are no longer ignored: they get their own group (a separate PR) and
+# a 30-day cooldown, so they arrive at most about monthly and only for
+# releases that have been out for a month. Dependabot cannot give one
+# ecosystem/directory two schedules, hence cooldown instead of a second entry.
 updates:
   - package-ecosystem: gomod
     directory: /backend
     schedule:
       interval: weekly
-    open-pull-requests-limit: 1
-    ignore:
-      - dependency-name: "*"
-        update-types: [version-update:semver-major]
+    open-pull-requests-limit: 2
+    cooldown:
+      semver-major-days: 30
     groups:
       compatible-updates:
         patterns: ["*"]
+        update-types: [minor, patch]
+      major-updates:
+        patterns: ["*"]
+        update-types: [major]
   - package-ecosystem: npm
     directory: /frontend
     schedule:
       interval: weekly
-    open-pull-requests-limit: 1
-    ignore:
-      - dependency-name: "*"
-        update-types: [version-update:semver-major]
+    open-pull-requests-limit: 2
+    cooldown:
+      semver-major-days: 30
     groups:
       compatible-updates:
         patterns: ["*"]
+        update-types: [minor, patch]
+      major-updates:
+        patterns: ["*"]
+        update-types: [major]
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: monthly
-    open-pull-requests-limit: 1
-    ignore:
-      - dependency-name: "*"
-        update-types: [version-update:semver-major]
+    open-pull-requests-limit: 2
     groups:
       compatible-updates:
         patterns: ["*"]
+        update-types: [minor, patch]
+      major-updates:
+        patterns: ["*"]
+        update-types: [major]
+  # The bundled PostgreSQL base image (digest-pinned). A bump must also update
+  # POSTGRES_IMAGE in scripts/versions.env and scripts/build-docker.sh;
+  # scripts/release-check.py fails the PR until they match. A major PostgreSQL
+  # version needs a data migration plan before merging.
+  - package-ecosystem: docker
+    directory: /deploy/docker
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 2
+    groups:
+      compatible-updates:
+        patterns: ["*"]
+        update-types: [minor, patch]
+      major-updates:
+        patterns: ["*"]
+        update-types: [major]

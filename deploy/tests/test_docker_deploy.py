@@ -391,4 +391,41 @@ class MaintenanceTests(TemporaryDockerTest):
         restore.assert_not_called();self.assertEqual(docker.safe_json(docker.transaction_file())['stage'],'committed')
 
 
+
+class HealthcheckTests(unittest.TestCase):
+    def test_new_and_upgraded_compositions_probe_panel_and_gateway(self):
+        comp = docker.composition(marker(), {})
+        panel, gateway = comp['services']['panel']['healthcheck'], comp['services']['gateway']['healthcheck']
+        self.assertEqual(panel['test'][:3], ['CMD', '/bin/bash', '-c'])
+        self.assertIn('/dev/tcp/127.0.0.1/19100', panel['test'][3]); self.assertIn('GET /api/health', panel['test'][3])
+        # Compose interpolates `$` even in JSON files; the probe must not need it.
+        self.assertNotIn('$', json.dumps(comp['services']['panel']['healthcheck']))
+        self.assertEqual(gateway['test'][1:], ['/opt/guangyue-personal/bin/guangyue-gateway', '-config', '/etc/guangyue-gateway.json', '-wait-ready', '5s'])
+        legacy = json.loads(json.dumps(comp))
+        for name in ('panel', 'gateway'): legacy['services'][name].pop('healthcheck')
+        self.assertEqual(docker.with_healthchecks(legacy), comp)
+        custom = json.loads(json.dumps(comp)); custom['services']['panel']['healthcheck'] = {'disable': True}
+        self.assertEqual(docker.with_healthchecks(custom)['services']['panel']['healthcheck'], {'disable': True})
+
+    @unittest.skipUnless(Path('/bin/bash').is_file(), 'bash unavailable')
+    def test_panel_probe_accepts_200_and_rejects_other_statuses(self):
+        import socket, threading
+        script = docker.PANEL_HEALTHCHECK['test'][3]
+        for status, expected in (('200 OK', 0), ('503 Service Unavailable', 1)):
+            server = socket.socket(); server.bind(('127.0.0.1', 0)); server.listen(1)
+            port = server.getsockname()[1]
+            def serve():
+                connection, _ = server.accept()
+                with connection:
+                    request = connection.recv(4096)
+                    assert request.startswith(b'GET /api/health HTTP/1.0\r\n'), request
+                    connection.sendall(('HTTP/1.1 %s\r\nContent-Length: 2\r\n\r\n{}' % status).encode())
+            thread = threading.Thread(target=serve); thread.start()
+            try:
+                result = subprocess.run(['/bin/bash', '-c', script.replace('19100', str(port))], timeout=10)
+            finally:
+                thread.join(5); server.close()
+            with self.subTest(status=status): self.assertEqual(result.returncode != 0, bool(expected))
+
+
 if __name__=='__main__':unittest.main()

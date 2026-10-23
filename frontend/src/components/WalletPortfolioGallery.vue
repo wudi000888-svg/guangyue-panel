@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import {computed,nextTick,onMounted,onUnmounted,ref,watch} from 'vue';
 import {ArrowDownLeft,ArrowUpRight,ChevronDown,Fuel,History,RefreshCw,Settings2,ShieldAlert,WalletCards} from 'lucide-vue-next';
-import {useApi,onSessionExpired,onAccessDenied,isCancelled} from '../lib/api';
+import {useApi,onSessionExpired,onAccessDenied,isCancelled, errorMessage } from '../lib/api';
 import {serialPoll} from '../lib/requests';
 import {stamp} from '../lib/commerce';
 import {portfolioAmount,portfolioStatus} from '../lib/cryptoPortfolio';
@@ -26,7 +26,7 @@ async function manualRefresh(){if(!readable())return;await Promise.all([refreshP
 const statusLabels={loading:'等待链上查询',refreshing:'正在更新',stale:'上次成功快照',partial:'部分地址待核对',failed:'暂无成功快照',ready:'余额已更新'};
 function snapshot(wallet:CryptoWallet,chain:CryptoChain){return state.value.snapshots[wallet.id]?.[chain.id]}
 function dataError(wallet:CryptoWallet,chain:CryptoChain){return state.value.errors[wallet.id]?.[chain.id]||''}
-async function loadSettings(){if(!readable())return;settingsRequest?.abort();const request=new AbortController();settingsRequest=request;try{const value=await api<CryptoSettings>('/settings','GET',undefined,{signal:request.signal});if(!readable()||settingsRequest!==request)return;settings.value=value;error.value='';await nextTick();await refresh()}catch(reason){if(readable()&&settingsRequest===request&&!isCancelled(reason))error.value=t((reason as Error).message)}}
+async function loadSettings(){if(!readable())return;settingsRequest?.abort();const request=new AbortController();settingsRequest=request;try{const value=await api<CryptoSettings>('/settings','GET',undefined,{signal:request.signal});if(!readable()||settingsRequest!==request)return;settings.value=value;error.value='';await nextTick();await refresh()}catch(reason){if(readable()&&settingsRequest===request&&!isCancelled(reason))error.value=errorMessage(reason)}}
 async function refresh(){if(readable())await reader.refresh()}
 function layout(){cancelAnimationFrame(layoutFrame);layoutFrame=requestAnimationFrame(()=>{const element=grid.value;if(!element)return;const mobile=window.matchMedia('(max-width:650px)').matches;for(const card of Array.from(element.querySelectorAll<HTMLElement>('.wallet-gallery-cell'))){card.style.gridRowEnd='auto';if(!mobile){const content=card.querySelector<HTMLElement>('.wallet-gallery-card');if(content)card.style.gridRowEnd='span '+Math.ceil((content.getBoundingClientRect().height+18)/10)}}})}
 function watchCards(){observer?.disconnect();if(!grid.value)return;observer=new ResizeObserver(layout);observer.observe(grid.value);for(const card of Array.from(grid.value.querySelectorAll<HTMLElement>('.wallet-gallery-card')))observer.observe(card);layout()}

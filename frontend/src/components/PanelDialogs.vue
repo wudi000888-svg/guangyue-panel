@@ -5,7 +5,7 @@ import { usePanelContext } from "../composables/panelContext";
 const { plans,state, page, busy, error, notice, modal, editingID, userForm, nodeForm, ipForm, importMode, importForm, importFile, importFileReading, importIssues, clearPrivateFile, readPrivateFile, importSubscription, ipPool, selectedIP, ipStatus, ipBadge, passwordForm, probeResult, displayedNodeName, confirmation, defaultRealitySNI, editingDefaultDirect, bytes, exitName, go, editIP, saveUser, confirmUser, confirmed, editNode, probe, saveIP, saveNode, deleteNode, changePassword } = usePanelContext();
 import { Activity, ArrowRight, Check, ChevronDown, CircleHelp, Download, Globe2, KeyRound, LoaderCircle, Plus, ShieldCheck, SlidersHorizontal, Trash2, X } from "lucide-vue-next";
 import { t } from "../i18n";
-import CountryMark from "../CountryMark.vue";
+import CountryMark from "./CountryMark.vue";
 const hasPlan=computed(()=>!!userForm.plan_id||!editingID.value);
 const nodeRate=computed({get:()=>(nodeForm.rate_milli??1000)/1000,set:(v:number)=>nodeForm.rate_milli=Math.round(v*1000)});
 const editDialog=ref<HTMLElement|null>(null), confirmDialog=ref<HTMLElement|null>(null);
@@ -29,6 +29,13 @@ async function saveExit(){
   }
 }
 watch(()=>state.value?.me.id,()=>{returnToNode.value=false;});
+// The password is only held while its confirmation is open.
+const confirmPassword=ref('');
+watch(confirmation,()=>{confirmPassword.value='';});
+async function submitConfirmation(){
+  if(busy.value||!confirmation.value||(confirmation.value.password&&!confirmPassword.value))return;
+  try{await confirmed(confirmPassword.value);}finally{confirmPassword.value='';}
+}
 useModalFocus(computed(()=>!!modal.value || !!confirmation.value), computed(()=>confirmation.value ? confirmDialog.value : editDialog.value), ()=>{
   if(busy.value)return;
   if(confirmation.value)confirmation.value=null;else closeEditor();
@@ -509,10 +516,11 @@ useModalFocus(computed(()=>!!modal.value || !!confirmation.value), computed(()=>
     <section ref="confirmDialog" tabindex="-1" class="modal confirmation" role="alertdialog" aria-modal="true" :aria-label="confirmation.title">
       <h2>{{ confirmation.title }}</h2>
       <p>{{ confirmation.detail }}</p>
+      <label v-if="confirmation.password">{{ t("管理员当前密码") }}<input v-model="confirmPassword" type="password" autocomplete="current-password" required @keydown.enter.prevent="submitConfirmation"/></label>
       <p v-if="error" class="error">{{ t(error) }}</p>
       <div class="modal-footer">
         <button :disabled="busy" @click="confirmation = null">{{ t("取消") }}</button
-        ><button class="primary" :disabled="busy" @click="confirmed">
+        ><button class="primary" :disabled="busy || (!!confirmation.password && !confirmPassword)" @click="submitConfirmation">
           <LoaderCircle v-if="busy" class="spin" :size="16" />{{ t("确认") }}</button>
       </div>
     </section>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { ArchiveRestore, Check, ChevronDown, Copy, Download, Ellipsis, Eye, LoaderCircle, Plus, RefreshCw, ShieldAlert, Trash2, WalletCards, X } from 'lucide-vue-next';
-import { useApi, isCancelled, ApiError, onSessionExpired, onAccessDenied } from '../lib/api';
+import { useApi, isCancelled, ApiError, onSessionExpired, onAccessDenied, errorMessage } from '../lib/api';
 import { operationID, stamp } from '../lib/commerce';
 import { canAllocate, deleteCryptoWallet, saveWalletNetworks, walletFormOperation, CRYPTO_WALLET_CHAINS, walletChains, walletFundingAddress, walletFundingPath, validateWalletChains, parseCryptoBackup, saveGeneratedWallet, saveImportedWallet, validateBackupPassword, CRYPTO_BACKUP_FILE_LIMIT, MAX_WALLET_NEXT_INDEX, type CryptoAddress, type CryptoAddressPage, type CryptoBackup, type CryptoWallet } from '../lib/cryptoWallet';
 import { t } from '../i18n';
@@ -9,8 +9,9 @@ import {SOLANA_CHAIN_ID} from '../lib/cryptoNetworks';
 import {walletStatus,type WalletReceivingSettings} from '../lib/walletStatus';
 import {usePaymentModule} from '../lib/paymentModule';
 import WalletAssetMark from './WalletAssetMark.vue';
-import CryptoPaymentSettings from './CryptoPaymentSettings.vue';
-import CryptoTreasury from './CryptoTreasury.vue';
+// Each section is its own chunk: only the one being viewed is downloaded.
+const CryptoPaymentSettings = defineAsyncComponent(() => import('./CryptoPaymentSettings.vue'));
+const CryptoTreasury = defineAsyncComponent(() => import('./CryptoTreasury.vue'));
 import { applyWalletList, applyWalletMutation, applyPermanentWalletDeletion, shouldResumeWalletList, type WalletListChange } from '../lib/cryptoWalletList';
 
 type Action = '' | 'hot' | 'mnemonic' | 'xpub' | 'restore' | 'backup' | 'confirm' | 'reveal' | 'status' | 'networks' | 'allocate' | 'recover' | 'delete';
@@ -62,7 +63,7 @@ async function load(){
  if(!props.active||disposed)return;
  if(document.hidden){resumeList=true;return}
  resumeList=false;const sequence=++listSequence;loading.value=true;
- try{const result=await api<{items:CryptoWallet[]}>('/wallets','GET',undefined,{signal:reads.signal});if(disposed||sequence!==listSequence||!props.active)return;const value=applyWalletList(result,wallets.value);wallets.value=value.wallets;loaded.value=true;listError.value='';emit('walletsChanged',{items:wallets.value,authoritative:true})}catch(reason){if(!disposed&&sequence===listSequence&&!isCancelled(reason))listError.value=t((reason as Error).message)}finally{if(sequence===listSequence)loading.value=false}
+ try{const result=await api<{items:CryptoWallet[]}>('/wallets','GET',undefined,{signal:reads.signal});if(disposed||sequence!==listSequence||!props.active)return;const value=applyWalletList(result,wallets.value);wallets.value=value.wallets;loaded.value=true;listError.value='';emit('walletsChanged',{items:wallets.value,authoritative:true})}catch(reason){if(!disposed&&sequence===listSequence&&!isCancelled(reason))listError.value=errorMessage(reason)}finally{if(sequence===listSequence)loading.value=false}
 }
 async function loadAddresses(wallet: CryptoWallet, append = false,force=false) {
   if (!props.active || disposed) return;
@@ -74,7 +75,7 @@ async function loadAddresses(wallet: CryptoWallet, append = false,force=false) {
     const page = await api<CryptoAddressPage>(`/wallets/${encodeURIComponent(wallet.id)}/addresses?${query}`, 'GET', undefined, { signal: reads.signal });
     if (disposed || sequence !== addressSequence || selectedID.value !== wallet.id) return;
     syncWallet(page.wallet); addresses.value = [...new Map([...addresses.value, ...page.items].map(address => [address.id, address])).values()]; nextAfter.value = page.next_after;
-  } catch (reason) { if (!disposed && sequence === addressSequence && !isCancelled(reason)) addressError.value = t((reason as Error).message); }
+  } catch (reason) { if (!disposed && sequence === addressSequence && !isCancelled(reason)) addressError.value = errorMessage(reason); }
   finally { if (sequence === addressSequence) addressLoading.value = false; }
 }
 function resetForm() {
@@ -105,7 +106,7 @@ async function readBackup(event: Event) {
     const parsed = parseCryptoBackup(await file.text());
     if (disposed || generation !== formGeneration) return;
     backupFile.value = parsed; backupFileName.value = file.name; backupSelection++;
-  } catch (reason) { if (generation === formGeneration) formError.value = t((reason as Error).message); }
+  } catch (reason) { if (generation === formGeneration) formError.value = errorMessage(reason); }
 }
 function download(backup: CryptoBackup, wallet: CryptoWallet) {
   const blob = new Blob([JSON.stringify(backup)], { type: 'application/json' }), url = URL.createObjectURL(blob);
@@ -180,7 +181,7 @@ async function submit() {
   } catch (reason) {
     if (current() && !isCancelled(reason)) {
       if ((kind === 'hot'||kind==='mnemonic') && creationSubmitted && !(reason instanceof ApiError)) { close(); error.value = t('创建结果尚未确认，已刷新钱包列表，请先核对是否已创建成功。'); }
-      else if(kind==='delete'&&!(reason instanceof ApiError)){formError.value=t('操作结果尚未确认，已重新读取钱包列表；请先核对状态，再使用同一次操作重试。')}else if(reason instanceof ApiError&&reason.status===409&&reason.message.includes('钱包已变化'))formError.value=t('钱包已被更新，请关闭窗口后重新打开，核对状态再确认。');else formError.value = t((reason as Error).message);
+      else if(kind==='delete'&&!(reason instanceof ApiError)){formError.value=t('操作结果尚未确认，已重新读取钱包列表；请先核对状态，再使用同一次操作重试。')}else if(reason instanceof ApiError&&reason.status===409&&reason.data.error?.includes('钱包已变化'))formError.value=t('钱包已被更新，请关闭窗口后重新打开，核对状态再确认。');else formError.value = errorMessage(reason);
     }
     if (reason instanceof ApiError && reason.status < 500) formOperation = undefined;
     // A lost response may follow a successful commit. Never retry with another seed under the old key.

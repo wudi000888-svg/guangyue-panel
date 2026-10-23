@@ -2,13 +2,13 @@
 import {computed,ref} from 'vue';
 import {X} from 'lucide-vue-next';
 import type {Node,NodeGroup} from '../types';
-import {useApi,isCancelled} from '../lib/api';
+import {useApi,isCancelled, errorMessage } from '../lib/api';
 import {useModalFocus} from '../composables/useModalFocus';
 import {t} from '../i18n';
 const props=defineProps<{nodes:Node[];groups:NodeGroup[]}>(),emit=defineEmits<{close:[];updated:[]}>(),api=useApi();
 const rate=ref((props.nodes[0]?.rate_milli??1000)/1000),changeRate=ref(true),sameExit=ref(false),busy=ref(false),error=ref(''),review=ref<{expected:Record<string,string>;nodes_affected:number}|null>(null),dialog=ref<HTMLElement|null>(null);
 useModalFocus(computed(()=>true),dialog,()=>{if(!busy.value)emit('close');});
-async function save(){busy.value=true;error.value='';const input={ids:props.nodes.map(n=>n.id),...(changeRate.value?{rate_milli:Math.round(rate.value*1000)}:{}),same_exit:sameExit.value};try{if(!review.value){review.value=await api('/nodes/policy','POST',{...input,preview:true});}else{await api('/nodes/policy','POST',{...input,expected:review.value.expected});emit('updated');emit('close');}}catch(e){if(!isCancelled(e)){error.value=(e as Error).message;review.value=null;}}finally{busy.value=false;}}
+async function save(){busy.value=true;error.value='';const input={ids:props.nodes.map(n=>n.id),...(changeRate.value?{rate_milli:Math.round(rate.value*1000)}:{}),same_exit:sameExit.value};try{if(!review.value){review.value=await api('/nodes/policy','POST',{...input,preview:true});}else{await api('/nodes/policy','POST',{...input,expected:review.value.expected});emit('updated');emit('close');}}catch(e){if(!isCancelled(e)){error.value=errorMessage(e);review.value=null;}}finally{busy.value=false;}}
 </script>
 <template><Teleport to="body"><div class="modal-shade" @click.self="!busy&&emit('close')"><form class="modal node-policy-dialog" ref="dialog" tabindex="-1" role="dialog" aria-modal="true" :aria-label="t('调整节点倍率')" @submit.prevent="save"><div class="modal-head"><h2>{{t('调整节点倍率')}}</h2><button type="button" class="icon" :disabled="busy" :aria-label="t('关闭')" @click="emit('close')"><X :size="20"/></button></div><p class="field-help">{{t('已选择')}} {{nodes.length}} {{t('个节点')}} · {{nodes.map(n=>n.name).join('、')}}</p>
  <template v-if="!review"><label class="inline-check"><input v-model="changeRate" type="checkbox"/>{{t('修改倍率')}}</label><label v-if="changeRate">{{t('节点倍率')}}<input v-model.number="rate" type="number" min="0" max="100" step="0.01" required/></label><label class="inline-check"><input v-model="sameExit" type="checkbox"/>{{t('同时应用到相同出口的其他节点')}}</label></template>

@@ -25,6 +25,10 @@ type Store struct {
 	stateDir    string
 	runtimeMu   sync.RWMutex
 	runtime     RuntimeSettings
+	// meterPolicies holds the digest of each node policy last committed to
+	// node_meter_policies, so unchanged policies are not rewritten every tick.
+	meterMu       sync.Mutex
+	meterPolicies map[string]string
 }
 
 func openStore(dir string) (*Store, error) {
@@ -222,6 +226,17 @@ func (s *Store) nodes() ([]Node, error) {
 	}
 	return out, rows.Err()
 }
+func (s *Store) node(id string) (Node, error) {
+	var b []byte
+	if err := s.db.QueryRow("SELECT doc FROM nodes WHERE id=?", id).Scan(&b); err != nil {
+		return Node{}, err
+	}
+	var n Node
+	if err := s.vault.open(b, &n); err != nil {
+		return Node{}, err
+	}
+	return normalizeNodePolicy(n), nil
+}
 func (s *Store) saveNode(n Node) error {
 	b, err := s.vault.seal(normalizeNodePolicy(n))
 	if err != nil {
@@ -374,9 +389,9 @@ func (s *Store) markPreparedNodes(hyOptimized bool) error {
 	}
 	defer tx.Rollback()
 	for key, protocol := range map[string]string{"x_nodes": "vless", "hy_nodes": "hy2"} {
-		value := nodeHash(nodes, protocol)
+		value := xrayRestartHash(nodes)
 		if protocol == "hy2" {
-			value = hy2NodeHash(nodes, hyOptimized)
+			value = hy2RestartHash(nodes, hyOptimized)
 		}
 		if _, err = tx.Exec("INSERT INTO meta(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value", key, value); err != nil {
 			return err

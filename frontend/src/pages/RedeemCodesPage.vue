@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import PageHeading from "../components/PageHeading.vue";
+import { errorMessage } from '../lib/api';
 import {Plus,RefreshCw,Gift} from "lucide-vue-next";
 import "../styles/admin-ui.css";
 import {onMounted,ref} from 'vue';
 import {useCommerce,cents,money,stamp,stateText,type Redemption} from '../lib/commerce';
 import {download} from '../lib/download';
 import {t} from '../i18n';
-import '../commerce.css';
+import '../styles/commerce.css';
 
 type CodeItem={id:string;code?:string;available:boolean;reason?:string};
 const {read,run,busy,error,notice}=useCommerce();
@@ -17,7 +18,7 @@ const items=ref<Redemption[]>([]), selected=ref<string[]>([]), amount=ref(''), c
   plaintext=ref<Record<string,string>>({});
 async function load(){items.value=(await read<{items:Redemption[]}>('/codes'))?.items||[];selected.value=[]}
 async function more(){if(!items.value.length)return;const v=await read<{items:Redemption[]}>('/codes?before='+encodeURIComponent(items.value.at(-1)!.id));if(v)items.value.push(...v.items)}
-async function generate(){let value:string;try{value=cents(amount.value)}catch(e){error.value=(e as Error).message;return}const end=forever.value?0:Math.floor(new Date(expires.value).getTime()/1000);if(!forever.value&&(!end||end<=Date.now()/1000)){error.value=t('有效期必须在未来');return}const v=await run<{codes:{id:string;code:string}[]}>('/codes',{amount:value,count:count.value,expires:end,note:note.value,password:password.value});password.value='';if(v){generated.value=v.codes;notice.value=t('请及时保存兑换码，列表支持重新查看明文');await load()}}
+async function generate(){let value:string;try{value=cents(amount.value)}catch(e){error.value=errorMessage(e);return}const end=forever.value?0:Math.floor(new Date(expires.value).getTime()/1000);if(!forever.value&&(!end||end<=Date.now()/1000)){error.value=t('有效期必须在未来');return}const v=await run<{codes:{id:string;code:string}[]}>('/codes',{amount:value,count:count.value,expires:end,note:note.value,password:password.value});password.value='';if(v){generated.value=v.codes;notice.value=t('请及时保存兑换码，列表支持重新查看明文');await load()}}
 async function revoke(){const ids=selected.value.filter(id=>items.value.find(v=>v.id===id)?.state==='unused');if(!ids.length)return;const v=await run<{revoked:number}>('/codes/revoke',{ids});if(v){notice.value=t('未兑换的选中兑换码已作废');await load()}}
 async function reveal(){if(!selected.value.length)return;const v=await run<{items:CodeItem[]}>('/codes/reveal',{ids:selected.value});if(v){for(const item of v.items)if(item.available&&item.code)plaintext.value[item.id]=item.code;const unavailable=v.items.filter(item=>!item.available).length;notice.value=unavailable?t('部分历史兑换码未保存明文，无法恢复'):t('已显示选中兑换码明文')}}
 function exportCodes(kind:'generated'|'revealed'){const values=kind==='generated'?generated.value.map(v=>v.code):Object.values(plaintext.value);if(values.length)download(new Blob([values.join('\n')],{type:'text/plain;charset=utf-8'}),'guangyue-redemption-codes.txt')}
