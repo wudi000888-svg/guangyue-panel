@@ -91,7 +91,7 @@ func TestUserIsolationAndCSRF(t *testing.T) {
 	for _, test := range []struct {
 		method, path string
 		want         int
-	}{{"GET", "/api/subscription?user_id=1", 403}, {"GET", "/api/backup", 403}, {"POST", "/api/users", 403}, {"DELETE", "/api/users/3", 403}} {
+	}{{"GET", "/api/subscription?user_id=1", 403}, {"POST", "/api/backup", 403}, {"POST", "/api/users", 403}, {"DELETE", "/api/users/3", 403}} {
 		w := req(t, a, alice, test.method, test.path, object{})
 		if w.Code != test.want {
 			t.Fatalf("%s %s: %d", test.method, test.path, w.Code)
@@ -198,7 +198,7 @@ func TestBackupRestorePreservesEncryptedCredentialsAndRevocations(t *testing.T) 
 	if err := a.store.queueKick(99); err != nil {
 		t.Fatal(err)
 	}
-	w := req(t, a, u, "GET", "/api/backup", nil)
+	w := req(t, a, u, "POST", "/api/backup", object{"password": commerceTestPassword})
 	if w.Code != 200 {
 		t.Fatalf("backup: %s", w.Body.String())
 	}
@@ -391,8 +391,8 @@ func TestXrayZeroExitStillRequiresUserReadback(t *testing.T) {
 		t.Fatal(err)
 	}
 	nodes, _ := a.store.nodes()
-	_ = a.store.setMeta("x_nodes", nodeHash(nodes, "vless"))
-	_ = a.store.setMeta("hy_nodes", nodeHash(nodes, "hy2"))
+	_ = a.store.setMeta("x_nodes", xrayRestartHash(nodes))
+	_ = a.store.setMeta("hy_nodes", hy2RestartHash(nodes, false))
 	err = a.reconcile()
 	if err == nil || !strings.Contains(err.Error(), "verification mismatch") {
 		t.Fatalf("zero-exit CLI failure reported success: %v", err)

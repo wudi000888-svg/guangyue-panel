@@ -48,24 +48,7 @@ func (a *App) commerceWork(now int64) error {
 				continue
 			}
 			if o.Expires <= now {
-				if o.PaymentAttemptID != "" {
-					var state string
-					if err := a.store.db.QueryRow("SELECT state FROM payment_attempts WHERE id=?", o.PaymentAttemptID).Scan(&state); err != nil {
-						problems = append(problems, err)
-						continue
-					} else if state == "paid" {
-						continue
-					}
-				}
-				o.State = "expired"
-				o.Message = "订单确认已超时"
-				if o.PaymentAttemptID != "" {
-					if _, e = a.store.db.Exec("UPDATE payment_attempts SET state='expired',updated=? WHERE id=? AND state IN ('created','awaiting_customer')", now, o.PaymentAttemptID); e != nil {
-						problems = append(problems, e)
-						continue
-					}
-				}
-				if e = a.persistOrder(o, "pending"); e != nil {
+				if e = a.expirePendingOrder(o, now); e != nil {
 					problems = append(problems, e)
 				}
 			}
@@ -108,6 +91,38 @@ func (a *App) commerceWork(now int64) error {
 		}
 	}
 	return errors.Join(append(problems, a.commerceNotifications(now))...)
+}
+// expirePendingOrder expires an unpaid order and its payment attempt in one
+// transaction, locking order then attempt like recordPaymentEvent. Separate
+// statements could leave the attempt expired while the order stayed
+// pending, so a late payment would be booked against an open-looking order.
+func (a *App) expirePendingOrder(o Order, now int64) error {
+	tx, e := a.store.db.Begin()
+	if e != nil {
+		return e
+	}
+	defer tx.Rollback()
+	if _, e = tx.Exec("UPDATE commerce_orders SET updated=updated WHERE id=?", o.ID); e != nil {
+		return e
+	}
+	if o.PaymentAttemptID != "" {
+		var state string
+		if e = tx.QueryRow("SELECT state FROM payment_attempts WHERE id=?", o.PaymentAttemptID).Scan(&state); e != nil {
+			return e
+		}
+		if state == "paid" {
+			return nil
+		}
+		if _, e = tx.Exec("UPDATE payment_attempts SET state='expired',updated=? WHERE id=? AND state IN ('created','awaiting_customer')", now, o.PaymentAttemptID); e != nil {
+			return e
+		}
+	}
+	o.State = "expired"
+	o.Message = "订单确认已超时"
+	if e = saveOrder(tx, o, "pending"); e != nil {
+		return e
+	}
+	return tx.Commit()
 }
 func (a *App) persistOrder(o Order, old string) error {
 	tx, e := a.store.db.Begin()

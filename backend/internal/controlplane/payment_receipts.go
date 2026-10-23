@@ -494,10 +494,16 @@ func (a *App) runPaymentWorker(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		a.mu.Lock()
-		_ = a.paymentWork()
-		a.mu.Unlock()
-		_ = a.paymentRefundWork(ctx)
+		a.runWorker("支付到账处理", func() error {
+			// Most ticks have nothing to do; check without the control lock.
+			if pending, err := a.paymentWorkPending(); err != nil || !pending {
+				return err
+			}
+			a.mu.Lock()
+			defer a.mu.Unlock()
+			return a.paymentWork()
+		})
+		a.runWorker("原路退款", func() error { return a.paymentRefundWork(ctx) })
 		select {
 		case <-ctx.Done():
 			return
@@ -532,6 +538,21 @@ func (a *App) listPaymentReceipts(w http.ResponseWriter, r *http.Request, actor 
 // Upgrades may already contain verified attempts from the earlier payment core.
 // Bring those funds into the same restartable receipt pipeline once, without
 // granting anything from unsigned pending attempts.
+// paymentWorkPending reports whether paymentWork has anything to change. It
+// mirrors every selection paymentWork makes, so returning false means the
+// whole pass would be a no-op.
+func (a *App) paymentWorkPending() (bool, error) {
+	if a.cfg.businessAgent() {
+		return false, nil
+	}
+	var pending bool
+	err := a.store.db.QueryRow(`SELECT
+		EXISTS(SELECT 1 FROM payment_receipts WHERE state='verified')
+		OR EXISTS(SELECT 1 FROM payment_attempts WHERE account_scope='' AND external_ref IS NOT NULL AND external_ref<>'' AND state IN ('paid','completed','refund_required','refunded'))
+		OR EXISTS(SELECT 1 FROM payment_receipts WHERE state='applied' AND attempt_id IN (SELECT id FROM payment_attempts WHERE state='refund_required'))
+		OR EXISTS(SELECT 1 FROM payment_attempts WHERE provider_id<>'crypto' AND state IN ('created','awaiting_customer') AND expires<=?)`, time.Now().Unix()).Scan(&pending)
+	return pending, err
+}
 func (a *App) recoverLegacyPaymentReceipts() error {
 	rows, err := a.store.db.Query("SELECT " + paymentAttemptColumns + " FROM payment_attempts WHERE account_scope='' AND external_ref IS NOT NULL AND external_ref<>'' AND state IN ('paid','completed','refund_required','refunded') ORDER BY created LIMIT 100")
 	if err != nil {

@@ -434,7 +434,7 @@ func (c *cryptoEVM) Transfers(ctx context.Context, contract, to string, fromBloc
 		return nil, commerceFail(409, "两个 RPC 的转账日志不一致")
 	}
 	for _, v := range x {
-		if v.Removed || v.BlockNumber < fromBlock || v.BlockNumber > toBlock || v.Address != strings.ToLower(contract) || len(v.Topics) != 3 || v.Topics[0] != cryptoTransferTopic || v.Topics[2] != "0x"+cryptoABIAddress(to) || len(v.Data) != 66 {
+		if v.Removed || v.BlockNumber < fromBlock || v.BlockNumber > toBlock || v.Address != strings.ToLower(contract) || len(v.Topics) != 3 || v.Topics[0] != cryptoTransferTopic || !cryptoTopicAddress(v.Topics[1]) || v.Topics[2] != "0x"+cryptoABIAddress(to) || len(v.Data) != 66 {
 			return nil, commerceFail(409, "RPC 返回了不匹配的转账日志")
 		}
 		if _, e := cryptoHexInt(v.Data); e != nil {
@@ -600,4 +600,14 @@ func (c *cryptoEVM) Broadcast(ctx context.Context, raw, expected string) error {
 }
 func cryptoTransferData(destination string, amount *big.Int) string {
 	return "0xa9059cbb" + cryptoABIAddress(destination) + fmt.Sprintf("%064x", amount)
+}
+
+// cryptoTopicAddress reports whether an indexed log topic is a 32-byte word
+// holding an address (12 zero bytes then 20 address bytes).
+func cryptoTopicAddress(topic string) bool {
+	if len(topic) != 66 || !strings.HasPrefix(topic, "0x") || topic[2:26] != strings.Repeat("0", 24) {
+		return false
+	}
+	_, err := hex.DecodeString(topic[2:])
+	return err == nil
 }

@@ -436,8 +436,8 @@ func (a *App) cryptoProcessTransaction(ctx context.Context, id, lease string, v 
 	r, e := c.FinalReceipt(ctx, v.Hash)
 	if e != nil {
 		if errors.Is(e, errCryptoFinality) {
-			_ = a.store.freezeCryptoChain(v.ChainID)
-			return false, commerceFail(422, errCryptoFinality.Error())
+			// A failed freeze must surface: the chain would stay usable.
+			return false, errors.Join(commerceFail(422, errCryptoFinality.Error()), a.store.freezeCryptoChain(v.ChainID))
 		}
 		return false, e
 	}
@@ -465,7 +465,7 @@ func (a *App) cryptoProcessTransaction(ctx context.Context, id, lease string, v 
 	if e = c.validateSignedReceipt(ctx, v, r); e != nil {
 		var ce commerceError
 		if errors.As(e, &ce) && ce.status == 422 {
-			_ = a.store.freezeCryptoChain(v.ChainID)
+			e = errors.Join(e, a.store.freezeCryptoChain(v.ChainID))
 		}
 		return false, e
 	}
@@ -633,10 +633,9 @@ func (a *App) cryptoSweepWork(ctx context.Context) error {
 	// Release only our own fenced lease. A completed step has already cleared it.
 	finishCtx, finishCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer finishCancel()
-	if end := a.cryptoSweepFinish(finishCtx, id, lease, state, message); e == nil {
-		return end
-	}
-	return e
+	// A failed release must be reported too, or the job silently waits for
+	// the lease to expire.
+	return errors.Join(e, a.cryptoSweepFinish(finishCtx, id, lease, state, message))
 }
 func (a *App) runCryptoSweepWorker(ctx context.Context) {
 	ticker := time.NewTicker(3 * time.Second)
@@ -645,7 +644,7 @@ func (a *App) runCryptoSweepWorker(ctx context.Context) {
 		if ctx.Err() != nil {
 			return
 		}
-		_ = a.cryptoSweepWork(ctx)
+		a.runWorker("加密资产归集", func() error { return a.cryptoSweepWork(ctx) })
 		select {
 		case <-ctx.Done():
 			return

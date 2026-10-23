@@ -156,6 +156,14 @@ func (a *App) coreRecords() ([]Record, error) {
 	if err != nil {
 		return nil, err
 	}
+	return a.coreRecordsFrom(records)
+}
+
+// coreRecordsFrom applies the core authorization policy to loaded records.
+// Every step is per record, so a single record yields the same result it
+// would have inside the full set.
+func (a *App) coreRecordsFrom(records []Record) ([]Record, error) {
+	var err error
 	if err = a.filterMountRecords(records); err != nil {
 		return nil, err
 	}

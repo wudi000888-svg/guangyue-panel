@@ -101,8 +101,9 @@ func (a *App) serveSubscription(w http.ResponseWriter, r *http.Request) {
 		failure(w, 404, "订阅不存在")
 		return
 	}
-	a.mu.Lock()
-	defer a.mu.Unlock()
+	// Rendering only reads committed rows, so it runs without the control
+	// lock; clients must not stall behind core reconciliation. Only the
+	// access-time write below needs the lock that guards user documents.
 	var id int64
 	public := r.PathValue("user") != ""
 	var err error
@@ -152,7 +153,7 @@ func (a *App) serveSubscription(w http.ResponseWriter, r *http.Request) {
 		failure(w, 400, "订阅格式不支持")
 		return
 	}
-	if err = a.store.markSubscriptionAccess(&record, time.Now().Unix()); err != nil {
+	if err = a.markSubscriptionAccess(id); err != nil {
 		failure(w, 500, "保存访问时间失败")
 		return
 	}
@@ -166,6 +167,22 @@ func (a *App) serveSubscription(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", "attachment; filename="+map[bool]string{true: "guangyue-public.", false: "guangyue."}[public]+map[bool]string{true: "yaml", false: "txt"}[r.URL.Query().Get("format") == "mihomo"])
 	w.Write(b)
 }
+
+// markSubscriptionAccess re-reads the user under the control lock so the
+// access time never overwrites a newer document written meanwhile. The time
+// is informational: while the control loop is busy it is skipped rather than
+// making the client wait.
+func (a *App) markSubscriptionAccess(id int64) error {
+	if !a.mu.TryLock() {
+		return nil
+	}
+	defer a.mu.Unlock()
+	current, err := a.store.record(id)
+	if err != nil {
+		return err
+	}
+	return a.store.markSubscriptionAccess(&current, time.Now().Unix())
+}
 func (a *App) hyAuth(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		Addr string `json:"addr"`
@@ -177,23 +194,9 @@ func (a *App) hyAuth(w http.ResponseWriter, r *http.Request) {
 		jsonResponse(w, 200, object{"ok": false})
 		return
 	}
-	records, err := a.coreRecords()
-	nodes, e := a.store.nodes()
-	if err == nil && e == nil {
-		for _, record := range records {
-			if !record.Active() || !record.HY2 {
-				continue
-			}
-			for _, node := range nodes {
-				if node.Protocol != "hy2" || !memberMayUseNode(record, node) {
-					continue
-				}
-				if subtle.ConstantTimeCompare([]byte(input.Auth), []byte(hyNodePassword(record, node))) == 1 {
-					jsonResponse(w, 200, object{"ok": true, "id": hyNodeIdentity(record, node)})
-					return
-				}
-			}
-		}
+	if identity, ok := a.hyAuthenticate(input.Auth); ok {
+		jsonResponse(w, 200, object{"ok": true, "id": identity})
+		return
 	}
 	jsonResponse(w, 200, object{"ok": false})
 }

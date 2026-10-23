@@ -34,11 +34,11 @@ func fileDigest(path string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-// Hold the control-plane lock only while capturing the database and its key.
-// Hashing, compression and slow-client writes use files and bounded buffers.
+// The database snapshot is transactionally consistent on its own and the
+// master key never changes after first start, so the control lock is not
+// held: a large Pro database no longer freezes every request for minutes.
+// heavyMu (taken by the caller) keeps backups from running concurrently.
 func (a *App) backupSnapshot(dir string) error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	if err := a.store.db.Snapshot(ctx, filepath.Join(dir, "panel.db")); err != nil {
@@ -103,7 +103,24 @@ func appendBackupEntry(tw *tar.Writer, path, name string) error {
 	_, err = io.Copy(tw, f)
 	return err
 }
+
+// The archive holds the master key and every sealed secret, including the
+// wallet seed, so it needs the same password re-check as revealing the seed.
 func (a *App) backup(w http.ResponseWriter, r *http.Request, actor Record) {
+	var input struct {
+		Password string `json:"password"`
+	}
+	if !decode(w, r, &input) {
+		return
+	}
+	if _, err := a.commerceActor(actor, true, input.Password); err != nil {
+		failure(w, 403, "请验证管理员当前密码")
+		return
+	}
+	a.streamBackup(w, actor)
+}
+
+func (a *App) streamBackup(w http.ResponseWriter, actor Record) {
 	if !a.heavyMu.TryLock() {
 		failure(w, 409, "后台任务繁忙，请稍后重试")
 		return

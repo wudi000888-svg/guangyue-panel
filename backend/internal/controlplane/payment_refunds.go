@@ -103,6 +103,15 @@ func (a *App) paymentRefundAction(w http.ResponseWriter, r *http.Request, actor 
 		refund.State = "succeeded"
 		refund.Message = "管理员已核对并确认商户后台退款"
 	}
+	// A fully consumed purchase has nothing left to return. Settle it without
+	// contacting the provider; a stored amount of 0 means "legacy full refund"
+	// to the worker, so it must never be queued.
+	zeroRefund := in.Action == "request" && refundAmount <= 0
+	if zeroRefund {
+		refund.Amount = 0
+		refund.State = "succeeded"
+		refund.Message = "可退金额为 0，无需原路退款"
+	}
 	tx, err := a.store.db.Begin()
 	if err != nil {
 		return err
@@ -128,7 +137,7 @@ func (a *App) paymentRefundAction(w http.ResponseWriter, r *http.Request, actor 
 	if err != nil {
 		return err
 	}
-	if in.Action == "confirm_manual" {
+	if in.Action == "confirm_manual" || zeroRefund {
 		if err = a.finishPaymentRefund(tx, receipt, refund.ExternalRef); err != nil {
 			return err
 		}
@@ -203,7 +212,13 @@ func (a *App) paymentRefundWork(ctx context.Context) error {
 		if refund.ExternalRef != "" {
 			e = a.stripeAPI(ctx, p, "GET", "/v1/refunds/"+url.PathEscape(refund.ExternalRef), "", nil, &remote)
 		} else {
-			values := url.Values{"payment_intent": {receipt.ExternalRef}, "amount": {strconv.FormatInt(receipt.Amount, 10)}, "metadata[attempt_id]": {attempt.ID}, "metadata[refund_id]": {refund.ID}}
+			amount, e := stripeRefundAmount(refund, receipt)
+			if e != nil {
+				_, _ = a.store.db.Exec("UPDATE payment_refunds SET state='failed',message=?,updated=? WHERE id=? AND state='processing'", e.Error(), time.Now().Unix(), refund.ID)
+				problems = append(problems, e)
+				continue
+			}
+			values := url.Values{"payment_intent": {receipt.ExternalRef}, "amount": {strconv.FormatInt(amount, 10)}, "metadata[attempt_id]": {attempt.ID}, "metadata[refund_id]": {refund.ID}}
 			e = a.stripeAPI(ctx, p, "POST", "/v1/refunds", "gy-refund-"+refund.ID, values, &remote)
 		}
 		if e != nil {
@@ -217,6 +232,18 @@ func (a *App) paymentRefundWork(ctx context.Context) error {
 		}
 	}
 	return errors.Join(problems...)
+}
+// stripeRefundAmount is the amount actually returned to the payer: the
+// prorated amount recorded when the refund was requested. Rows written before
+// refunds were prorated store 0 and meant the full payment.
+func stripeRefundAmount(refund PaymentRefund, receipt PaymentReceipt) (int64, error) {
+	if refund.Amount <= 0 {
+		return receipt.Amount, nil
+	}
+	if refund.Amount > receipt.Amount {
+		return 0, errors.New("退款金额超过原支付金额，需人工核对")
+	}
+	return refund.Amount, nil
 }
 func (a *App) recordStripeRefund(p PaymentProvider, event verifiedPaymentEvent) error {
 	if event.RefundID == "" || event.ExternalRef == "" {

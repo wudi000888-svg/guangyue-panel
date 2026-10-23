@@ -162,6 +162,10 @@ func (s *Store) saveCommerceRequest(tx *persistence.Tx, actor int64, id string, 
 	_, e = tx.Exec("INSERT INTO commerce_requests(id,user_id,fingerprint,response,created) VALUES(?,?,?,?,?)", id, actor, digest(string(jsonBytes(request))), b, time.Now().Unix())
 	return e
 }
+// txUser overwrites the whole user document without a version check. Unlike
+// wallet postings and payment rows (conditional SQL), user documents are
+// read-modify-written by many paths, and their only serialisation is that
+// every writer holds App.mu. A new writer that skips App.mu loses updates.
 func txUser(tx *persistence.Tx, user domain.User) error {
 	r, e := tx.Exec("UPDATE users SET doc=? WHERE id=?", jsonBytes(user), user.ID)
 	if e == nil {
@@ -185,6 +189,24 @@ func (s *Store) commercePendingExcept(user int64, exclude string) (bool, error) 
 	}
 	e := s.db.QueryRow(query, args...).Scan(&n)
 	return n > 0, e
+}
+// commerceBarrierUsers returns every user with an order still provisioning or
+// refunding, in one query rather than one per user.
+func (s *Store) commerceBarrierUsers() (map[int64]bool, error) {
+	rows, err := s.db.Query("SELECT DISTINCT user_id FROM commerce_orders WHERE state IN ('provisioning','refunding')")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	users := map[int64]bool{}
+	for rows.Next() {
+		var id int64
+		if err = rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		users[id] = true
+	}
+	return users, rows.Err()
 }
 func (s *Store) commerceBarrier(user int64) (bool, error) {
 	var n int

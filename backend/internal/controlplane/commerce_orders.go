@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"math/bits"
 	"net/http"
 	"strings"
 	"time"
@@ -165,6 +166,18 @@ func removeQueuedEntitlement(u *Record, index int) bool {
 // unused active entitlement. Queued purchases have not been consumed yet and
 // therefore remain fully refundable. A missing meter falls back to the full
 // amount so an old record is never under-refunded silently.
+// prorate returns amount*part/whole rounded down. Quotas are byte counts up to
+// 2^60, so the product needs 128 bits; part<=whole keeps the result <= amount.
+func prorate(amount, part, whole int64) int64 {
+	if amount <= 0 || part <= 0 || whole <= 0 {
+		return 0
+	}
+	part = min(part, whole)
+	hi, lo := bits.Mul64(uint64(amount), uint64(part))
+	q, _ := bits.Div64(hi, lo, uint64(whole))
+	return int64(q)
+}
+
 func refundableOrderAmount(o Order, u Record, now int64) int64 {
 	amount := o.Offer.Price
 	if amount <= 0 {
@@ -176,13 +189,13 @@ func refundableOrderAmount(o Order, u Record, now int64) int64 {
 	}
 	if o.Offer.Plan.Quota > 0 && u.QuotaUsed() > 0 {
 		used := min(o.Offer.Plan.Quota, max(int64(0), u.QuotaUsed()))
-		return amount * (o.Offer.Plan.Quota - used) / o.Offer.Plan.Quota
+		return prorate(amount, o.Offer.Plan.Quota-used, o.Offer.Plan.Quota)
 	}
 	if o.Offer.Plan.Quota == 0 && o.Offer.Plan.ValidDays > 0 && u.Entitlement != nil && u.Entitlement.AssignedAt > 0 {
 		total := int64(o.Offer.Plan.ValidDays) * 86400
 		left := max(int64(0), u.Expires-now)
 		if total > 0 && left < total {
-			return amount * left / total
+			return prorate(amount, left, total)
 		}
 	}
 	return amount
