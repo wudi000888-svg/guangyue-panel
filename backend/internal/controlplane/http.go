@@ -7,9 +7,11 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 
@@ -123,6 +125,7 @@ func (a *App) rateAllowed(ip string) bool {
 			delete(a.limits, k)
 		}
 	}
+	ip = rateLimitKey(ip)
 	v := a.limits[ip]
 	kept := v[:0]
 	for _, t := range v {
@@ -130,11 +133,58 @@ func (a *App) rateAllowed(ip string) bool {
 			kept = append(kept, t)
 		}
 	}
-	if len(kept) >= 12 || len(a.limits) >= 4096 {
+	if len(kept) >= 12 {
 		return false
+	}
+	// A full table evicts the least recently active sources rather than
+	// refusing everyone: refusing let ~4096 addresses lock out all logins,
+	// while an attacker's own entries are the newest and stay limited.
+	if _, tracked := a.limits[ip]; !tracked && len(a.limits) >= 4096 {
+		evictOldestLimits(a.limits, len(a.limits)-4095)
 	}
 	a.limits[ip] = append(kept, now)
 	return true
+}
+
+// rateLimitKey groups IPv6 sources by /64, the block a single host normally
+// controls; IPv4 addresses and other keys are kept as they are. Keys may
+// carry a purpose prefix such as "register:".
+func rateLimitKey(key string) string {
+	prefix, addr := "", key
+	if _, err := netip.ParseAddr(key); err != nil {
+		if p, rest, ok := strings.Cut(key, ":"); ok {
+			prefix, addr = p+":", rest
+		}
+	}
+	ip, err := netip.ParseAddr(addr)
+	if err != nil {
+		return key
+	}
+	ip = ip.Unmap()
+	if ip.Is6() {
+		block, _ := ip.Prefix(64)
+		return prefix + block.String()
+	}
+	return prefix + ip.String()
+}
+
+func evictOldestLimits(limits map[string][]time.Time, n int) {
+	type entry struct {
+		key  string
+		last time.Time
+	}
+	entries := make([]entry, 0, len(limits))
+	for k, v := range limits {
+		var last time.Time
+		if len(v) > 0 {
+			last = v[len(v)-1]
+		}
+		entries = append(entries, entry{k, last})
+	}
+	slices.SortFunc(entries, func(x, y entry) int { return x.last.Compare(y.last) })
+	for i := 0; i < n && i < len(entries); i++ {
+		delete(limits, entries[i].key)
+	}
 }
 func (a *App) login(w http.ResponseWriter, r *http.Request) {
 	ip := requestIP(r)
@@ -142,18 +192,20 @@ func (a *App) login(w http.ResponseWriter, r *http.Request) {
 		failure(w, 429, "登录尝试过多，请稍后重试")
 		return
 	}
+	var input struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	// Read the (size-limited) body first: a slow upload must not occupy one
+	// of the two bcrypt slots.
+	if !decode(w, r, &input) {
+		return
+	}
 	select {
 	case a.loginSlots <- struct{}{}:
 		defer func() { <-a.loginSlots }()
 	default:
 		failure(w, 429, "登录繁忙，请稍后重试")
-		return
-	}
-	var input struct {
-		Username string `json:"username"`
-		Password string `json:"password"`
-	}
-	if !decode(w, r, &input) {
 		return
 	}
 	if len(input.Password) > 72 {
