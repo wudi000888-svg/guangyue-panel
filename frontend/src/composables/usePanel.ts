@@ -3,12 +3,12 @@ import { download } from "../lib/download";
 import { useAccessStore } from "../stores/access";
 import { useRouter, useRoute } from "vue-router";
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
-import { Mail, Globe2, KeyRound, LayoutDashboard, Database, QrCode, RadioTower, Server, Settings2, Users, Package, Wallet, Ticket, ShoppingBag, Receipt, Gift, Layers3, Coins } from "lucide-vue-next";
 import { bytes, date, duration, exitName } from "../lib/format";
 import { useSubscription } from "./useSubscription";
 import { useToast } from "./panel/useToast";
+import { usePanelNavigation } from "./panel/usePanelNavigation";
 import { useSidebarCustomization } from './useSidebarCustomization';
-import { useApi, ApiError, downloadBlob, JSON_REQUEST_HEADERS, invalidateSession, onSessionExpired, isCancelled, setRemoteSite, getRemoteSite, requestGeneration, errorMessage } from "../lib/api";
+import { useApi, ApiError, downloadBlob, JSON_REQUEST_HEADERS, invalidateSession, onSessionExpired, isCancelled, setRemoteSite, requestGeneration, errorMessage } from "../lib/api";
 import { runQueued } from "../lib/tasks";
 import { latestRequest, serialPoll } from "../lib/requests";
 import { NodeSaveUncertain, saveNodeRecovering, upsertSavedNode } from "../lib/nodeSave";
@@ -390,74 +390,7 @@ const pendingHY = computed(
         | undefined
     )?.hy2_old_connections || 0,
 );
-const titles: Record<string, string> = {
-  clients: "客户端中心", monitor: "实时监控",
-  wallet: "账户余额", shop: "购买套餐", orders: "订单管理", tickets: "工单中心", "redeem-codes": "兑换码管理",
-  overview: "仪表盘",
-  plans: "套餐管理",
-  "crypto-payments": "加密货币",
-  "node-groups": "节点组",
- users: "用户管理",
-  ips: "私有 IP 池",
-  public: "公共 IP 池",
-  nodes: "本地节点",
-  "subsite-nodes": "子站节点",
-  "public-nodes": "公共节点",
-  "public-subscription": "订阅管理",
-  subscription: "订阅管理",
-  "node-square": "节点广场",
-  tasks: "任务中心",
-  fleet: "群站管理",
-  pairing: "配对令牌",
-  system: "运维状态",
-  messages: "站内信",
-  settings: "系统设置",
-  sources: "订阅来源",
-};
-const pageDescriptions: Record<string, string> = {
-  clients: "按系统与架构下载客户端，再导入对应格式的面板订阅", monitor: "查看每位用户的活跃连接与实时流量",
-  wallet: "查看可用余额、冻结金额与收支明细", shop: "使用站内余额开通或续费套餐", orders: "追踪订单、开通进度与退款状态", tickets: "提交服务问题并跟进处理进度", "redeem-codes": "生成定额兑换码，管理有效期与作废状态",
-  overview: "集中查看企业网络用量、出口与运行状态",
-  plans: "管理套餐额度、有效期与订阅节点权限",
-  "crypto-payments": "配置链上收款、HD 钱包、余额与归集",
-  "node-groups": "查看本地、子站和公共节点，使用权限由套餐决定",
- users: "管理成员访问权限、流量配额与有效期",
-  ips: "集中维护出口资源，按需分配给接入节点",
-  public: "自动发现、筛选和维护全球公开代理出口",
-  nodes: "管理本地主机接入节点、出口代理与公网地址",
-  "subsite-nodes": "管理直接挂载的子站节点，客户端流量直接进入子站",
-  "public-nodes": "独立管理自动公共节点，随代理质量筛选而更新",
-  "public-subscription": "独立公共订阅，仅分发当前合格的自动节点",
-  subscription: "分发成员连接配置，管理订阅与访问凭据",
-  "node-square": "浏览公开线路和适用套餐",
-  tasks: "统一查看任务排队、执行结果与失败原因",
-  fleet: "集中管理业务站、成员授权和出口分配",
-  pairing: "生成配对令牌，供 Pro 主站接管本站",
-  system: "查看服务状态、证书与最近操作记录",
-  messages: "集中接收维护通知与账户消息",
-  settings: "统一管理企业品牌、访问偏好与成员支持",
-  sources: "管理上游订阅链接与每日错峰更新",
-};
-const memberTitles: Record<string,string> = {subscription:'我的订阅',orders:'我的订单',wallet:'我的钱包'};
-const pageTitle = computed(() => page.value === 'shop' && owner.value ? t('套餐上架') : t((!owner.value && memberTitles[page.value]) || titles[page.value] || ''));
-const pageDescription = computed(() => page.value === 'shop' && owner.value ? t('管理套餐上架与销售规则') : t(pageDescriptions[page.value] || ''));
-const allNavGroups = computed(() => [
-  {id:'workspace',label:t('工作台'),items:[{id:'overview',label:t('仪表盘'),icon:LayoutDashboard},{id:'clients',label:t('客户端中心'),icon:Package},...(owner.value?[{id:'monitor',label:t('实时监控'),icon:RadioTower}]:[])]},
-  {id:'access',label:t('用户与套餐'),items:[...(owner.value?[{id:'users',label:t('用户管理'),icon:Users},{id:'plans',label:t('套餐管理'),icon:Package},{id:'node-groups',label:t('节点组'),icon:Layers3}]:[]),{id:'subscription',label:owner.value?t('订阅管理'):t('我的订阅'),icon:QrCode},{id:'node-square',label:t('节点广场'),icon:Globe2},{id:'messages',label:t('站内信'),icon:Mail}]},
-  {id:'resources',label:t('节点与出口'),items:[...(owner.value?[{id:'ips',label:t('本地 IP 池'),icon:Database},{id:'nodes',label:t('本地节点'),icon:RadioTower},{id:'subsite-nodes',label:t('子站节点'),icon:Globe2},{id:'public',label:t('公共 IP 池'),icon:Database},{id:'public-nodes',label:t('公共节点'),icon:Globe2},{id:'public-subscription',label:t('公共订阅'),icon:QrCode}]:[])]},
-  {id:'system',label:t('系统与服务'),items:[...(!selectedSite.value?[{id:'wallet',label:owner.value?t('账户余额'):t('我的钱包'),icon:Wallet},{id:'shop',label:owner.value?t('套餐上架'):t('购买套餐'),icon:ShoppingBag},{id:'orders',label:owner.value?t('订单管理'):t('我的订单'),icon:Receipt},{id:'tickets',label:t('工单中心'),icon:Ticket},...(owner.value?[{id:'crypto-payments',label:t('加密货币'),icon:Coins},{id:'redeem-codes',label:t('兑换码管理'),icon:Gift}]:[])]:[]),...(owner.value&&state.value?.system.edition==='pro'&&state.value?.system.role==='controller'&&!getRemoteSite()?[{id:'fleet',label:t('群站管理'),icon:Globe2}]:[]),...(owner.value&&!getRemoteSite()?[{id:'pairing',label:t('配对令牌'),icon:KeyRound}]:[]),...(owner.value?[{id:'tasks',label:t('任务中心'),icon:Server},{id:'system',label:t('运维状态'),icon:Server}]:[]),{id:'settings',label:owner.value?t('系统设置'):t('个人设置'),icon:Settings2}]},
-]);
-const navGroups = computed(() => {
-  const hidePublic = !publicFeaturesEnabled.value;
-  if (!hidePublic) return allNavGroups.value;
-  const allowed = new Set(owner.value
-    ? ["overview", "clients", "monitor", "users", "plans", "crypto-payments", "node-groups", "node-square", "ips", "nodes", "subsite-nodes", "subscription", "settings", "wallet", "shop", "orders", "tickets", "redeem-codes", "messages", "pairing", "fleet", "tasks", "system"]
-    : ["clients", "subscription", "node-square", "wallet", "shop", "orders", "tickets", "messages", "settings"]);
-  return allNavGroups.value
-    .map(group => ({ ...group, items: group.items.filter(item => allowed.has(item.id)) }))
-    .filter(group => group.items.length);
-});
-const nav = computed(()=>navGroups.value.flatMap(group=>group.items));
+const { titles, pageDescriptions, pageTitle, pageDescription, allNavGroups, navGroups, nav, currentGroup } = usePanelNavigation({ state, page, owner, selectedSite, publicFeaturesEnabled });
 const sidebarCustomization = useSidebarCustomization({
   site, api, canCustomize: () => owner.value && !!state.value,
   available: () => nav.value.map(item => item.id),
@@ -467,7 +400,6 @@ const sidebarCustomization = useSidebarCustomization({
 watch(() => nav.value.map(item => item.id).join(","), () => {
   if (state.value && !nav.value.some(item => item.id === page.value)) go(owner.value ? "overview" : "subscription");
 });
-const currentGroup = computed(()=>navGroups.value.find(g=>g.items.some(item=>item.id===page.value))?.label || '');
 const active = (u: User) =>
   u.enabled &&
   (!u.expires || u.expires > Date.now() / 1000) &&
