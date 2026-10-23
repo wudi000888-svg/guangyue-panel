@@ -1,29 +1,13 @@
 <script setup lang="ts">
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue';
 import { Check, Clock3, Copy, FileSearch, LoaderCircle, QrCode, RefreshCw, ShieldCheck, X } from 'lucide-vue-next';
-import { qrDataURL } from './lib/qrcode';
-import {rateText} from "./lib/quota";
-import CountryMark from './CountryMark.vue';
-import QualityTags from './QualityTags.vue';
-import { locale, t } from './i18n';
-import type { IPQuality } from './quality';
+import { qrDataURL } from '../../lib/qrcode';
+import {rateText} from "../../lib/quota";
+import CountryMark from '../CountryMark.vue';
+import QualityTags from '../QualityTags.vue';
+import { locale, t } from '../../i18n';
+import type { SubscriptionNode } from '../../types';
 
-export type SubscriptionNode = {
- mounted?:boolean;source?:string;group_ids?:string[];
- rate_milli?:number;
-  dns?: {mode: string; doh?: string; ipv6?: string};
-  site_id?: string;
-  site_name?: string;
-  id: string;
-  name: string;
-  protocol: 'vless' | 'hy2';
-  uri: string;
-  probe_ip: string;
-  country: string;
-  country_code: string;
-  checked_at: number;
-  quality: IPQuality | null;
-};
 const props = defineProps<{ nodes: SubscriptionNode[]; active: boolean; pool: 'private' | 'public' | 'all' | 'local' | 'mounted' | 'subsite' | 'mixed'; loading?: boolean }>();
 const emit = defineEmits<{ refresh: [] }>();
 const search = ref(''), copied = ref(''), copyError = ref('');

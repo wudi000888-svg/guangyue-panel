@@ -1,4 +1,5 @@
 import { treasuryPreviewMatches, type SweepInput, type SweepPreview } from './cryptoTreasury';
+import { errorMessage } from './api';
 export const WALLET_GAS_POLL_MS = 5000;
 export interface SweepEstimateContext { walletID: string; input: SweepInput }
 export interface SweepEstimateState { preview?: SweepPreview; loading: boolean; error: string }
@@ -31,7 +32,7 @@ export function createSweepEstimator(api: SweepEstimateAPI, publish: (state: Swe
     if (current !== generation || request.signal.aborted) return;
     if (!sweepEstimateDisplayCurrent(value, captured.walletID, captured.input, clock())) throw new Error('提取预估与当前选择不一致或已过期，请重新预估');
     invalidated = false; update({ preview: value, error: '' });
-   } catch (reason) { if (current === generation && !request.signal.aborted) update({ error: reason instanceof Error ? reason.message : String(reason) }); }
+   } catch (reason) { if (current === generation && !request.signal.aborted) update({ error: errorMessage(reason) }); }
    finally { if (current === generation) { controller = undefined; flight = undefined; update({ loading: false }); } }
   })();
   flight = run; return run;

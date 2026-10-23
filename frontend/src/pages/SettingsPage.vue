@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import PageHeading from "../components/PageHeading.vue";
 import "../styles/admin-ui.css";
-import {computed,nextTick,ref,watch} from 'vue';
+import {computed,defineAsyncComponent,nextTick,ref,watch} from 'vue';
 import {Building2,CreditCard,Settings2,SlidersHorizontal,ChevronRight,ShieldCheck,Grid2X2,Navigation,Globe2,Search,ArrowUpRight,KeyRound,Sun,Moon,GripVertical,PanelLeftOpen,PanelLeftClose,LoaderCircle,Check,RefreshCw} from 'lucide-vue-next';
 import {usePanelContext} from '../composables/panelContext';
 import {t} from '../i18n';
@@ -10,19 +10,22 @@ import {useRoute} from 'vue-router';
 const route=useRoute();
 import {allowedRoute} from '../lib/access';
 import {groupNavigation,sidebarNavigation,MEMBER_NAVIGATION_LABELS} from '../lib/navigation';
-import CommerceSettings from '../components/CommerceSettings.vue';
-import PanelSettings from '../PanelSettings.vue';
-import RuntimeSettings from '../RuntimeSettings.vue';
-import NetworkSettings from '../NetworkSettings.vue';
-import LanguageSwitcher from '../LanguageSwitcher.vue';
-import AccountEmail from '../components/AccountEmail.vue';
+import LanguageSwitcher from '../components/LanguageSwitcher.vue';
+// Sections load on first visit; only the visible one is mounted (form
+// sections stay alive in <KeepAlive> so unsaved edits survive tab switches).
+const CommerceSettings=defineAsyncComponent(()=>import('../components/CommerceSettings.vue'));
+const PanelSettings=defineAsyncComponent(()=>import('../components/settings/PanelSettings.vue'));
+const RuntimeSettings=defineAsyncComponent(()=>import('../components/settings/RuntimeSettings.vue'));
+const NetworkSettings=defineAsyncComponent(()=>import('../components/settings/NetworkSettings.vue'));
+const AccountEmail=defineAsyncComponent(()=>import('../components/AccountEmail.vue'));
 import '../styles/integrations.css';
 const {state,owner,selectedSite,publicFeaturesEnabled,refresh,nav,pageDescriptions,go,theme,toggleTheme,modal,error,sidebarCustomization}=usePanelContext();
 const {dragging:sidebarDragging,target:sidebarTarget,saving:sidebarSaving,error:sidebarSaveError,saved:sidebarSaved,directoryRequest}=sidebarCustomization;
 const directory=ref<HTMLElement|null>(null);
+const cacheKey=computed(()=>(selectedSite.value||'local')+':'+owner.value);
 const canCustomize=computed(()=>owner.value&&!!state.value);
 const directoryDropActive=computed(()=>canCustomize.value&&sidebarDragging.value?.source==='sidebar'&&sidebarTarget.value==='directory');
-const section=ref('features'),visited=ref(new Set(['features'])),featureSearch=ref(''),directoryScope=ref('hidden');
+const section=ref('features'),featureSearch=ref(''),directoryScope=ref('hidden');
 const availableNavigation=computed(()=>nav.value.filter(item=>allowedRoute(router.resolve('/'+item.id).meta,{role:state.value?.me.role||null,edition:state.value?.system.edition||'lite',publicFeatures:publicFeaturesEnabled.value})).map(item=>({...item,label:!owner.value&&MEMBER_NAVIGATION_LABELS[item.id]?t(MEMBER_NAVIGATION_LABELS[item.id]!):item.label})));
 const sidebarIDs=computed(()=>new Set(sidebarNavigation(availableNavigation.value,sidebarCustomization.selected(owner.value?'admin':'member'),owner.value).map(item=>item.id)));
 const features=computed(()=>groupNavigation(availableNavigation.value.filter(item=>item.id!=='settings'&&(directoryScope.value==='all'||!sidebarIDs.value.has(item.id))&&(!featureSearch.value.trim()||[item.label,t(pageDescriptions[item.id]||''),item.id].join(' ').toLocaleLowerCase().includes(featureSearch.value.trim().toLocaleLowerCase()))),owner.value));
@@ -37,7 +40,7 @@ const tabs=computed(()=>[
  ...(!selectedSite.value?[{id:'personal',label:t('我的账户'),description:t('邮箱、语言与账户安全'),icon:Settings2}]:[])
  ]:[{id:'personal',label:t('个人偏好'),description:t('语言、外观与账户安全'),icon:Settings2}])
 ]);
-function choose(id:string){if(!tabs.value.some(tab=>tab.id===id))return;section.value=id;visited.value.add(id);}
+function choose(id:string){if(!tabs.value.some(tab=>tab.id===id))return;section.value=id;}
 watch([()=>route.query.section,tabs],()=>{const requested=String(route.query.section||'');if(requested)choose(requested)},{immediate:true});
 function password(){error.value='';modal.value='password';}
 function featureDrag(event:DragEvent,id:string){if(!canCustomize.value||id==='settings'){event.preventDefault();return}sidebarCustomization.startDrag(event,id,'directory');}
@@ -52,7 +55,7 @@ async function pinFeature(event:MouseEvent,id:string,pinned:boolean){
  if(event.detail===0&&focused&&!focused.isConnected){const remaining=directory.value?.querySelectorAll<HTMLButtonElement>('.directory-open');(remaining?.[Math.min(Math.max(0,position),(remaining?.length||1)-1)]||directory.value)?.focus();}
 }
 watch(directoryRequest,()=>choose('features'));
-watch([selectedSite,owner],()=>{section.value='features';visited.value=new Set(['features']);featureSearch.value='';directoryScope.value='hidden';});
+watch([selectedSite,owner],()=>{section.value='features';featureSearch.value='';directoryScope.value='hidden';});
 async function tabKey(event:KeyboardEvent){const keys=['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'];if(!keys.includes(event.key))return;event.preventDefault();const items=tabs.value,index=items.findIndex(v=>v.id===section.value);choose(items[event.key==='Home'?0:event.key==='End'?items.length-1:(index+(['ArrowRight','ArrowDown'].includes(event.key)?1:-1)+items.length)%items.length].id);const parent=(event.currentTarget as HTMLElement).parentElement;await nextTick();parent?.querySelector<HTMLButtonElement>('[aria-selected="true"]')?.focus();}
 </script>
 <template>
@@ -62,7 +65,7 @@ async function tabKey(event:KeyboardEvent){const keys=['ArrowLeft','ArrowRight',
  <div class="settings-workspace">
   <aside class="settings-sidebar"><nav class="settings-tabs" :style="{'--settings-tab-count':tabs.length}" role="tablist" :aria-label="t('设置分类')"><button v-for="tab in tabs" :key="tab.id" :id="'settings-tab-'+tab.id" role="tab" :aria-selected="section===tab.id" :aria-controls="'settings-panel-'+tab.id" :tabindex="section===tab.id?0:-1" @click="choose(tab.id)" @keydown="tabKey"><span class="settings-tab-icon"><component :is="tab.icon" :size="19"/></span><span class="settings-tab-label"><strong>{{tab.label}}</strong><small>{{tab.description}}</small></span><ChevronRight :size="15" class="settings-tab-arrow"/></button></nav><p v-if="owner" class="settings-guidance"><ShieldCheck :size="16"/><span>{{t('侧边栏调整会自动保存，其他设置请手动保存。')}}</span></p></aside>
   <div class="settings-content">
-   <div id="settings-panel-features" data-sidebar-drop-target="directory" ref="directory" v-show="section==='features'" role="tabpanel" aria-labelledby="settings-tab-features" tabindex="0" class="feature-directory" :class="{'directory-drop-active':directoryDropActive,'directory-customizable':canCustomize}" @dragenter="directoryDragOver" @dragover="directoryDragOver" @dragleave="directoryDragLeave" @drop="directoryDrop">
+   <div id="settings-panel-features" data-sidebar-drop-target="directory" ref="directory" v-if="section==='features'" role="tabpanel" aria-labelledby="settings-tab-features" tabindex="0" class="feature-directory" :class="{'directory-drop-active':directoryDropActive,'directory-customizable':canCustomize}" @dragenter="directoryDragOver" @dragover="directoryDragOver" @dragleave="directoryDragLeave" @drop="directoryDrop">
     <div class="directory-heading"><div><h2>{{t('更多功能')}}</h2><p>{{canCustomize?t('把常用功能放到侧边栏，不常用的留在这里。调整后立即生效并自动保存。'):t('未选择的侧边栏入口都在这里，功能与权限保持不变。')}}</p></div><button v-if="owner" @click="choose('navigation')"><Navigation :size="16"/>{{t('配置侧边栏')}}</button></div>
     <div v-if="canCustomize" class="directory-customization-status"><p class="directory-drag-hint"><GripVertical :size="18"/><span>{{t('拖动手柄到左侧侧边栏，或使用每项下方的按钮。')}}</span></p><p v-if="sidebarSaveError" class="directory-save-error" role="alert"><span>{{sidebarSaveError}}</span><button type="button" :disabled="sidebarSaving" @click="sidebarCustomization.retry()"><RefreshCw :size="15"/>{{t('重试保存')}}</button></p><p v-else-if="sidebarSaving||sidebarSaved" class="directory-save-state" role="status" aria-live="polite"><LoaderCircle v-if="sidebarSaving" :size="15" class="spin"/><Check v-else :size="15"/>{{sidebarSaving?t('正在自动保存侧边栏…'):t('侧边栏已自动保存')}}</p></div>
     <div v-if="canCustomize&&sidebarDragging?.source==='sidebar'" class="directory-drop-hint" :class="{active:directoryDropActive}"><PanelLeftClose :size="21"/><div><strong>{{t('放到这里，移到更多功能')}}</strong><span>{{t('只收起入口，功能仍可随时使用。')}}</span></div></div>
@@ -70,10 +73,10 @@ async function tabKey(event:KeyboardEvent){const keys=['ArrowLeft','ArrowRight',
     <section v-for="group in features" :key="group.id" class="directory-section"><h3>{{t(group.label)}}</h3><div class="directory-grid"><article v-for="item in group.items" :key="item.id" class="directory-item" :class="{pinned:sidebarIDs.has(item.id),dragging:sidebarDragging?.id===item.id&&sidebarDragging.source==='directory'}" :draggable="canCustomize" :data-directory-id="item.id" @dragstart="featureDrag($event,item.id)" @dragend="sidebarCustomization.endDrag()"><button type="button" class="directory-open" :draggable="false" @click="go(item.id)"><span class="directory-icon"><component :is="item.icon" :size="21"/></span><span class="directory-copy"><strong>{{item.label}}</strong><small>{{item.id==='shop'&&owner?t('管理套餐上架与销售规则'):t(pageDescriptions[item.id]||'')}}</small><em v-if="sidebarIDs.has(item.id)">{{t('已在侧边栏')}}</em></span><ArrowUpRight :size="17"/></button><div v-if="canCustomize" class="directory-item-actions"><span class="directory-drag-handle" @pointerdown="sidebarCustomization.startPointer($event,item.id,'directory')" draggable="true" aria-hidden="true" :title="t('拖到侧边栏')"><GripVertical :size="18"/><span>{{t('拖动')}}</span></span><button type="button" class="directory-pin" :draggable="false" :aria-label="item.label+' · '+(sidebarIDs.has(item.id)?t('移到更多功能'):t('放入侧边栏'))" @click="pinFeature($event,item.id,!sidebarIDs.has(item.id))"><PanelLeftClose v-if="sidebarIDs.has(item.id)" :size="16"/><PanelLeftOpen v-else :size="16"/>{{sidebarIDs.has(item.id)?t('移到更多功能'):t('放入侧边栏')}}</button></div></article></div></section>
     <div v-if="!features.length" class="directory-empty" :class="{'directory-empty-drop':canCustomize}"><Grid2X2 :size="28"/><p>{{featureSearch?t('没有匹配的功能'):t('其他功能已全部放入侧边栏')}}</p><span v-if="canCustomize&&!featureSearch">{{t('可以把侧边栏中不常用的入口拖到这里。')}}</span><button @click="featureSearch='';directoryScope='all'">{{t('查看全部功能')}}</button></div>
    </div>
-   <div v-if="owner&&['site','navigation','access'].some(id=>visited.has(id))" :id="'settings-panel-'+(['site','navigation','access'].includes(section)?section:'site')" v-show="['site','navigation','access'].includes(section)" role="tabpanel" :aria-labelledby="'settings-tab-'+section" tabindex="0"><PanelSettings :key="selectedSite||'local'" :section="section" :admin-navigation="availableNavigation" :remote-site="!!selectedSite" :public-features-enabled="publicFeaturesEnabled" @update-public-features-enabled="publicFeaturesEnabled=$event" @saved="refresh()" @show-section="choose"/></div>
-   <div v-if="owner&&!selectedSite&&visited.has('commerce')" id="settings-panel-commerce" v-show="section==='commerce'" role="tabpanel" aria-labelledby="settings-tab-commerce" tabindex="0"><CommerceSettings :active="section==='commerce'"/></div>
-   <div v-if="owner&&visited.has('runtime')" id="settings-panel-runtime" v-show="section==='runtime'" role="tabpanel" aria-labelledby="settings-tab-runtime" tabindex="0" class="runtime-panel"><RuntimeSettings @updated="refresh()"/><NetworkSettings v-if="!selectedSite"/></div>
-   <div v-if="(!owner||!selectedSite)&&visited.has('personal')" id="settings-panel-personal" v-show="section==='personal'" role="tabpanel" aria-labelledby="settings-tab-personal" tabindex="0" class="personal-preferences"><section class="settings-card"><h2>{{t('显示偏好')}}</h2><div class="personal-row"><div><strong>{{t('界面语言')}}</strong><p>{{t('仅影响当前浏览器的显示语言。')}}</p></div><LanguageSwitcher/></div><div class="personal-row"><div><strong>{{t('界面外观')}}</strong><p>{{theme==='dark'?t('深色模式'):t('浅色模式')}}</p></div><button @click="toggleTheme"><Sun v-if="theme==='dark'" :size="17"/><Moon v-else :size="17"/>{{theme==='dark'?t('切换浅色模式'):t('切换深色模式')}}</button></div></section><section class="settings-card"><h2>{{t('账户安全')}}</h2><div class="personal-row"><div><strong>{{state.me.username}}</strong><p>{{t('定期更新密码，保护你的账户。')}}</p></div><button @click="password"><KeyRound :size="17"/>{{t('修改密码')}}</button></div><AccountEmail/></section></div>
+   <div v-if="owner" :id="'settings-panel-'+(['site','navigation','access'].includes(section)?section:'site')" v-show="['site','navigation','access'].includes(section)" role="tabpanel" :aria-labelledby="'settings-tab-'+section" tabindex="0"><KeepAlive :key="cacheKey"><PanelSettings v-if="['site','navigation','access'].includes(section)" :key="selectedSite||'local'" :section="section" :admin-navigation="availableNavigation" :remote-site="!!selectedSite" :public-features-enabled="publicFeaturesEnabled" @update-public-features-enabled="publicFeaturesEnabled=$event" @saved="refresh()" @show-section="choose"/></KeepAlive></div>
+   <div v-if="owner&&!selectedSite" id="settings-panel-commerce" v-show="section==='commerce'" role="tabpanel" aria-labelledby="settings-tab-commerce" tabindex="0"><KeepAlive :key="cacheKey"><CommerceSettings v-if="section==='commerce'" :active="true"/></KeepAlive></div>
+   <div v-if="owner&&section==='runtime'" id="settings-panel-runtime" role="tabpanel" aria-labelledby="settings-tab-runtime" tabindex="0" class="runtime-panel"><RuntimeSettings @updated="refresh()"/><NetworkSettings v-if="!selectedSite"/></div>
+   <div v-if="(!owner||!selectedSite)&&section==='personal'" id="settings-panel-personal" role="tabpanel" aria-labelledby="settings-tab-personal" tabindex="0" class="personal-preferences"><section class="settings-card"><h2>{{t('显示偏好')}}</h2><div class="personal-row"><div><strong>{{t('界面语言')}}</strong><p>{{t('仅影响当前浏览器的显示语言。')}}</p></div><LanguageSwitcher/></div><div class="personal-row"><div><strong>{{t('界面外观')}}</strong><p>{{theme==='dark'?t('深色模式'):t('浅色模式')}}</p></div><button @click="toggleTheme"><Sun v-if="theme==='dark'" :size="17"/><Moon v-else :size="17"/>{{theme==='dark'?t('切换浅色模式'):t('切换深色模式')}}</button></div></section><section class="settings-card"><h2>{{t('账户安全')}}</h2><div class="personal-row"><div><strong>{{state.me.username}}</strong><p>{{t('定期更新密码，保护你的账户。')}}</p></div><button @click="password"><KeyRound :size="17"/>{{t('修改密码')}}</button></div><AccountEmail/></section></div>
   </div>
  </div>
 </section>

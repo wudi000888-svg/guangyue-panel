@@ -36,8 +36,22 @@ function isAccessDenial(value: unknown): value is AccessDenial {
 export class ApiError extends Error {
   constructor(public status: number, public data: Partial<SiteAccessStatus> & { access_denied?: boolean; error?: string; warnings?: { index: number; reason: string }[] } = {}) {
     const warnings = Array.isArray(data.warnings) ? data.warnings.filter(w => w && typeof w.reason === 'string').slice(0, 5) : [];
-    super((data.error || t('请求失败')) + (warnings.length ? '：' + warnings.map(w => t('第 ') + w.index + t(' 项 ') + w.reason).join('；') : ''));
+    super((data.error ? t(data.error) : t('请求失败')) + (warnings.length ? '：' + warnings.map(w => t('第 ') + w.index + t(' 项 ') + t(w.reason)).join('；') : ''));
   }
+}
+// Browsers report a failed fetch (offline, DNS, TLS, CORS) as a bare TypeError.
+const networkFailure = /failed to fetch|networkerror|load failed|network request failed|fetch failed/i;
+export function isNetworkError(error: unknown): boolean {
+  return error instanceof TypeError && networkFailure.test(error.message);
+}
+// User-facing text for any thrown value: server and local messages are
+// translated (Chinese source strings are catalogue keys) and transport
+// failures get a readable explanation instead of `TypeError: Failed to fetch`.
+export function errorMessage(error: unknown): string {
+  if (isNetworkError(error)) return t('网络连接失败，请检查网络后重试');
+  if (error instanceof Error) return error.message ? t(error.message) : t('请求失败');
+  if (typeof error === 'string' && error) return t(error);
+  return t('请求失败');
 }
 export const isCancelled = (error: unknown): boolean => error instanceof Error && error.name === 'AbortError';
 const aborted = () => new DOMException('Request cancelled', 'AbortError');
@@ -110,10 +124,12 @@ async function request<T>(url: string, options: RequestInit, decode: (r: Respons
     options.signal?.removeEventListener('abort', cancel);
   }
 }
-export function api<T = any>(path: string, method = 'GET', body?: unknown, options: RequestInit = {}): Promise<T> {
+// The control plane's CSRF check requires both headers (plus same Origin) on writes.
+export const JSON_REQUEST_HEADERS: Readonly<Record<string, string>> = { 'Content-Type': 'application/json', 'X-Requested-With': 'guangyue' };
+export function api<T = unknown>(path: string, method = 'GET', body?: unknown, options: RequestInit = {}): Promise<T> {
   return request('/api' + path, {
     ...options, method,
-    headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'guangyue', ...options.headers },
+    headers: { ...JSON_REQUEST_HEADERS, ...options.headers },
     body: body === undefined ? undefined : JSON.stringify(body),
   }, response => response.json());
 }
@@ -125,7 +141,7 @@ export function downloadBlob(url: string, options: RequestInit = {}): Promise<Bl
 export function useApi(prefix = '') {
   const scope = new AbortController();
   onScopeDispose(() => scope.abort());
-  return <T = any>(path = '', method = 'GET', body?: unknown, options: RequestInit = {}) => api<T>(prefix + path, method, body, {
+  return <T = unknown>(path = '', method = 'GET', body?: unknown, options: RequestInit = {}) => api<T>(prefix + path, method, body, {
     ...options, signal: options.signal ? AbortSignal.any([scope.signal, options.signal]) : scope.signal,
   });
 }

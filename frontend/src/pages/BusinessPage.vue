@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue';
 import { Plus, RefreshCw, Server, Trash2, X, Users, RadioTower, Activity, Power, Settings2, Search, CheckCircle2, TriangleAlert, ArrowUpRight, CircleCheck, Network, Download, History, RotateCcw, Upload } from 'lucide-vue-next';
-import { useApi, isCancelled } from '../lib/api';
+import { useApi, isCancelled, errorMessage } from '../lib/api';
 import { latestRequest, serialPoll } from '../lib/requests';
 import { usePanelContext } from '../composables/panelContext';
 import { useModalFocus } from '../composables/useModalFocus';
@@ -76,7 +76,7 @@ function stopUpdaterWaiting(site:ManagedSite){
 async function probe(site:ManagedSite,request?:AbortController){
  if(jobs[site.id])return;jobs[site.id]=true;const revision=directoryRevision;
  try{const updated=await api<ManagedSite>('/'+site.id+'/probe','POST',{});if(!disposed&&revision===directoryRevision&&(!request||directoryRequest.isCurrent(request)))replace(updated);}
- catch(e){if(!isCancelled(e)&&!disposed&&revision===directoryRevision&&(!request||directoryRequest.isCurrent(request))){const current=sites.value.find(s=>s.id===site.id);if(current)current.error=(e as Error).message;}}
+ catch(e){if(!isCancelled(e)&&!disposed&&revision===directoryRevision&&(!request||directoryRequest.isCurrent(request))){const current=sites.value.find(s=>s.id===site.id);if(current)current.error=errorMessage(e);}}
  finally{delete jobs[site.id];}
 }
 async function load(probeAll=false){
@@ -84,20 +84,20 @@ async function load(probeAll=false){
  try{const out=await api<{sites:ManagedSite[];settling?:ManagedSite[]}>('','GET',undefined,{signal:request.signal});if(!directoryRequest.isCurrent(request)||revision!==directoryRevision)return;sites.value=out.sites;settling.value=out.settling||[];loaded.value=true;error.value='';
   if(probeAll){const queue=[...direct.value];await Promise.all(Array.from({length:Math.min(4,queue.length)},async()=>{while(queue.length&&!disposed&&directoryRequest.isCurrent(request)&&revision===directoryRevision){const site=queue.shift();if(site)await probe(site,request);}}));}
   if(directoryRequest.isCurrent(request)&&revision===directoryRevision)updatedAt.value=Date.now();
- }catch(e){if(directoryRequest.isCurrent(request)&&revision===directoryRevision&&!isCancelled(e))error.value=(e as Error).message;}finally{if(directoryRequest.isCurrent(request))refreshing.value=false;}
+ }catch(e){if(directoryRequest.isCurrent(request)&&revision===directoryRevision&&!isCancelled(e))error.value=errorMessage(e);}finally{if(directoryRequest.isCurrent(request))refreshing.value=false;}
 }
 function close(){if(busy.value)return;adding.value=false;removing.value=null;controlling.value=null;form.token='';error.value='';}
 async function connect(){if(busy.value||!canMountSubsites.value)return;directoryRevision++;busy.value=true;error.value='';try{
  const site=await api<ManagedSite>('/import','POST',form);form.token='';form.url='';form.name='';adding.value=false;
  sites.value=sites.value.filter(s=>s.id!==site.id);sites.value.push(site);notice.value=t('子站已连接，可开始挂载节点。');await probe(site);
-}catch(e){if(!isCancelled(e))error.value=(e as Error).message;}finally{busy.value=false;}}
+}catch(e){if(!isCancelled(e))error.value=errorMessage(e);}finally{busy.value=false;}}
 async function remove(){if(busy.value||!removing.value||!canMountSubsites.value)return;directoryRevision++;busy.value=true;error.value='';try{
  const id=removing.value.id;await api('/'+id,'DELETE',{});sites.value=sites.value.filter(s=>s.id!==id);versions.remove(id);removing.value=null;notice.value=t('子站已移除');
-}catch(e){if(!isCancelled(e))error.value=(e as Error).message;}finally{busy.value=false;}}
+}catch(e){if(!isCancelled(e))error.value=errorMessage(e);}finally{busy.value=false;}}
 async function control(){if(busy.value||!controlling.value||!canMountSubsites.value)return;directoryRevision++;busy.value=true;error.value='';try{
  const s=controlling.value;replace(await api<ManagedSite>('/'+s.id+'/control','POST',{paused:!s.connection?.status?.paused}));controlling.value=null;notice.value=t('服务调度已完成');
-}catch(e){if(!isCancelled(e))error.value=(e as Error).message;}finally{busy.value=false;}}
-async function manage(site:ManagedSite,page:string){if(openingSite.value||!canMountSubsites.value||site.connection?.scope!=='manage')return;openingSite.value=site.id;try{await switchSite(site.id,site.name);if(selectedSite.value===site.id)go(page);}catch(e){if(!isCancelled(e))error.value=(e as Error).message;}finally{openingSite.value='';}}
+}catch(e){if(!isCancelled(e))error.value=errorMessage(e);}finally{busy.value=false;}}
+async function manage(site:ManagedSite,page:string){if(openingSite.value||!canMountSubsites.value||site.connection?.scope!=='manage')return;openingSite.value=site.id;try{await switchSite(site.id,site.name);if(selectedSite.value===site.id)go(page);}catch(e){if(!isCancelled(e))error.value=errorMessage(e);}finally{openingSite.value='';}}
 function onPoolSaved(site:ManagedSite){directoryRevision++;replace(site);pooling.value=site;}
 async function onPolicySaved(){directoryRevision++;await load();}
 const poll=serialPoll(async()=>{if(canMountSubsites.value&&!document.hidden&&!changing.value)await load(true);},()=>15000);

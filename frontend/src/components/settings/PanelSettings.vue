@@ -1,6 +1,6 @@
 <script lang="ts">
-import type { SiteSettings } from './types';
-export type { SiteSettings } from './types';
+import type { SiteSettings } from '../../types';
+export type { SiteSettings } from '../../types';
 
 /** Merge automatic navigation writes without accepting stale changes to other settings. */
 export function mergePanelSettings(baseline: SiteSettings, draft: SiteSettings, current: SiteSettings): SiteSettings {
@@ -15,14 +15,14 @@ export function mergePanelSettings(baseline: SiteSettings, draft: SiteSettings, 
 }
 </script>
 <script setup lang="ts">
-import { useApi, isCancelled } from "./lib/api";
-import { latestRequest } from "./lib/requests";
+import { useApi, isCancelled, errorMessage } from "../../lib/api";
+import { latestRequest } from "../../lib/requests";
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { Save, Building2, ShieldCheck, Navigation, Download, Globe2, Search, RefreshCw, TriangleAlert, CheckCircle2, LoaderCircle } from 'lucide-vue-next';
-import { t, locale } from './i18n';
-import { DEFAULT_ADMIN_SIDEBAR, DEFAULT_MEMBER_SIDEBAR, MEMBER_NAVIGATION, type NavigationItem } from './lib/navigation';
-import { countryOptions } from './lib/countries';
-import { usePanelContext } from './composables/panelContext';
+import { t, locale } from '../../i18n';
+import { DEFAULT_ADMIN_SIDEBAR, DEFAULT_MEMBER_SIDEBAR, MEMBER_NAVIGATION, type NavigationItem } from '../../lib/navigation';
+import { countryOptions } from '../../lib/countries';
+import { usePanelContext } from '../../composables/panelContext';
 const api = useApi();
 const loadRequest = latestRequest();
 onUnmounted(()=>loadRequest.cancel());
@@ -46,11 +46,11 @@ function resetNavigation(){sidebarCustomization.setSelected(navigationRole.value
 function selectCountry(code:string,checked:boolean){const values=new Set(form.country_access_blocked);if(checked)values.add(code);else values.delete(code);form.country_access_blocked=[...values].sort();}
 function receive(value:SiteSettings){Object.assign(form,value,{sidebar_admin:[...(value.sidebar_admin??DEFAULT_ADMIN_SIDEBAR)],sidebar_member:[...(value.sidebar_member??DEFAULT_MEMBER_SIDEBAR)],country_access_blocked:[...(value.country_access_blocked||[])]});baseline=JSON.parse(JSON.stringify(form));}
 async function revealInvalid(event:Event){event.preventDefault();const target=event.target as HTMLInputElement;emit('showSection',target.closest<HTMLElement>('[data-setting-section]')?.dataset.settingSection||'site');error.value=target.validationMessage;await nextTick();target.focus();}
-async function loadAccess(){if(props.remoteSite||accessLoading.value)return;accessLoading.value=true;accessError.value='';try{accessPreview.value=await api<AccessPreview>('/access-check');}catch(e){if(!isCancelled(e))accessError.value=(e as Error).message;}finally{accessLoading.value=false;}}
+async function loadAccess(){if(props.remoteSite||accessLoading.value)return;accessLoading.value=true;accessError.value='';try{accessPreview.value=await api<AccessPreview>('/access-check');}catch(e){if(!isCancelled(e))accessError.value=errorMessage(e);}finally{accessLoading.value=false;}}
 watch(()=>[form.country_access_enabled,form.country_access_blocked.join(','),accessPreview.value?.country_code],()=>{confirmOwnCountry.value=false;});
 watch(form,()=>{saved.value=false;},{deep:true,flush:'sync'});
-async function load(){const request=loadRequest.start();try{const value=await api<SiteSettings>('/settings','GET',undefined,{signal:request.signal});if(!loadRequest.isCurrent(request))return;receive(value);ready.value=true;error.value='';}catch(e){if(loadRequest.isCurrent(request)&&!isCancelled(e))error.value=(e as Error).message;}}
-async function save(){if(props.section==='navigation'||busy.value||!baseline||blocksOwnCountry.value&&!confirmOwnCountry.value)return;busy.value=true;loadRequest.cancel();error.value='';saved.value=false;try{const value=await sidebarCustomization.withSettingsLock(async()=>{const current=await api<SiteSettings>('/settings');const payload=mergePanelSettings(baseline!,form,current);const updated=await api<SiteSettings>('/settings','PUT',payload);sidebarCustomization.acceptSettings(updated);return updated;});receive(value);saved.value=true;emit('saved');}catch(e){if(!isCancelled(e))error.value=(e as Error).message;}finally{busy.value=false;}}
+async function load(){const request=loadRequest.start();try{const value=await api<SiteSettings>('/settings','GET',undefined,{signal:request.signal});if(!loadRequest.isCurrent(request))return;receive(value);ready.value=true;error.value='';}catch(e){if(loadRequest.isCurrent(request)&&!isCancelled(e))error.value=errorMessage(e);}}
+async function save(){if(props.section==='navigation'||busy.value||!baseline||blocksOwnCountry.value&&!confirmOwnCountry.value)return;busy.value=true;loadRequest.cancel();error.value='';saved.value=false;try{const value=await sidebarCustomization.withSettingsLock(async()=>{const current=await api<SiteSettings>('/settings');const payload=mergePanelSettings(baseline!,form,current);const updated=await api<SiteSettings>('/settings','PUT',payload);sidebarCustomization.acceptSettings(updated);return updated;});receive(value);saved.value=true;emit('saved');}catch(e){if(!isCancelled(e))error.value=errorMessage(e);}finally{busy.value=false;}}
 onMounted(()=>{void load();void loadAccess();});
 </script>
 <template>

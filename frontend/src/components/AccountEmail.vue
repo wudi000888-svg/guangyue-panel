@@ -2,16 +2,16 @@
 import { onMounted, onUnmounted, ref } from 'vue';
 import { Mail, Send, ShieldCheck } from 'lucide-vue-next';
 import { usePanelContext } from '../composables/panelContext';
-import { isCancelled } from '../lib/api';
+import { isCancelled, errorMessage } from '../lib/api';
 import { t } from '../i18n';
 type EmailAccount = { email: string; verified: boolean; verified_at: number; pending_email: string; available: boolean };
 const { api } = usePanelContext();
 const account = ref<EmailAccount | null>(null), email = ref(''), password = ref(''), busy = ref(false), error = ref(''), notice = ref('');
-async function load() { try { account.value = await api<EmailAccount>('/account/email'); } catch (e) { if (!isCancelled(e)) error.value = t((e as Error).message); } }
+async function load() { try { account.value = await api<EmailAccount>('/account/email'); } catch (e) { if (!isCancelled(e)) error.value = errorMessage(e); } }
 async function change(remove = false) {
   if (busy.value) return; busy.value = true; error.value = ''; notice.value = '';
   try { await api('/account/email', remove ? 'DELETE' : 'POST', { ...(remove ? {} : { email: email.value }), current_password: password.value }); notice.value = t(remove ? '邮箱已解除绑定' : '验证邮件已进入发送队列，请在邮件中确认绑定。'); email.value = ''; await load(); }
-  catch (e) { if (!isCancelled(e)) error.value = t((e as Error).message); }
+  catch (e) { if (!isCancelled(e)) error.value = errorMessage(e); }
   finally { busy.value = false; password.value = ''; }
 }
 onMounted(() => { void load(); window.addEventListener('focus', load); });

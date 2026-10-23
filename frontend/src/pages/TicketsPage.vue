@@ -10,7 +10,7 @@ import { mergeHistory } from '../components/member/flow';
 import { serialPoll } from '../lib/requests';
 import { t } from '../i18n';
 import { ticketListHasMore, ticketListPath, type TicketListFilter } from './ticketList';
-import '../commerce.css';
+import '../styles/commerce.css';
 import '../styles/member-ui.css';
 const route=useRoute(),{owner,state}=usePanelContext(),{read,run,api,busy,error,notice}=useCommerce('/support');
 const items=ref<Ticket[]>([]),ticket=ref<Ticket|null>(null),replies=ref<TicketReply[]>([]),activeID=ref('');

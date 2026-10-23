@@ -2,7 +2,7 @@
 import "../styles/admin-ui.css";
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { RefreshCw, XCircle, ListChecks } from 'lucide-vue-next';
-import { useApi, isCancelled } from '../lib/api';
+import { useApi, isCancelled, errorMessage } from '../lib/api';
 import { latestRequest, serialPoll } from '../lib/requests';
 import type { BackgroundTask } from '../lib/tasks';
 import { t } from '../i18n';
@@ -12,8 +12,8 @@ const tasks=ref<BackgroundTask[]>([]),error=ref(''),busy=ref(false),loading=ref(
 const visibleTasks=computed(()=>tasks.value.filter(task=>filter.value==='all'||(filter.value==='active'?['queued','running'].includes(task.state):task.state===filter.value)));
 const taskFilters=computed(()=>[{id:'all',label:t('全部'),count:tasks.value.length},{id:'active',label:t('进行中'),count:tasks.value.filter(task=>['queued','running'].includes(task.state)).length},{id:'succeeded',label:t('已完成'),count:tasks.value.filter(task=>task.state==='succeeded').length},{id:'failed',label:t('执行失败'),count:tasks.value.filter(task=>task.state==='failed').length}]);
 const labels:Record<string,string>={queued:'排队中',running:'执行中',succeeded:'已完成',failed:'执行失败',cancelled:'已取消',speed:'出口测速',quality:'IP 质量检测','import-source':'更新订阅','public-source':'抓取公开来源','public-cycle':'公共代理采集','core-apply':'应用核心配置'};
-async function load(){const request=requests.start();loading.value=true;try{const result=await api<{items:BackgroundTask[]}>('','GET',undefined,{signal:request.signal});if(requests.isCurrent(request)){tasks.value=result.items;error.value='';loaded.value=true}}catch(e){if(requests.isCurrent(request)&&!isCancelled(e))error.value=(e as Error).message;}finally{if(requests.isCurrent(request))loading.value=false}}
-async function cancel(id:string){busy.value=true;try{await api('/'+id+'/cancel','POST',{});await load();}catch(e){if(!isCancelled(e))error.value=(e as Error).message;}finally{busy.value=false;}}
+async function load(){const request=requests.start();loading.value=true;try{const result=await api<{items:BackgroundTask[]}>('','GET',undefined,{signal:request.signal});if(requests.isCurrent(request)){tasks.value=result.items;error.value='';loaded.value=true}}catch(e){if(requests.isCurrent(request)&&!isCancelled(e))error.value=errorMessage(e);}finally{if(requests.isCurrent(request))loading.value=false}}
+async function cancel(id:string){busy.value=true;try{await api('/'+id+'/cancel','POST',{});await load();}catch(e){if(!isCancelled(e))error.value=errorMessage(e);}finally{busy.value=false;}}
 const poll=serialPoll(async()=>{if(!document.hidden&&!busy.value&&!loading.value)await load();},()=>3000);
 onMounted(()=>{void load();poll.start();});onUnmounted(()=>{poll.stop();requests.cancel()});
 </script>

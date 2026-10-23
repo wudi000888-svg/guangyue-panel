@@ -2,7 +2,7 @@
 import {computed,nextTick,onMounted,onUnmounted,ref} from 'vue';
 import {useModalFocus} from '../composables/useModalFocus';
 import {X,RefreshCw,Search,CheckCircle2,TriangleAlert,Network,SlidersHorizontal,Layers3,Server} from 'lucide-vue-next';
-import {useApi,isCancelled} from '../lib/api';
+import {useApi,isCancelled, errorMessage } from '../lib/api';
 import {usePanelContext} from '../composables/panelContext';
 import type {ManagedSite,MountedNode} from '../lib/sites';
 import type {Node,NodeGroup,GroupMember} from '../types';
@@ -38,7 +38,7 @@ const groupNames=(ids:string[])=>ids.map(id=>nodeGroups.value.find(g=>g.id===id)
 function host(n:Node){return n.protocol==='hy2'?catalog.value?.info.hy2_host:catalog.value?.info.vless_host;}
 function fill(s:ManagedSite){current.value=s;monthlyBudgetGB.value=(s.monthly_budget||0)/1073741824;cooldownHours.value=(s.cooldown_seconds||86400)/3600;mounts.value=(s.mount?.nodes||[]).map(n=>({...n,group_ids:['default-subsite']}));baseline.value=signature();}
 async function refreshGroupDirectory(){const g=await mainAPI<{groups:NodeGroup[];members:Record<string,GroupMember[]>}>('/node-groups','GET',undefined,{signal:lifetime.signal});if(!disposed){nodeGroups.value=g.groups;groupMembers.value=g.members;}}
-async function load(){if(busy.value||dirty.value)return;busy.value=true;saveStage.value='loading';error.value='';savedNotice.value=false;groupRefreshFailed.value=false;try{const [siteResult,groupResult]=await Promise.allSettled([api<ManagedSite>('/'+props.site.id+'/node-pool','GET',undefined,{signal:lifetime.signal}),refreshGroupDirectory()]);if(disposed)return;if(siteResult.status==='rejected')throw siteResult.reason;fill(siteResult.value);groupRefreshFailed.value=groupResult.status==='rejected'&&!isCancelled(groupResult.reason);}catch(e){if(!isCancelled(e))error.value=(e as Error).message;}finally{busy.value=false;saveStage.value='idle';}}
+async function load(){if(busy.value||dirty.value)return;busy.value=true;saveStage.value='loading';error.value='';savedNotice.value=false;groupRefreshFailed.value=false;try{const [siteResult,groupResult]=await Promise.allSettled([api<ManagedSite>('/'+props.site.id+'/node-pool','GET',undefined,{signal:lifetime.signal}),refreshGroupDirectory()]);if(disposed)return;if(siteResult.status==='rejected')throw siteResult.reason;fill(siteResult.value);groupRefreshFailed.value=groupResult.status==='rejected'&&!isCancelled(groupResult.reason);}catch(e){if(!isCancelled(e))error.value=errorMessage(e);}finally{busy.value=false;saveStage.value='idle';}}
 function selectNode(n:Node,enabled:boolean){savedNotice.value=false;if(!enabled){mounts.value=mounts.value.filter(m=>m.node_id!==n.id);return;}if(!mount(n.id))mounts.value.push({node_id:n.id,name:'',enabled:true,group_ids:['default-subsite']});}
 function selectVisible(){for(const n of visible.value)if(n.enabled)selectNode(n,true);}
 async function refreshSavedGroups(){
@@ -62,13 +62,13 @@ async function save(){
   if(!Number.isFinite(monthlyBudgetGB.value)||monthlyBudgetGB.value<0||monthlyBudgetGB.value>1073741824||!Number.isFinite(cooldownHours.value)||cooldownHours.value<1||cooldownHours.value>8760)throw new Error(t('子站预算冷却时长无效'));
   const saved=await api<ManagedSite>('/'+props.site.id+'/node-pool','PUT',{revision:current.value.revision,catalog_revision:current.value.mount.catalog.revision,monthly_budget:Math.round(monthlyBudgetGB.value*1073741824),cooldown_seconds:Math.round(cooldownHours.value*3600),nodes:mounts.value,assignment:'groups'});
   await acceptSaved(saved);
- }catch(e){saveStage.value='idle';if(!isCancelled(e))error.value=e instanceof TypeError?t('连接中断，保存结果尚未确认。请刷新目录核对后再操作。'):(e as Error).message;}
+ }catch(e){saveStage.value='idle';if(!isCancelled(e))error.value=e instanceof TypeError?t('连接中断，保存结果尚未确认。请刷新目录核对后再操作。'):errorMessage(e);}
  finally{busy.value=false;}
 }
 async function sync(){
  if(busy.value||dirty.value)return;busy.value=true;error.value='';saveStage.value='syncing';
  try{await acceptSaved(await api<ManagedSite>('/'+props.site.id+'/node-pool/sync','POST',{}));}
- catch(e){saveStage.value='idle';if(!isCancelled(e))error.value=(e as Error).message;}
+ catch(e){saveStage.value='idle';if(!isCancelled(e))error.value=errorMessage(e);}
  finally{busy.value=false;}
 }
 onMounted(load);

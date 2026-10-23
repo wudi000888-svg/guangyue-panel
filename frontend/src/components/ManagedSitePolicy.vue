@@ -2,10 +2,10 @@
 import { computed, toRaw, watch, ref } from 'vue';
 import {useModalFocus} from '../composables/useModalFocus';
 import { Plus, Trash2, X } from 'lucide-vue-next';
-import { useApi, isCancelled } from '../lib/api';
+import { useApi, isCancelled, errorMessage } from '../lib/api';
 import { usePanelContext } from '../composables/panelContext';
-import QualityTags from '../QualityTags.vue';
-import SpeedMetric from '../SpeedMetric.vue';
+import QualityTags from './QualityTags.vue';
+import SpeedMetric from './SpeedMetric.vue';
 import type { Node } from '../types';
 import type { ManagedSite } from '../lib/sites';
 import { t } from '../i18n';
@@ -23,8 +23,8 @@ useModalFocus(computed(()=>!!editing.value),dialog,close);
 function close(){if(!busy.value)emit('close');}
 function edit(site:ManagedSite){editing.value=structuredClone(toRaw(site));monthlyBudgetGB.value=(site.monthly_budget||0)/1073741824;cooldownHours.value=(site.cooldown_seconds||86400)/3600;if(!editing.value.default_nodes?.length)editing.value.default_nodes=['vless','hy2'].map(protocol=>({id:protocol+'-main',name:protocol.toUpperCase(),exit_id:'',protocol,enabled:true,policy_version:1,rate_milli:1000,group_ids:['default-subsite']}));editing.value.nodes=editing.value.nodes.map(n=>({...n,policy_version:1,rate_milli:n.policy_version?n.rate_milli:1000,group_ids:n.policy_version?n.group_ids:[pools.value.find(p=>p.id===n.exit_id)?.pool_group==='public'?'legacy-public':'legacy-private']}));members.value={};for(const user of allUsers.value){const g=site.grants.find(g=>g.user_id===user.id);members.value[user.id]={selected:!!g,gib:g?g.quota/1073741824:0};}error.value='';}
 function addNode(){if(!editing.value||!pools.value.length)return;editing.value.nodes.push({id:'node_'+crypto.randomUUID().slice(0,8),name:'',protocol:'vless',policy_version:1,rate_milli:1000,group_ids:['default-subsite'],exit_id:pools.value[0].id,enabled:true,dns:{mode:'secure',doh:'https://1.1.1.1/dns-query',ipv6:'block'}});}
-async function save(){const s=editing.value;if(!s)return;busy.value=true;error.value='';try{if(!Number.isFinite(monthlyBudgetGB.value)||monthlyBudgetGB.value<0||monthlyBudgetGB.value>1073741824||!Number.isFinite(cooldownHours.value)||cooldownHours.value<1||cooldownHours.value>8760)throw new Error(t('子站预算冷却时长无效'));const grants=Object.entries(members.value).filter(([,v])=>v.selected).map(([id,v])=>({user_id:Number(id),quota:Math.round(v.gib*1073741824)}));await api('/'+s.id,'PUT',{name:s.name,group:s.group,enabled:s.enabled,exclusive:s.exclusive,monthly_budget:Math.round(monthlyBudgetGB.value*1073741824),cooldown_seconds:Math.round(cooldownHours.value*3600),revision:s.revision,default_nodes:s.default_nodes,nodes:s.nodes,grants});await refresh();emit("saved");emit("close");}catch(e){if(!isCancelled(e))error.value=(e as Error).message;}finally{busy.value=false;}}
-async function detect(n:Node,kind:string){if(!editing.value)return;busy.value=true;error.value='';try{await api('/'+editing.value.id+'/tasks','POST',{kind,node_id:n.id});}catch(e){if(!isCancelled(e))error.value=(e as Error).message;}finally{busy.value=false;}}
+async function save(){const s=editing.value;if(!s)return;busy.value=true;error.value='';try{if(!Number.isFinite(monthlyBudgetGB.value)||monthlyBudgetGB.value<0||monthlyBudgetGB.value>1073741824||!Number.isFinite(cooldownHours.value)||cooldownHours.value<1||cooldownHours.value>8760)throw new Error(t('子站预算冷却时长无效'));const grants=Object.entries(members.value).filter(([,v])=>v.selected).map(([id,v])=>({user_id:Number(id),quota:Math.round(v.gib*1073741824)}));await api('/'+s.id,'PUT',{name:s.name,group:s.group,enabled:s.enabled,exclusive:s.exclusive,monthly_budget:Math.round(monthlyBudgetGB.value*1073741824),cooldown_seconds:Math.round(cooldownHours.value*3600),revision:s.revision,default_nodes:s.default_nodes,nodes:s.nodes,grants});await refresh();emit("saved");emit("close");}catch(e){if(!isCancelled(e))error.value=errorMessage(e);}finally{busy.value=false;}}
+async function detect(n:Node,kind:string){if(!editing.value)return;busy.value=true;error.value='';try{await api('/'+editing.value.id+'/tasks','POST',{kind,node_id:n.id});}catch(e){if(!isCancelled(e))error.value=errorMessage(e);}finally{busy.value=false;}}
 
 watch(()=>props.site,site=>edit(site),{immediate:true});
 </script>

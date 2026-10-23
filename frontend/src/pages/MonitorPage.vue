@@ -3,7 +3,7 @@ import PageHeading from "../components/PageHeading.vue";
 import "../styles/admin-ui.css";
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { Activity, RefreshCw, Pause, Play } from 'lucide-vue-next';
-import { useApi, isCancelled } from '../lib/api';
+import { useApi, isCancelled, errorMessage } from '../lib/api';
 import { latestRequest, serialPoll } from '../lib/requests';
 import { bytes } from '../lib/format';
 import { t, locale } from '../i18n';
@@ -26,7 +26,7 @@ async function load(){
     const query=new URLSearchParams({q:search.value,page:String(page.value),user_id:String(user.value)});
     const data=await api<LiveSnapshot>('?'+query,'GET',undefined,{signal:request.signal});
     if(requests.isCurrent(request)){snapshot.value=data;received.value=Date.now();now.value=Date.now();error.value='';}
-  }catch(e){if(requests.isCurrent(request)&&!isCancelled(e))error.value=(e as Error).message;}
+  }catch(e){if(requests.isCurrent(request)&&!isCancelled(e))error.value=errorMessage(e);}
   finally{if(requests.isCurrent(request))busy.value=false;}
 }
 const poll=serialPoll(async()=>{if(!document.hidden&&!paused.value)await load();},()=>5000);

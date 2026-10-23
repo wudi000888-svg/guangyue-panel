@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import {computed,onBeforeUnmount,onMounted,ref} from 'vue';
 import {Check,ChevronRight,LoaderCircle,RefreshCw,ShieldCheck} from 'lucide-vue-next';
-import {useApi,isCancelled} from '../lib/api';
+import {useApi,isCancelled, errorMessage } from '../lib/api';
 import {t} from '../i18n';
 type Challenge={token:string;width:number;height:number;piece_width:number;piece_y:number;background:string;piece:string;expires:number};
 type Point={x:number;t:number};
@@ -15,7 +15,7 @@ function expire(at:number){clearTimeout(expiry);expiry=setTimeout(()=>{verified.
 async function load(){
  if(busy.value)return;const current=++sequence;busy.value=true;error.value='';verified.value=false;challenge.value=null;position.value=0;points=[];dragging.value=false;activePointer=null;clearTimeout(expiry);emit('update:modelValue','');
  try{const value=await api<Challenge>('/register/challenge');if(current!==sequence)return;challenge.value=value;expire(value.expires);}
- catch(e){if(!isCancelled(e))error.value=t((e as Error).message);}finally{if(current===sequence)busy.value=false;}
+ catch(e){if(!isCancelled(e))error.value=errorMessage(e);}finally{if(current===sequence)busy.value=false;}
 }
 function begin(){if(!points.length){started=performance.now();points=[{x:0,t:0}];}}
 function sample(){const p={x:position.value,t:Math.round(performance.now()-started)};if(points.length<120)points.push(p);else points[points.length-1]=p;}
@@ -27,7 +27,7 @@ function key(e:KeyboardEvent){if(!challenge.value||busy.value||verified.value)re
 async function verify(){
  if(!challenge.value||busy.value||verified.value)return;sample();busy.value=true;error.value='';
  try{const value=await api<{token:string;expires:number}>('/register/verify','POST',{token:challenge.value.token,position:Math.round(position.value),trace:points});verified.value=true;emit('update:modelValue',value.token);expire(value.expires);}
- catch(e){if(!isCancelled(e)){error.value=t((e as Error).message);challenge.value=null;emit('update:modelValue','');}}
+ catch(e){if(!isCancelled(e)){error.value=errorMessage(e);challenge.value=null;emit('update:modelValue','');}}
  finally{busy.value=false;points=[];}
 }
 onMounted(load);onBeforeUnmount(()=>{sequence++;clearTimeout(expiry);});

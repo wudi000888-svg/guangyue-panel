@@ -6,11 +6,11 @@ const { canMountSubsites,state, busy, speedRunning, qualityRunning, qualityTest,
 import { ArrowUpRight, Download, Gauge, LoaderCircle, Database, Pencil, Plus, RefreshCw, Search, Trash2, X } from "lucide-vue-next";
 import { t } from "../i18n";
 import SubsiteIPPoolOverview from "../components/SubsiteIPPoolOverview.vue";
-import ImportSources from "../ImportSources.vue";
-import ResourceTabs from "../ResourceTabs.vue";
-import CountryMark from "../CountryMark.vue";
-import SpeedMetric from "../SpeedMetric.vue";
-import QualityTags from "../QualityTags.vue";
+import ImportSources from "../components/pool/ImportSources.vue";
+import ResourceTabs from "../components/pool/ResourceTabs.vue";
+import CountryMark from "../components/CountryMark.vue";
+import SpeedMetric from "../components/SpeedMetric.vue";
+import QualityTags from "../components/QualityTags.vue";
 import { usePagination } from "../composables/usePagination";
 import ListTable from "../components/ListTable.vue";
 const {page:listPage,pages:listPages,rows:listRows}=usePagination(filteredIPs);

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import {ref,watch} from 'vue';
-import {useApi,isCancelled} from '../lib/api';
+import {useApi,isCancelled, errorMessage } from '../lib/api';
 import {latestRequest} from '../lib/requests';
 import {bytes,date} from '../lib/format';
 import {rateText} from '../lib/quota';
@@ -9,7 +9,7 @@ import type {User} from '../types';
 const props=defineProps<{user:User}>(),api=useApi(),request=latestRequest();
 type Report={period_id:string;periods:User[];nodes:{site_id:string;node_id:string;rate_milli:number;rate_revision:string;upload:number;download:number}[]};
 const open=ref(false),data=ref<Report|null>(null),period=ref(''),error=ref('');
-async function load(){const current=request.start();error.value='';try{const result=await api<Report>('/usage?user_id='+props.user.id+(period.value?'&period_id='+encodeURIComponent(period.value):''),'GET',undefined,{signal:current.signal});if(request.isCurrent(current))data.value=result;}catch(e){if(!isCancelled(e)&&request.isCurrent(current))error.value=(e as Error).message;}}
+async function load(){const current=request.start();error.value='';try{const result=await api<Report>('/usage?user_id='+props.user.id+(period.value?'&period_id='+encodeURIComponent(period.value):''),'GET',undefined,{signal:current.signal});if(request.isCurrent(current))data.value=result;}catch(e){if(!isCancelled(e)&&request.isCurrent(current))error.value=errorMessage(e);}}
 watch(()=>props.user.id,()=>{request.cancel();data.value=null;period.value='';if(open.value)void load();});
 watch([open,period],()=>{if(open.value)void load();});
 </script>

@@ -3,11 +3,14 @@ import { download } from "../lib/download";
 import { useAccessStore } from "../stores/access";
 import { useRouter, useRoute } from "vue-router";
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from "vue";
-import { Mail, Globe2, KeyRound, LayoutDashboard, Database, QrCode, RadioTower, Server, Settings2, Users, Package, Wallet, Ticket, ShoppingBag, Receipt, Gift, Layers3, Coins } from "lucide-vue-next";
 import { bytes, date, duration, exitName } from "../lib/format";
 import { useSubscription } from "./useSubscription";
+import { useToast } from "./panel/useToast";
+import { usePanelNavigation } from "./panel/usePanelNavigation";
+import { useUserDirectory } from "./panel/useUserDirectory";
+import { usePrivatePool } from "./panel/usePrivatePool";
 import { useSidebarCustomization } from './useSidebarCustomization';
-import { useApi, ApiError, downloadBlob, invalidateSession, onSessionExpired, isCancelled, setRemoteSite, getRemoteSite, requestGeneration } from "../lib/api";
+import { useApi, downloadBlob, JSON_REQUEST_HEADERS, invalidateSession, onSessionExpired, isCancelled, setRemoteSite, requestGeneration, errorMessage } from "../lib/api";
 import { runQueued } from "../lib/tasks";
 import { latestRequest, serialPoll } from "../lib/requests";
 import { NodeSaveUncertain, saveNodeRecovering, upsertSavedNode } from "../lib/nodeSave";
@@ -39,23 +42,21 @@ const state = ref<State | null>(null),
   ready = ref(false),
   busy = ref(false),
   error = ref(""),
-  notice = ref(""),
   page = ref("overview"),
   mobileNav = ref(false);
+const {notice,toast}=useToast();
+const owner = computed(() => state.value?.me.role === "owner");
 const access=useAccessStore();
-watch(state,v=>{access.role=v?.me.role||null;access.edition=v?.system.edition||'lite';},{flush:'sync'});
+watch(()=>[state.value?.me.role,state.value?.system.edition] as const,([role,edition])=>{access.role=role||null;access.edition=edition||'lite';},{flush:'sync'});
 const site = ref<SiteSettings>({panel_name:'广月面板',organization:'跨境电商工作区',default_locale:'zh-CN',support_email:'',login_notice:'',registration_enabled:false,registration_captcha:false,revision:'',sidebar_admin:[...DEFAULT_ADMIN_SIDEBAR],sidebar_member:[...DEFAULT_MEMBER_SIDEBAR],client_download_relay:false,country_access_enabled:false,country_access_blocked:[],country_access_reason:''});
 watch([site, locale], () => { document.title=site.value.panel_name+' · '+t('月庭'); }, {deep:true,immediate:true});
 const login = reactive({ username: "", password: "" });
 const registration = reactive({ username: "", password: "", confirm_password: "", captcha_token: "", email: "", email_token: "" });
 const registrationReset = ref(0);
-const userSearch = ref(""),
-  userFilter = ref("all"),
-  userRole = ref("all"),
-  modal = ref(""),
+const modal = ref(""),
   editingID = ref(0);
 const plans=ref<Plan[]>([]),nodeGroups=ref<NodeGroup[]>([]),groupMembers=ref<Record<string,import("../types").GroupMember[]>>({});
-async function loadEntitlements(){try{const [p,g]=await Promise.all([api<{plans:Plan[]}>("/plans"),api<{groups:NodeGroup[];members:Record<string,import("../types").GroupMember[]>}>("/node-groups")]);plans.value=p.plans;nodeGroups.value=g.groups;groupMembers.value=g.members;}catch(e){if(!isCancelled(e))error.value=(e as Error).message;}}
+async function loadEntitlements(){try{const [p,g]=await Promise.all([api<{plans:Plan[]}>("/plans"),api<{groups:NodeGroup[];members:Record<string,import("../types").GroupMember[]>}>("/node-groups")]);plans.value=p.plans;nodeGroups.value=g.groups;groupMembers.value=g.members;}catch(e){if(!isCancelled(e))error.value=errorMessage(e);}}
 const userForm = reactive({
  plan_id:"",
   username: "",
@@ -108,86 +109,7 @@ async function qualityTest(n: Node, pool = false) {
     finally { if(generation===requestGeneration()){qualityRunning.value = ''; await refresh();} }
   });
 }
-const importMode = ref<'url' | 'content' | 'file'>("url");
-const importForm = reactive({ url: "", content: "", plain_protocol: "http" });
-const importFile = ref<{ name: string; size: number; lines: number } | null>(null);
-const importFileReading = ref(false);
-const importIssues = ref<{ index: number; reason: string }[]>([]);
-let importFileContent = "", importFileSequence = 0;
-function clearPrivateFile() {
-  importFileSequence++;
-  importFileContent = "";
-  importFile.value = null;
-  importFileReading.value = false;
-}
-async function readPrivateFile(event: Event) {
-  const input = event.target as HTMLInputElement;
-  const file = input.files?.[0];
-  if (!file) return;
-  clearPrivateFile();
-  const sequence = importFileSequence;
-  importFileReading.value = true;
-  importIssues.value = [];
-  error.value = "";
-  try {
-    if (file.size > 4 * 1024 * 1024) throw new Error(t("文件不能超过 4 MiB"));
-    const content = await file.text();
-    if (sequence !== importFileSequence || modal.value !== "import") return;
-    if (!content.trim()) throw new Error(t("文件为空，请选择包含代理配置的文件。"));
-    importFileContent = content;
-    importFile.value = { name: file.name, size: file.size, lines: content.split(/\r?\n/).filter(line => line.trim() && !line.trim().startsWith('#')).length };
-    importMode.value = "file";
-  } catch (e) {
-    if (sequence === importFileSequence) error.value = e instanceof Error && [t("文件不能超过 4 MiB"), t("文件为空，请选择包含代理配置的文件。")].includes(e.message) ? e.message : t("读取文件失败，请重新选择文件。");
-  } finally {
-    input.value = "";
-    if (sequence === importFileSequence) importFileReading.value = false;
-  }
-}
-const importReport = ref<{
-  queued?: boolean;
-  added: number;
-  duplicates: number;
-  warnings: { index: number; reason: string }[];
-} | null>(null);
-function openImport() {
-  Object.assign(importForm, { url: "", content: "", plain_protocol: "http" });
-  clearPrivateFile();
-  importMode.value = "url";
-  importIssues.value = [];
-  error.value = "";
-  modal.value = "import";
-}
-watch(modal, value => {
-  if (value !== "import") {
-    clearPrivateFile();
-    importForm.url = "";
-    importForm.content = "";
-    importIssues.value = [];
-  }
-}, { flush: 'sync' });
-watch(importMode, () => { importIssues.value = []; error.value = ""; });
-async function importSubscription() {
-  if (importFileReading.value || (importMode.value === 'file' && !importFileContent)) return;
-  await task(async () => {
-    importIssues.value = [];
-    let result;
-    try {
-      result = await api("/ips/import", "POST", importMode.value === "url"
-        ? { url: importForm.url }
-        : { content: importMode.value === "file" ? importFileContent : importForm.content, plain_protocol: importForm.plain_protocol });
-    } catch (error) {
-      if (error instanceof ApiError) importIssues.value = error.data.warnings || [];
-      throw error;
-    }
-    importReport.value = { ...result, warnings: Array.isArray(result.warnings) ? result.warnings : [] };
-    importForm.url = "";
-    importForm.content = "";
-    modal.value = "";
-    await refresh();
-    if(importReport.value?.queued){go("sources");toast(t("更新已排队，后台将依次执行"));}else {go("ips/manual");toast(t("已导入独立出口，可检测质量、测速或分配至节点。"));}
-  });
-}
+const { importMode, importForm, importFile, importFileReading, importIssues, clearPrivateFile, readPrivateFile, importReport, openImport, importSubscription, ipSearch, ipType, ipState, ipPool, publicResources, privateTab, privateSources, privateSourcesReady, privateSourcesLoading, privateSourcesError, receivePrivateSources, loadPrivateSources, publicTab, selectPublicTab, subscriptionResourceIDs, isSubscribedResource, subscriptionIPs, manualIPs, canMountSubsites, privateTabs, sourceLabel, selectPrivateTab, viewSourceResources, poolStats, ipStatus, ipBadge, sourceFilter, filteredIPs, resetPrivatePool } = usePrivatePool({ state, owner, selectedSite, api, router, error, modal, task, refresh, go, toast });
 async function speedTest(n: Node, pool = false) {
  const generation=requestGeneration();
   await task(async () => {
@@ -203,124 +125,24 @@ async function speedTest(n: Node, pool = false) {
     }
   });
 }
-const ipSearch = ref(""),
-  ipType = ref("all"),
-  ipState = ref("all");
-const ipPool = computed(() => (state.value?.ip_pool || []).filter(p => p.pool_group !== 'public'));
-const publicResources = computed(() => (state.value?.ip_pool || []).filter(p => p.pool_group === 'public'));
-const privateTab = ref("subscriptions");
-type PrivateSourceSummary = { source: { id: string; name: string }; resource_ids: string[] };
-const privateSources = ref<PrivateSourceSummary[]>([]);
-const privateSourcesReady = ref(false);
-const privateSourcesLoading = ref(false), privateSourcesError = ref('');
-let privateSourcesRequest: Promise<void> | null = null;
-function receivePrivateSources(rows: PrivateSourceSummary[]) {
-  privateSources.value = rows;
-  privateSourcesReady.value = true;
-  privateSourcesError.value = '';
-}
-async function loadPrivateSources() {
-  if (!owner.value) return;
-  if (privateSourcesRequest) return privateSourcesRequest;
-  privateSourcesLoading.value = true;
-  privateSourcesRequest = (async () => {
-    try { receivePrivateSources((await api('/import-sources')).items); }
-    catch (e) { if (!isCancelled(e)) privateSourcesError.value = (e as Error).message; }
-    finally { privateSourcesLoading.value = false; privateSourcesRequest = null; }
-  })();
-  return privateSourcesRequest;
-}
-const publicTab = ref('resources');
-function selectPublicTab(value: string) {
-  if (!['resources', 'sources', 'policy'].includes(value)) return;
-  publicTab.value = value;
-  void router.replace('/public' + (value === 'resources' ? '' : '/' + value));
-}
-const subscriptionResourceIDs = computed(() => new Set(privateSources.value.flatMap(row => row.resource_ids || [])));
-const isSubscribedResource = (p: IPResource) => !!p.subscription_id || subscriptionResourceIDs.value.has(p.id);
-const subscriptionIPs = computed(() => ipPool.value.filter(isSubscribedResource));
-const manualIPs = computed(() => ipPool.value.filter(p => !isSubscribedResource(p)));
-const canMountSubsites = computed(() => owner.value && state.value?.system.edition === 'pro' && state.value?.system.role === 'controller' && !selectedSite.value);
-const privateTabs = computed(() => [
-  ...(canMountSubsites.value ? [{id:'subsites',label:t('子站 IP 池')}] : []),
-  { id: 'subscriptions', label: t('订阅出口'), ...(privateSourcesReady.value ? { count: subscriptionIPs.value.length } : {}) },
-  { id: 'manual', label: t('独立出口'), ...(privateSourcesReady.value ? { count: manualIPs.value.length } : {}) },
-  { id: 'sources', label: t('订阅来源'), ...(privateSourcesReady.value ? { count: privateSources.value.length } : {}) },
-]);
-function sourceLabel(p: IPResource) {
-  const names = privateSources.value.filter(row => row.source.id === p.subscription_id || row.resource_ids?.includes(p.id)).map(row => row.source.name);
-  return names.join(' · ') || (p.subscription_id ? t('订阅来源') : t('独立添加'));
-}
-function selectPrivateTab(value: string) {
-  if (value === 'subsite-egress') value = 'subsites';
-  if (!['subscriptions','manual','sources','subsites'].includes(value)) return;
-  if (value === 'subsites' && !canMountSubsites.value) value = 'subscriptions';
-  privateTab.value = value;
-  sourceFilter.value = null;
-  ipSearch.value = '';
-  ipType.value = 'all';
-  ipState.value = 'all';
-  void router.replace('/ips/' + value);
-}
-function viewSourceResources(ids: string[], name: string) {
-  selectPrivateTab('subscriptions');
-  sourceFilter.value = { ids, name };
-  nextTick(() => window.scrollTo({ top: 0, behavior: 'instant' }));
-}
+const { userSearch, userFilter, userRole, expiringUsers, active, userStatus, users, usage } = useUserDirectory(state);
 async function sourceChanged() { await refresh(true); await loadPrivateSources(); }
-watch(page, value => { if (state.value) void refresh(true); if (value === 'ips') loadPrivateSources(); });
+// Navigation only refetches /state when the last full refresh is stale; the
+// 10 s operations poll keeps runtime counters current in between.
+const NAVIGATION_REFRESH_AGE = 15000;
+let lastRefreshAt = 0;
+watch(page, value => {
+  const refreshing = !!state.value && Date.now() - lastRefreshAt >= NAVIGATION_REFRESH_AGE;
+  if (refreshing) void refresh(true);
+  // refresh() already loads private sources for these tabs; avoid a second request.
+  if (value === 'ips' && !(refreshing && !['sources','subsites'].includes(privateTab.value))) loadPrivateSources();
+});
 const selectedIP = computed(() =>
   ipPool.value.find((p) => p.id === nodeForm.exit_id),
-);
-const poolStats = computed(() => ({
-  total: ipPool.value.length,
-  ready: ipPool.value.filter((p) => p.enabled && p.reachable).length,
-  used: ipPool.value.filter((p) => p.node_ids?.length).length,
-  attention: ipPool.value.filter((p) => p.enabled && !p.reachable).length,
-}));
-const ipStatus = (p: IPResource) =>
-  !p.enabled
-    ? t("已停用")
-    : !p.checked_at
-      ? t("待检测")
-      : !p.reachable
-        ? t("不可用")
-        : p.probe_error
-          ? t("国家待识别")
-          : t("可用");
-const ipBadge = (p: IPResource) =>
-  !p.enabled || !p.checked_at ? "neutral" : p.reachable ? "success" : "danger";
-const sourceFilter=ref<{ids:string[];name:string}|null>(null);
-const filteredIPs = computed(() =>
-  (privateSourcesReady.value ? privateTab.value === 'manual' ? manualIPs.value : subscriptionIPs.value : []).filter(
-    (p) =>
-      (!sourceFilter.value||sourceFilter.value.ids.includes(p.id)) &&
-      [p.label, p.name, p.probe_ip, p.host, p.notes, ...(p.quality?.tags || []).map(t => t.label), ...(p.quality?.streams || []).map(t => t.label)]
-        .join(" ")
-        .toLowerCase()
-        .includes(ipSearch.value.toLowerCase()) &&
-      (ipType.value === "all" || p.exit === ipType.value) &&
-      (ipState.value === "all" ||
-        (ipState.value === "ready"
-          ? p.enabled && p.reachable
-          : ipState.value === "unassigned"
-            ? !p.node_ids?.length
-            : ipState.value === "disabled"
-              ? !p.enabled
-              : p.enabled && !p.reachable)),
-  ),
 );
 const nodePoolLabel = (n: Node) =>
   state.value?.ip_pool.find((p) => p.id === n.exit_id)?.label ||
   (n.exit === "direct" ? t("本机直连") : exitName(n.exit));
-const expiringUsers = computed(
-  () =>
-    (state.value?.users || []).filter(
-      (u) =>
-        !u.mount_access && u.expires > Date.now() / 1000 &&
-        u.expires < Date.now() / 1000 + 7 * 86400,
-    ).length,
-);
 const passwordForm = reactive({ current: "", password: "", confirm: "" });
 const probeResult = ref("");
 const detecting = ref("");
@@ -365,9 +187,10 @@ const displayedNodeName = computed(
 const confirmation = ref<{
   title: string;
   detail: string;
-  action: () => Promise<void>;
+  /** Ask for the current administrator password and pass it to action(). */
+  password?: boolean;
+  action: (password: string) => Promise<void>;
 } | null>(null);
-const owner = computed(() => state.value?.me.role === "owner");
 const defaultRealitySNI = computed(() => state.value?.system.reality_sni || "www.cloudflare.com");
 const editingDefaultDirect = computed(() => !!nodeForm.default_direct || !!state.value?.nodes.find(n => n.id === nodeForm.id)?.default_direct);
 const pendingHY = computed(
@@ -378,74 +201,7 @@ const pendingHY = computed(
         | undefined
     )?.hy2_old_connections || 0,
 );
-const titles: Record<string, string> = {
-  clients: "客户端中心", monitor: "实时监控",
-  wallet: "账户余额", shop: "购买套餐", orders: "订单管理", tickets: "工单中心", "redeem-codes": "兑换码管理",
-  overview: "仪表盘",
-  plans: "套餐管理",
-  "crypto-payments": "加密货币",
-  "node-groups": "节点组",
- users: "用户管理",
-  ips: "私有 IP 池",
-  public: "公共 IP 池",
-  nodes: "本地节点",
-  "subsite-nodes": "子站节点",
-  "public-nodes": "公共节点",
-  "public-subscription": "订阅管理",
-  subscription: "订阅管理",
-  "node-square": "节点广场",
-  tasks: "任务中心",
-  fleet: "群站管理",
-  pairing: "配对令牌",
-  system: "运维状态",
-  messages: "站内信",
-  settings: "系统设置",
-  sources: "订阅来源",
-};
-const pageDescriptions: Record<string, string> = {
-  clients: "按系统与架构下载客户端，再导入对应格式的面板订阅", monitor: "查看每位用户的活跃连接与实时流量",
-  wallet: "查看可用余额、冻结金额与收支明细", shop: "使用站内余额开通或续费套餐", orders: "追踪订单、开通进度与退款状态", tickets: "提交服务问题并跟进处理进度", "redeem-codes": "生成定额兑换码，管理有效期与作废状态",
-  overview: "集中查看企业网络用量、出口与运行状态",
-  plans: "管理套餐额度、有效期与订阅节点权限",
-  "crypto-payments": "配置链上收款、HD 钱包、余额与归集",
-  "node-groups": "查看本地、子站和公共节点，使用权限由套餐决定",
- users: "管理成员访问权限、流量配额与有效期",
-  ips: "集中维护出口资源，按需分配给接入节点",
-  public: "自动发现、筛选和维护全球公开代理出口",
-  nodes: "管理本地主机接入节点、出口代理与公网地址",
-  "subsite-nodes": "管理直接挂载的子站节点，客户端流量直接进入子站",
-  "public-nodes": "独立管理自动公共节点，随代理质量筛选而更新",
-  "public-subscription": "独立公共订阅，仅分发当前合格的自动节点",
-  subscription: "分发成员连接配置，管理订阅与访问凭据",
-  "node-square": "浏览公开线路和适用套餐",
-  tasks: "统一查看任务排队、执行结果与失败原因",
-  fleet: "集中管理业务站、成员授权和出口分配",
-  pairing: "生成配对令牌，供 Pro 主站接管本站",
-  system: "查看服务状态、证书与最近操作记录",
-  messages: "集中接收维护通知与账户消息",
-  settings: "统一管理企业品牌、访问偏好与成员支持",
-  sources: "管理上游订阅链接与每日错峰更新",
-};
-const memberTitles: Record<string,string> = {subscription:'我的订阅',orders:'我的订单',wallet:'我的钱包'};
-const pageTitle = computed(() => page.value === 'shop' && owner.value ? t('套餐上架') : t((!owner.value && memberTitles[page.value]) || titles[page.value] || ''));
-const pageDescription = computed(() => page.value === 'shop' && owner.value ? t('管理套餐上架与销售规则') : t(pageDescriptions[page.value] || ''));
-const allNavGroups = computed(() => [
-  {id:'workspace',label:t('工作台'),items:[{id:'overview',label:t('仪表盘'),icon:LayoutDashboard},{id:'clients',label:t('客户端中心'),icon:Package},...(owner.value?[{id:'monitor',label:t('实时监控'),icon:RadioTower}]:[])]},
-  {id:'access',label:t('用户与套餐'),items:[...(owner.value?[{id:'users',label:t('用户管理'),icon:Users},{id:'plans',label:t('套餐管理'),icon:Package},{id:'node-groups',label:t('节点组'),icon:Layers3}]:[]),{id:'subscription',label:owner.value?t('订阅管理'):t('我的订阅'),icon:QrCode},{id:'node-square',label:t('节点广场'),icon:Globe2},{id:'messages',label:t('站内信'),icon:Mail}]},
-  {id:'resources',label:t('节点与出口'),items:[...(owner.value?[{id:'ips',label:t('本地 IP 池'),icon:Database},{id:'nodes',label:t('本地节点'),icon:RadioTower},{id:'subsite-nodes',label:t('子站节点'),icon:Globe2},{id:'public',label:t('公共 IP 池'),icon:Database},{id:'public-nodes',label:t('公共节点'),icon:Globe2},{id:'public-subscription',label:t('公共订阅'),icon:QrCode}]:[])]},
-  {id:'system',label:t('系统与服务'),items:[...(!selectedSite.value?[{id:'wallet',label:owner.value?t('账户余额'):t('我的钱包'),icon:Wallet},{id:'shop',label:owner.value?t('套餐上架'):t('购买套餐'),icon:ShoppingBag},{id:'orders',label:owner.value?t('订单管理'):t('我的订单'),icon:Receipt},{id:'tickets',label:t('工单中心'),icon:Ticket},...(owner.value?[{id:'crypto-payments',label:t('加密货币'),icon:Coins},{id:'redeem-codes',label:t('兑换码管理'),icon:Gift}]:[])]:[]),...(owner.value&&state.value?.system.edition==='pro'&&state.value?.system.role==='controller'&&!getRemoteSite()?[{id:'fleet',label:t('群站管理'),icon:Globe2}]:[]),...(owner.value&&!getRemoteSite()?[{id:'pairing',label:t('配对令牌'),icon:KeyRound}]:[]),...(owner.value?[{id:'tasks',label:t('任务中心'),icon:Server},{id:'system',label:t('运维状态'),icon:Server}]:[]),{id:'settings',label:owner.value?t('系统设置'):t('个人设置'),icon:Settings2}]},
-]);
-const navGroups = computed(() => {
-  const hidePublic = !publicFeaturesEnabled.value;
-  if (!hidePublic) return allNavGroups.value;
-  const allowed = new Set(owner.value
-    ? ["overview", "clients", "monitor", "users", "plans", "crypto-payments", "node-groups", "node-square", "ips", "nodes", "subsite-nodes", "subscription", "settings", "wallet", "shop", "orders", "tickets", "redeem-codes", "messages", "pairing", "fleet", "tasks", "system"]
-    : ["clients", "subscription", "node-square", "wallet", "shop", "orders", "tickets", "messages", "settings"]);
-  return allNavGroups.value
-    .map(group => ({ ...group, items: group.items.filter(item => allowed.has(item.id)) }))
-    .filter(group => group.items.length);
-});
-const nav = computed(()=>navGroups.value.flatMap(group=>group.items));
+const { titles, pageDescriptions, pageTitle, pageDescription, allNavGroups, navGroups, nav, currentGroup } = usePanelNavigation({ state, page, owner, selectedSite, publicFeaturesEnabled });
 const sidebarCustomization = useSidebarCustomization({
   site, api, canCustomize: () => owner.value && !!state.value,
   available: () => nav.value.map(item => item.id),
@@ -455,45 +211,14 @@ const sidebarCustomization = useSidebarCustomization({
 watch(() => nav.value.map(item => item.id).join(","), () => {
   if (state.value && !nav.value.some(item => item.id === page.value)) go(owner.value ? "overview" : "subscription");
 });
-const currentGroup = computed(()=>navGroups.value.find(g=>g.items.some(item=>item.id===page.value))?.label || '');
-const active = (u: User) =>
-  u.enabled &&
-  (!u.expires || u.expires > Date.now() / 1000) &&
-  (!u.quota || quotaUsed(u) < u.quota) && !u.meter?.pending_reset && (!u.meter?.end || u.meter.end > Date.now()/1000);
-const userStatus = (u: User) =>
- u.archived ? t("已归档") :
- u.meter?.pending_reset || (u.meter?.end && u.meter.end<=Date.now()/1000) ? t("周期切换中") :
-  !u.enabled
-    ? t("已停用")
-    : u.expires && u.expires <= Date.now() / 1000
-      ? t("已到期")
-      : u.quota && quotaUsed(u) >= u.quota
-        ? t("额度用尽")
-        : t("正常");
-const users = computed(() =>
-  (state.value?.users || []).filter(
-    (u) =>
-      !u.mount_access && u.username.toLowerCase().includes(userSearch.value.toLowerCase()) &&
-      (userRole.value === "all" || u.role === userRole.value) &&
-      (userFilter.value === "all" ||
-        (userFilter.value === "active"
-          ? active(u)
-          : userFilter.value === "disabled"
-            ? !u.enabled
-            : userFilter.value === "expired"
-              ? !!u.expires && u.expires <= Date.now() / 1000
-              : !!u.quota && quotaUsed(u) >= u.quota)),
-  ),
-);
 const {sub,subUser,format,subProtocol,subSource,qr,qrError,subLoading,subError,subURL,clearSubscription,loadSub,showSub,downloadSub} = useSubscription({state,page,owner,publicSubPage,active,task,go});
-const usage = (u: User) =>
-  u.quota ? Math.min(100, (quotaUsed(u) / u.quota) * 100) : 0;
 async function refresh(silent = false) {
   const request = stateRequest.start();
   try {
     const result = await api<State>("/state", "GET", undefined, { signal: request.signal });
     if (!stateRequest.isCurrent(request)) return false;
     state.value = result;
+    lastRefreshAt = Date.now();
     needsNodeRefresh = false;
     site.value = result.site;
     applyDefaultLocale(site.value.default_locale);
@@ -501,26 +226,22 @@ async function refresh(silent = false) {
     if (stateRequest.isCurrent(request) && !subUser.value && state.value) subUser.value = state.value.me.id;
     return true;
   } catch (e) {
-    if (!isCancelled(e) && !silent && state.value) error.value = (e as Error).message;
+    if (!isCancelled(e) && !silent && state.value) error.value = errorMessage(e);
     return false;
   } finally {
     if (stateRequest.isCurrent(request)) ready.value = true;
   }
 }
 function clearSession() {
- needsNodeRefresh=false;nodeSaveRequestID="";
+ needsNodeRefresh=false;nodeSaveRequestID="";lastRefreshAt=0;
  busy.value=false;speedRunning.value="";qualityRunning.value="";
  setRemoteSite("");selectedSite.value="";selectedSiteName.value="";
   stateRequest.cancel();
   state.value = null;
   plans.value=[];nodeGroups.value=[];groupMembers.value={};
-  privateSources.value = [];
-  privateSourcesReady.value = false;
-  privateSourcesError.value = "";
-  sourceFilter.value = null;
+  resetPrivatePool();
   selectedIPIDs.value = [];
   selectedNodeIDs.value = [];
-  importReport.value = null;
   clearSubscription();
   subUser.value = 0;
   qr.value = "";
@@ -538,18 +259,10 @@ async function task(fn: () => Promise<void>) {
   try {
     await fn();
   } catch (e) {
-    if (generation===requestGeneration() && !isCancelled(e)) error.value = (e as Error).message;
+    if (generation===requestGeneration() && !isCancelled(e)) error.value = errorMessage(e);
   } finally {
     if(generation===requestGeneration()) busy.value = false;
   }
-}
-let toastTimer: ReturnType<typeof setTimeout> | undefined;
-function toast(text: string) {
-  clearTimeout(toastTimer);
-  notice.value = text;
-  toastTimer = setTimeout(() => {
-    notice.value = "";
-  }, 4000);
 }
 async function signIn() {
   await task(async () => {
@@ -696,9 +409,9 @@ function confirmUser(u: User, action: string) {
     },
   };
 }
-async function confirmed() {
+async function confirmed(password = "") {
   await task(async () => {
-    await confirmation.value?.action();
+    await confirmation.value?.action(password);
     confirmation.value = null;
   });
 }
@@ -742,7 +455,7 @@ function editNode(n?: Node, protocol = "vless") {
 }
 async function probe() {
   await task(async () => {
-    const r = await api("/nodes/probe", "POST", {
+    const r = await api<{ name: string; warning?: string }>("/nodes/probe", "POST", {
       id: nodeForm.id,
       protocol: nodeForm.protocol,
       exit_id: editingDefaultDirect.value ? "" : nodeForm.exit_id,
@@ -755,7 +468,7 @@ async function detectNode(n: Node) {
   await task(async () => {
     detecting.value = n.id;
     try {
-      const result = await api("/nodes/" + n.id + "/detect", "POST", {});
+      const result = await api<{ probe_error?: string }>("/nodes/" + n.id + "/detect", "POST", {});
       toast(result.probe_error || t("出口名称已更新"));
     } finally {
       detecting.value = "";
@@ -896,7 +609,7 @@ function batchAction(kind: 'ips'|'nodes', action: 'delete'|'enable'|'disable') {
     title: (action==='delete'?t('批量删除'):action==='enable'?t('批量启用'):t('批量停用'))+' · '+ids.length,
     detail: action==='delete' ? t('同时删除绑定节点')+' '+bound+' · '+t('对应链接将从所有用户订阅移除。') : action==='disable'&&kind==='ips' ? t('停用出口会同时停用绑定节点。') : kind==='ips'?t('启用出口后，可按需启用对应节点。'):t('将一次性应用所选节点状态。'),
     action: async()=>{
-      const result=await api('/'+kind+'/batch','POST',{ids,action});
+      const result=await api<{ selected: number }>('/'+kind+'/batch','POST',{ids,action});
       if(kind==='ips')selectedIPIDs.value=[];else selectedNodeIDs.value=[];
       await refresh();toast(t('批量操作已完成')+' · '+result.selected);
     }
@@ -965,10 +678,11 @@ async function backup() {
  if(selectedSite.value){error.value=t("请在目标站点直接下载备份");return;}
   confirmation.value = {
     title: t("下载完整备份"),
-    detail: t("备份含账号、节点凭据与恢复密钥，请仅保存在可信设备。"),
-    action: async () => {
+    detail: t("备份含账号、节点凭据与恢复密钥，请仅保存在可信设备。") + " " + t("下载前请验证管理员当前密码。"),
+    password: true,
+    action: async (password: string) => {
       download(
-        await downloadBlob("/api/backup"),
+        await downloadBlob("/api/backup", { method: "POST", headers: JSON_REQUEST_HEADERS, body: JSON.stringify({ password }) }),
         "guangyue-backup-" + new Date().toISOString().slice(0, 10) + ".tar.gz",
       );
       toast(t("备份已下载"));
@@ -1008,13 +722,15 @@ const actionName = (s: string) =>
       speed_test: t("出口测速"),
     }) as Record<string, string>
   )[s] || (s.startsWith("update_user") ? t("更新成员") : s);
-let lastFullRefresh=0;
 const poll = serialPoll(async () => {
  if(!state.value||busy.value||document.hidden)return;
- if(needsNodeRefresh||Date.now()-lastFullRefresh>60000){if(await refresh(true))lastFullRefresh=Date.now();return;}
+ if(needsNodeRefresh||Date.now()-lastRefreshAt>60000){await refresh(true);return;}
  const value=await api<{system:Partial<State['system']>;me:User;site:SiteSettings;runtime:State['runtime'];unread_messages:number}>('/operations');
- if(!state.value)return;
- state.value={...state.value,me:value.me,site:value.site,runtime:value.runtime,unread_messages:value.unread_messages,system:{...state.value.system,...value.system}};
+ const current=state.value;
+ if(!current)return;
+ // Patch only the polled fields so computeds over users/nodes/ip_pool stay cached.
+ current.me=value.me;current.site=value.site;current.runtime=value.runtime;current.unread_messages=value.unread_messages;
+ Object.assign(current.system,value.system);
 },()=>10000);
 let mounted = true;
 watch(() => route.fullPath, async (path, previous) => {
@@ -1034,6 +750,6 @@ onMounted(async () => {
   
   poll.start();
 });
-onUnmounted(() => { mounted = false; poll.stop(); stateRequest.cancel(); removeSessionListener(); clearTimeout(toastTimer);  clearSubscription(); });
-return { sidebarCustomization, canMountSubsites,plans,nodeGroups,groupMembers,loadEntitlements,quotaUsed,selectedSite,selectedSiteName,switchSite, api, stateRequest, state, ready, busy, error, notice, page, mobileNav, site, login, registration, registrationReset, userSearch, userFilter, userRole, modal, editingID, userForm, nodeForm, ipForm, speedRunning, qualityRunning, qualityTest, importMode, importForm, importFile, importFileReading, importIssues, importFileContent, importFileSequence, clearPrivateFile, readPrivateFile, importReport, openImport, importSubscription, speedTest, ipSearch, ipType, ipState, ipPool, publicResources, privateTab, privateSources, privateSourcesReady, privateSourcesLoading, privateSourcesError, privateSourcesRequest, receivePrivateSources, loadPrivateSources, publicTab, selectPublicTab, subscriptionResourceIDs, isSubscribedResource, subscriptionIPs, manualIPs, privateTabs, sourceLabel, selectPrivateTab, viewSourceResources, sourceChanged, selectedIP, poolStats, ipStatus, ipBadge, sourceFilter, filteredIPs, nodePoolLabel, expiringUsers, passwordForm, sub, subUser, format, subProtocol, subSource, qr, qrError, subLoading, subError, probeResult, detecting, theme, sideCollapsed, publicFeaturesEnabled, nodeSearch, nodeProtocol, nodeStatus, filteredNodes, publicNodePage, publicSubPage, toggleTheme, originalExit, exitFingerprint, displayedNodeName, confirmation, owner, defaultRealitySNI, editingDefaultDirect, pendingHY, titles, pageTitle, pageDescription, pageDescriptions, allNavGroups, navGroups, nav, currentGroup, active, userStatus, users, subURL, usage, bytes, date, duration, exitName, refresh, clearSession, removeSessionListener, task, toastTimer, toast, signIn, signOut, registerAccount, go, editUser, saveUser, toggleUser, confirmUser, confirmed, editNode, probe, detectNode, editIP, saveIP, detectIP, deleteIP, selectedIPIDs, selectedNodeIDs, selectableNodes, selectAll, batchAction, saveNode, deleteNode, clearSubscription, loadSub, showSub, copy, downloadSub, download, backup, changePassword, actionName, poll, mounted };
+onUnmounted(() => { mounted = false; poll.stop(); stateRequest.cancel(); removeSessionListener(); clearSubscription(); });
+return { sidebarCustomization, canMountSubsites,plans,nodeGroups,groupMembers,loadEntitlements,quotaUsed,selectedSite,selectedSiteName,switchSite, api, stateRequest, state, ready, busy, error, notice, page, mobileNav, site, login, registration, registrationReset, userSearch, userFilter, userRole, modal, editingID, userForm, nodeForm, ipForm, speedRunning, qualityRunning, qualityTest, importMode, importForm, importFile, importFileReading, importIssues, clearPrivateFile, readPrivateFile, importReport, openImport, importSubscription, speedTest, ipSearch, ipType, ipState, ipPool, publicResources, privateTab, privateSources, privateSourcesReady, privateSourcesLoading, privateSourcesError, receivePrivateSources, loadPrivateSources, publicTab, selectPublicTab, subscriptionResourceIDs, isSubscribedResource, subscriptionIPs, manualIPs, privateTabs, sourceLabel, selectPrivateTab, viewSourceResources, sourceChanged, selectedIP, poolStats, ipStatus, ipBadge, sourceFilter, filteredIPs, nodePoolLabel, expiringUsers, passwordForm, sub, subUser, format, subProtocol, subSource, qr, qrError, subLoading, subError, probeResult, detecting, theme, sideCollapsed, publicFeaturesEnabled, nodeSearch, nodeProtocol, nodeStatus, filteredNodes, publicNodePage, publicSubPage, toggleTheme, originalExit, exitFingerprint, displayedNodeName, confirmation, owner, defaultRealitySNI, editingDefaultDirect, pendingHY, titles, pageTitle, pageDescription, pageDescriptions, allNavGroups, navGroups, nav, currentGroup, active, userStatus, users, subURL, usage, bytes, date, duration, exitName, refresh, clearSession, task, toast, signIn, signOut, registerAccount, go, editUser, saveUser, toggleUser, confirmUser, confirmed, editNode, probe, detectNode, editIP, saveIP, detectIP, deleteIP, selectedIPIDs, selectedNodeIDs, selectableNodes, selectAll, batchAction, saveNode, deleteNode, clearSubscription, loadSub, showSub, copy, downloadSub, download, backup, changePassword, actionName, poll };
 }

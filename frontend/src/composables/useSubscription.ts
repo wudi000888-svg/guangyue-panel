@@ -1,6 +1,6 @@
 import { computed, onMounted, onScopeDispose, ref, watch, type Ref, type ComputedRef } from "vue";
 import { qrDataURL } from "../lib/qrcode";
-import { useApi, downloadBlob, getRemoteSite } from "../lib/api";
+import { useApi, downloadBlob, getRemoteSite, errorMessage } from "../lib/api";
 import { download } from "../lib/download";
 import { t } from "../i18n";
 import type { State, Sub, User } from "../types";
@@ -100,7 +100,7 @@ async function loadSub(clear = false, preserveCurrent = false) {
     mergeLoadedUser(loaded.user);
   } catch (e) {
     if (!controller.signal.aborted && sequence === subscriptionSequence) {
-      subError.value = (e as Error).message;
+      subError.value = errorMessage(e);
       if (!preserveCurrent) sub.value = null;
     }
   } finally {

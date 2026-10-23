@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { t } from './i18n'
+import { t } from '../i18n'
 import { computed } from 'vue'
 import { Globe2 } from 'lucide-vue-next'
 const props = defineProps<{ code?: string; country?: string }>()

@@ -1,5 +1,5 @@
 import { onScopeDispose, reactive } from 'vue';
-import { ApiError, isCancelled } from '../lib/api';
+import { ApiError, isCancelled, errorMessage } from '../lib/api';
 import { serialPoll } from '../lib/requests';
 import { activeStages, catalogError, freshCatalog, usableReleases, type UpdateState, type VersionOperation } from '../lib/updater';
 
@@ -51,7 +51,7 @@ export function useSubsiteUpdates(options: Options) {
   }catch(error){
    if(!disposed&&!request.signal.aborted&&requests.get(id)===request){
     stale[id]=true;if(states[id])states[id]={...states[id]!,catalog_stale:true};
-    if(timeout.aborted||!isCancelled(error))errors[id]=timeout.aborted?'版本检查超时，请重试':running(id)?'连接暂时中断，正在确认更新状态':(error as Error).message;
+    if(timeout.aborted||!isCancelled(error))errors[id]=timeout.aborted?'版本检查超时，请重试':running(id)?'连接暂时中断，正在确认更新状态':errorMessage(error);
    }
   }finally{if(requests.get(id)===request){requests.delete(id);delete busy[id];}}
  }

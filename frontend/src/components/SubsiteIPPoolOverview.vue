@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue';
 import { ArrowRight, Database, LoaderCircle, RefreshCw, Trash2 } from 'lucide-vue-next';
-import { useApi, isCancelled } from '../lib/api';
+import { useApi, isCancelled, errorMessage } from '../lib/api';
 import { usePanelContext } from '../composables/panelContext';
 import type { ManagedSite } from '../lib/sites';
 import type { IPResource, Node } from '../types';
@@ -13,9 +13,9 @@ const sites = ref<ManagedSite[]>([]), busy = ref(false), notice = ref(''), error
 const pools = computed(() => (state.value?.ip_pool || []).filter(p => p.pool_group === 'subsite'));
 const connected = computed(() => sites.value.filter(s => s.connection?.scope === 'manage' && !!s.mount));
 function poolFor(site: ManagedSite, node: Node) { return pools.value.find(p => p.source === site.id && (p.notes || '').endsWith(' · ' + node.id)); }
-async function load() { busy.value = true; error.value = ''; try { sites.value = (await sitesAPI<{sites:ManagedSite[]}>()).sites; } catch (e) { if (!isCancelled(e)) error.value = (e as Error).message; } finally { busy.value = false; } }
-async function create(site: ManagedSite, node: Node) { if(creating.value||busy.value)return;creating.value = site.id + '/' + node.id; error.value = ''; try { await sitesAPI('/' + site.id + '/egress-pool', 'POST', {node_id: node.id}); await refresh(); await load();notice.value=t('中转出口已创建，可在本地节点中选择使用。'); } catch (e) { if (!isCancelled(e)) error.value = (e as Error).message; } finally { creating.value = ''; } }
-async function remove(pool: IPResource) { if(busy.value||creating.value)return;busy.value = true; error.value = ''; try { await api('/ips/' + pool.id, 'DELETE', {}); await refresh(); } catch (e) { if (!isCancelled(e)) error.value = (e as Error).message; } finally { busy.value = false; } }
+async function load() { busy.value = true; error.value = ''; try { sites.value = (await sitesAPI<{sites:ManagedSite[]}>()).sites; } catch (e) { if (!isCancelled(e)) error.value = errorMessage(e); } finally { busy.value = false; } }
+async function create(site: ManagedSite, node: Node) { if(creating.value||busy.value)return;creating.value = site.id + '/' + node.id; error.value = ''; try { await sitesAPI('/' + site.id + '/egress-pool', 'POST', {node_id: node.id}); await refresh(); await load();notice.value=t('中转出口已创建，可在本地节点中选择使用。'); } catch (e) { if (!isCancelled(e)) error.value = errorMessage(e); } finally { creating.value = ''; } }
+async function remove(pool: IPResource) { if(busy.value||creating.value)return;busy.value = true; error.value = ''; try { await api('/ips/' + pool.id, 'DELETE', {}); await refresh(); } catch (e) { if (!isCancelled(e)) error.value = errorMessage(e); } finally { busy.value = false; } }
 onMounted(load);
 </script>
 
