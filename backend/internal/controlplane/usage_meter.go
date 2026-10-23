@@ -78,14 +78,22 @@ func (s *Store) account(counters []Counter) error {
 	defer tx.Rollback()
 	// This small retained policy lets a deleted node's final core counters settle
 	// without bringing the node or any group membership back into configuration.
+	s.meterMu.Lock()
+	defer s.meterMu.Unlock()
+	written := map[string]string{}
 	for id, n := range policies {
 		// Preserve the access key and source metadata in the retained document;
 		// deleted mounted nodes still need their canonical key to resolve a
 		// package-specific multiplier while their final counters settle.
 		b, _ := json.Marshal(n)
+		sum := digest(string(b))
+		if s.meterPolicies[id] == sum {
+			continue
+		}
 		if _, err = tx.Exec("INSERT INTO node_meter_policies(id,doc) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET doc=excluded.doc", id, b); err != nil {
 			return err
 		}
+		written[id] = sum
 	}
 	users := map[int64]*User{}
 	for _, c := range counters {
@@ -97,6 +105,10 @@ func (s *Store) account(counters []Counter) error {
 		err = tx.QueryRow("SELECT generation,value FROM checkpoints WHERE key=?", c.Key).Scan(&gen, &last)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return err
+		}
+		if gen == c.Generation && c.Value == last {
+			// Unchanged counter: nothing to book and nothing to rewrite.
+			continue
 		}
 		delta := c.Value
 		if gen == c.Generation && c.Value >= last {
@@ -201,5 +213,14 @@ func (s *Store) account(counters []Counter) error {
 			return err
 		}
 	}
-	return tx.Commit()
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+	if s.meterPolicies == nil {
+		s.meterPolicies = map[string]string{}
+	}
+	for id, sum := range written {
+		s.meterPolicies[id] = sum
+	}
+	return nil
 }

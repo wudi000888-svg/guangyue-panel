@@ -25,6 +25,10 @@ type Store struct {
 	stateDir    string
 	runtimeMu   sync.RWMutex
 	runtime     RuntimeSettings
+	// meterPolicies holds the digest of each node policy last committed to
+	// node_meter_policies, so unchanged policies are not rewritten every tick.
+	meterMu       sync.Mutex
+	meterPolicies map[string]string
 }
 
 func openStore(dir string) (*Store, error) {
