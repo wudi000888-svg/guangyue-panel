@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, defineAsyncComponent, onMounted, onUnmounted, ref } from 'vue';
 import { ArrowUpRight, ChevronDown, CircleCheck, ChevronLeft, WalletCards, RefreshCw, ShieldAlert } from 'lucide-vue-next';
 import CryptoWalletSettings from '../components/CryptoWalletSettings.vue';
-import WalletPortfolioGallery from '../components/WalletPortfolioGallery.vue';
+const WalletPortfolioGallery = defineAsyncComponent(() => import('../components/WalletPortfolioGallery.vue'));
 import type {CryptoWallet} from '../lib/cryptoWallet';
 import type {WalletAction} from '../lib/walletGallery';
 import {applyWalletList,applyWalletListChange,type WalletListChange} from '../lib/cryptoWalletList';

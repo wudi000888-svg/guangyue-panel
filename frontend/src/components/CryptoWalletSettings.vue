@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, defineAsyncComponent, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { ArchiveRestore, Check, ChevronDown, Copy, Download, Ellipsis, Eye, LoaderCircle, Plus, RefreshCw, ShieldAlert, Trash2, WalletCards, X } from 'lucide-vue-next';
 import { useApi, isCancelled, ApiError, onSessionExpired, onAccessDenied, errorMessage } from '../lib/api';
 import { operationID, stamp } from '../lib/commerce';
@@ -9,8 +9,9 @@ import {SOLANA_CHAIN_ID} from '../lib/cryptoNetworks';
 import {walletStatus,type WalletReceivingSettings} from '../lib/walletStatus';
 import {usePaymentModule} from '../lib/paymentModule';
 import WalletAssetMark from './WalletAssetMark.vue';
-import CryptoPaymentSettings from './CryptoPaymentSettings.vue';
-import CryptoTreasury from './CryptoTreasury.vue';
+// Each section is its own chunk: only the one being viewed is downloaded.
+const CryptoPaymentSettings = defineAsyncComponent(() => import('./CryptoPaymentSettings.vue'));
+const CryptoTreasury = defineAsyncComponent(() => import('./CryptoTreasury.vue'));
 import { applyWalletList, applyWalletMutation, applyPermanentWalletDeletion, shouldResumeWalletList, type WalletListChange } from '../lib/cryptoWalletList';
 
 type Action = '' | 'hot' | 'mnemonic' | 'xpub' | 'restore' | 'backup' | 'confirm' | 'reveal' | 'status' | 'networks' | 'allocate' | 'recover' | 'delete';
