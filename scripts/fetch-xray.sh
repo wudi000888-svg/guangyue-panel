@@ -20,18 +20,20 @@ print('Bundled Xray session extension verified; no download needed.')
 PY
   exit 0
 fi
+# shellcheck source=versions.env
+. "$root/scripts/versions.env"
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 curl -fL --retry 2 --connect-timeout 15 --max-time 240 \
-  https://github.com/XTLS/Xray-core/releases/download/v26.3.27/Xray-linux-64.zip -o "$tmp/xray.zip"
-python3 - "$tmp/xray.zip" "$tmp/xray" <<'PY'
+  "https://github.com/XTLS/Xray-core/releases/download/$XRAY_VERSION/Xray-linux-64.zip" -o "$tmp/xray.zip"
+python3 - "$tmp/xray.zip" "$tmp/xray" "$XRAY_RELEASE_ZIP_SHA256" <<'PY'
 import hashlib,sys,zipfile
 from pathlib import Path
 archive=Path(sys.argv[1])
-if hashlib.sha256(archive.read_bytes()).hexdigest() != '23cd9af937744d97776ee35ecad4972cf4b2109d1e0fe6be9930467608f7c8ae':
+if hashlib.sha256(archive.read_bytes()).hexdigest() != sys.argv[3]:
     raise SystemExit('Xray checksum mismatch')
 with zipfile.ZipFile(archive) as z:
     Path(sys.argv[2]).write_bytes(z.read('xray'))
 PY
 install -m 0755 "$tmp/xray" "$output/xray-linux-amd64"
-printf 'Xray 26.3.27 archive SHA256 verified and installed\n'
+printf 'Xray %s archive SHA256 verified and installed\n' "${XRAY_VERSION#v}"

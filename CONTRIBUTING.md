@@ -8,6 +8,8 @@
 
 需要 Go 1.26.10、Node 24 LTS、npm、Python 3、Git、curl、unzip 和 OpenSSL 1.1.1+（推荐 3.x）。前端依赖由锁文件固定，使用 `npm ci`。Go 不在 PATH 时设置 `GY_GO=/path/to/go`。
 
+版本只在一处固定：Go 取 `backend/go.mod` 的 `toolchain` 指令，Node 取 `.nvmrc`，Mihomo/Xray/Hysteria 版本、提交与校验值以及随包 PostgreSQL/Redis 镜像取 `scripts/versions.env`。升级时只改这些文件，再按 `python3 scripts/release-check.py` 的提示同步无法读取它们的说明（本文件、`docs/VALIDATION.md`、`THIRD_PARTY_NOTICES.md`、`core-patches/README.md`、systemd 单元描述、`deploy/install.py`、Dockerfile 与 `scripts/build-docker.sh`）。Dependabot 的 Docker 更新同样需要同步 `scripts/versions.env`。
+
 ```bash
 python3 scripts/dev.py
 # 另一个终端：
@@ -47,7 +49,11 @@ npm run dev
 
 ```bash
 bash scripts/check.sh
+# 或只运行部分：catalog sqlite postgres vet frontend deploy release
+bash scripts/check.sh frontend release
 ```
+
+CI 将这些部分拆成并行任务（SQLite 测试三个分片），最后由名为 `check` 的任务汇总；分支保护要求的 `check` 与 `installation (…)` 检查在每次运行中都会给出结果。只改 `docs/`、根目录 Markdown 或 Issue/PR 模板的 PR 只运行发布树检查和秘密扫描，跳过测试、构建与安装；推送到 `main`、`codex/**` 和手动触发始终完整运行。自动发布分支 `codex/auto-release-*` 只校验其差异正是 `scripts/bump-version.py` 的结果，合并后主线再完整运行，发布只使用主线运行的产物（保留 60 天）。
 
 构建与原生包准备：
 

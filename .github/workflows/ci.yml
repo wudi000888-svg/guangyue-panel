@@ -1,4 +1,9 @@
 name: CI
+# Branch protection requires the checks `check`,
+# `installation (ubuntu-22.04, lite)` and `installation (ubuntu-24.04, pro)`.
+# Those jobs therefore run on every event and report success when their work
+# is intentionally skipped. Never add workflow-level `paths`/`paths-ignore`:
+# a workflow that does not start reports no required checks at all.
 on:
   push:
     branches: [main, 'codex/**']
@@ -11,19 +16,170 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 jobs:
-  check:
+  changes:
+    name: changes
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      mode: ${{ steps.plan.outputs.mode }}
+      backend: ${{ steps.plan.outputs.backend }}
+      frontend: ${{ steps.plan.outputs.frontend }}
+      deploy: ${{ steps.plan.outputs.deploy }}
+      package: ${{ steps.plan.outputs.package }}
+      security: ${{ steps.plan.outputs.security }}
+      postgres_image: ${{ steps.plan.outputs.postgres_image }}
+      redis_image: ${{ steps.plan.outputs.redis_image }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - id: filter
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        with:
+          predicate-quantifier: some-with-excludes
+          filters: |
+            backend:
+              - 'backend/**'
+              - 'frontend/src/data/clients.json'
+              - 'scripts/test-sqlite-backend.py'
+              - 'scripts/sync-client-catalog.py'
+            frontend:
+              - 'frontend/**'
+              - '.nvmrc'
+            deploy:
+              - 'deploy/**'
+              - 'scripts/**'
+              - 'core-patches/**'
+              - 'install.sh'
+            infra:
+              - '.github/workflows/**'
+              - 'scripts/check.sh'
+              - 'scripts/versions.env'
+              - 'backend/go.mod'
+            code:
+              - '**'
+              - '!docs/**'
+              - '!*.md'
+              - '!.github/ISSUE_TEMPLATE/**'
+              - '!.github/PULL_REQUEST_TEMPLATE.md'
+      - id: plan
+        name: Decide which checks this event needs
+        env:
+          EVENT: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          BACKEND: ${{ steps.filter.outputs.backend }}
+          FRONTEND: ${{ steps.filter.outputs.frontend }}
+          DEPLOY: ${{ steps.filter.outputs.deploy }}
+          INFRA: ${{ steps.filter.outputs.infra }}
+          CODE: ${{ steps.filter.outputs.code }}
+        run: |
+          # Pushes and dispatches always run everything (release artifacts come
+          # from main runs), except the auto-release bump branch, whose diff is
+          # verified to be the exact bump-version.py output instead.
+          if [[ "$EVENT" != pull_request && "$REF_NAME" == codex/auto-release-* ]]; then
+            mode=release-bump
+          elif [[ "$EVENT" != pull_request || "$INFRA" == true ]]; then
+            mode=full
+          elif [[ "$CODE" == true ]]; then
+            mode=partial
+          else
+            mode=docs
+          fi
+          pick() { case "$mode" in full) echo true ;; partial) echo "${1:-false}" ;; *) echo false ;; esac; }
+          set -a; . scripts/versions.env; set +a
+          {
+            echo "mode=$mode"
+            echo "backend=$(pick "$BACKEND")"
+            echo "frontend=$(pick "$FRONTEND")"
+            echo "deploy=$(pick "$DEPLOY")"
+            echo "package=$(pick true)"
+            echo "security=$([[ "$mode" == release-bump ]] && echo false || echo true)"
+            echo "postgres_image=$POSTGRES_IMAGE"
+            echo "redis_image=$REDIS_IMAGE"
+          } | tee -a "$GITHUB_OUTPUT"
+
+  release-bump:
+    name: release bump diff
+    needs: changes
+    if: needs.changes.outputs.mode == 'release-bump'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - name: Branch must be exactly bump-version.py applied to main
+        run: |
+          git fetch --no-tags origin main
+          head=$(git rev-parse HEAD)
+          base=$(git merge-base origin/main "$head")
+          allowed='^(VERSION|backend/internal/controlplane/config\.go|frontend/package\.json|frontend/package-lock\.json|README\.md|CHANGELOG\.md)$'
+          changed=$(git diff --name-only "$base" "$head")
+          printf 'Changed files:\n%s\n' "$changed"
+          test -n "$changed"
+          if unexpected=$(grep -Ev "$allowed" <<<"$changed"); then
+            printf '::error::Auto-release branch changes files outside the version bump:\n%s\n' "$unexpected"
+            exit 1
+          fi
+          # Regenerate the bump with main's own script and require identical content.
+          git worktree add --detach "$RUNNER_TEMP/base" "$base"
+          (cd "$RUNNER_TEMP/base" && python3 scripts/bump-version.py --version "$(git -C "$GITHUB_WORKSPACE" show "$head:VERSION")")
+          git -C "$RUNNER_TEMP/base" diff --exit-code "$head" -- || { echo '::error::Branch differs from the bump-version.py result'; exit 1; }
+      - run: python3 scripts/release-check.py
+
+  lint:
+    name: catalog and release tree
+    needs: changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - run: bash scripts/check.sh catalog release
+
+  backend-sqlite:
+    name: backend sqlite (shard ${{ matrix.shard }})
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      redis:
+        image: ${{ needs.changes.outputs.redis_image }}
+        ports: ['6379:6379']
+        options: --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      GY_TEST_REDIS_URL: redis://127.0.0.1:6379/0
+      GY_SQLITE_SHARD: ${{ matrix.shard }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - run: bash scripts/check.sh sqlite
+
+  backend-postgres:
+    name: backend postgres and vet
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     services:
       postgres:
-        image: postgres:17-alpine
+        image: ${{ needs.changes.outputs.postgres_image }}
         env:
           POSTGRES_PASSWORD: ci-fixture-only
           POSTGRES_DB: guangyue_test
         ports: ['5432:5432']
         options: --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 12
       redis:
-        image: redis:8-alpine
+        image: ${{ needs.changes.outputs.redis_image }}
         ports: ['6379:6379']
         options: --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 12
     env:
@@ -31,30 +187,138 @@ jobs:
       GY_TEST_REDIS_URL: redis://127.0.0.1:6379/0
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
-          fetch-depth: 0
-      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
-        with:
-          go-version: '1.26.10'
+          go-version-file: backend/go.mod
           cache-dependency-path: backend/go.sum
+      - run: bash scripts/check.sh postgres vet
+
+  frontend:
+    name: frontend
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: '24'
+          node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      - run: bash scripts/check.sh
+      - run: bash scripts/check.sh frontend
+
+  deploy-tests:
+    name: deploy tests
+    needs: changes
+    if: needs.changes.outputs.deploy == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - run: bash scripts/check.sh deploy
+
+  security:
+    name: security scans
+    needs: changes
+    if: needs.changes.outputs.security == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      GOVULNCHECK_VERSION: v1.1.4
+      GITLEAKS_VERSION: 8.24.3
+      GITLEAKS_SHA256: 9991e0b2903da4c8f6122b5c3186448b927a5da4deef1fe45271c3793f4ee29c # gitleaks:allow public release checksum
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - id: go
+        run: printf 'version=%s\n' "$(go env GOVERSION)" >> "$GITHUB_OUTPUT"
+      - id: tools
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ runner.temp }}/scan-tools
+          key: scan-tools-${{ runner.os }}-${{ steps.go.outputs.version }}-govulncheck-${{ env.GOVULNCHECK_VERSION }}-gitleaks-${{ env.GITLEAKS_VERSION }}
+      - name: Install govulncheck and the checksum-verified gitleaks release
+        if: steps.tools.outputs.cache-hit != 'true'
+        run: |
+          tools="$RUNNER_TEMP/scan-tools"
+          mkdir -p "$tools"
+          GOBIN="$tools" go install "golang.org/x/vuln/cmd/govulncheck@$GOVULNCHECK_VERSION"
+          archive="$RUNNER_TEMP/gitleaks.tar.gz"
+          curl -fsSL --retry 3 -o "$archive" "https://github.com/gitleaks/gitleaks/releases/download/v$GITLEAKS_VERSION/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "$GITLEAKS_SHA256  $archive" | sha256sum -c -
+          tar -xzf "$archive" -C "$tools" gitleaks
+      - run: echo "$RUNNER_TEMP/scan-tools" >> "$GITHUB_PATH"
       - name: Scan reachable Go vulnerabilities
         working-directory: backend
-        run: go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
-      - name: Scan source and all Git history
+        run: govulncheck ./...
+      - name: Scan source and Git history
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          go install github.com/zricethezav/gitleaks/v8@v8.24.3
+          gitleaks version
           scan_dir=$(mktemp -d)
           git archive HEAD | tar -x -C "$scan_dir"
           gitleaks dir "$scan_dir" --redact --no-banner
-          gitleaks git . --redact --no-banner --log-opts=--all
+          if [[ -n "$BASE_SHA" && -n "$HEAD_SHA" ]]; then
+            # Pull requests: only the commits this PR adds. Pushes scan all history.
+            for sha in "$BASE_SHA" "$HEAD_SHA"; do
+              git cat-file -e "$sha^{commit}" 2>/dev/null || git fetch --no-tags origin "$sha"
+            done
+            gitleaks git . --redact --no-banner --log-opts="$BASE_SHA..$HEAD_SHA"
+          else
+            gitleaks git . --redact --no-banner --log-opts=--all
+          fi
+
+  package:
+    name: build and package
+    needs: changes
+    if: needs.changes.outputs.package == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: backend/go.mod
+          # Separate key from the test jobs so core module downloads are cached too.
+          cache-dependency-path: |
+            backend/go.sum
+            scripts/versions.env
+            core-patches/**
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - id: go
+        run: printf 'version=%s\n' "$(go env GOVERSION)" >> "$GITHUB_OUTPUT"
+      - id: cores
+        name: Restore patched Xray/Hysteria builds for identical inputs
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: |
+            build/bin/xray-linux-amd64
+            build/bin/hysteria-node-linux-amd64
+            build/xray-source.tar.gz
+            .cache/xray-monitor-source
+            .cache/hysteria-node-*
+          key: cores-${{ runner.os }}-${{ steps.go.outputs.version }}-${{ hashFiles('scripts/versions.env', 'core-patches/**', 'scripts/build-hy2-core.sh', 'scripts/build-xray-core.sh', 'scripts/test-xray-sessions.py') }}
+      - name: Restore pinned Mihomo source
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: .cache/mihomo-source
+          key: mihomo-source-${{ hashFiles('scripts/versions.env', 'scripts/fetch-mihomo-source.sh') }}
       - run: bash scripts/build.sh
-      - run: bash scripts/build-hy2-core.sh --test && bash scripts/build-xray-core.sh --test
+      - name: Build and test patched cores (skipped when restored for identical inputs)
+        if: steps.cores.outputs.cache-hit != 'true'
+        run: bash scripts/build-hy2-core.sh --test && bash scripts/build-xray-core.sh --test
       - run: python3 scripts/third-party.py && python3 scripts/package.py
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -64,10 +328,56 @@ jobs:
             build/releases/SHA256SUMS
             build/releases/SBOM.spdx.json
             build/releases/install.sh
-          retention-days: 7
+          # Main runs are what release.yml publishes; keep them long enough to tag late.
+          retention-days: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && 60 || 7 }}
+
+  check:
+    # Required status check. It aggregates the jobs above and fails when any
+    # of them failed, was cancelled, or was skipped although this event needs it.
+    name: check
+    needs: [changes, release-bump, lint, backend-sqlite, backend-postgres, frontend, deploy-tests, security, package]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every needed job to succeed
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          needs = json.loads(os.environ['NEEDS'])
+          plan = needs['changes'].get('outputs') or {}
+          expected = {
+              'changes': True,
+              'lint': True,
+              'release-bump': plan.get('mode') == 'release-bump',
+              'backend-sqlite': plan.get('backend') == 'true',
+              'backend-postgres': plan.get('backend') == 'true',
+              'frontend': plan.get('frontend') == 'true',
+              'deploy-tests': plan.get('deploy') == 'true',
+              'security': plan.get('security') == 'true',
+              'package': plan.get('package') == 'true',
+          }
+          print('mode:', plan.get('mode', 'unknown'))
+          bad = []
+          for job, required in expected.items():
+              result = needs[job]['result']
+              ok = result == 'success' if required else result in ('success', 'skipped')
+              print(f'{job:18} {result:10} {"required" if required else "optional"}')
+              if not ok:
+                  bad.append(job)
+          if bad:
+              raise SystemExit('::error::Failed, cancelled or unexpectedly skipped: ' + ', '.join(bad))
+          PY
+
   installation:
+    # Required checks: keep this job (and its matrix names) running on every
+    # event. A job-level skip would leave the matrix names unreported, so the
+    # steps are skipped instead when no package was built for this change.
     name: installation (${{ matrix.os }}, ${{ matrix.edition }})
-    needs: check
+    needs: [changes, package]
+    if: ${{ !cancelled() && needs.changes.result == 'success' && (needs.package.result == 'success' || needs.package.result == 'skipped') }}
     strategy:
       fail-fast: false
       matrix:
@@ -91,12 +401,18 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     steps:
+      - name: No package for this change
+        if: needs.package.result != 'success'
+        run: echo "CI mode '${{ needs.changes.outputs.mode }}' builds no package; installation is not affected."
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        if: needs.package.result == 'success'
       - name: Download build artifact using GitHub CLI
+        if: needs.package.result == 'success'
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh run download "$GITHUB_RUN_ID" --name linux-amd64 --dir build/releases
       - name: Prepare disposable runner
+        if: needs.package.result == 'success'
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y nginx libnginx-mod-stream certbot python3 curl unzip openssl
@@ -108,6 +424,7 @@ jobs:
           GY_BIN_DIR="$PWD/bin" bash scripts/fetch-xray.sh
           GY_BIN_DIR="$PWD/bin" bash scripts/fetch-mihomo.sh
       - name: Real systemd installation, certificate rotation, edition migration and rollback
+        if: needs.package.result == 'success'
         env:
           GY_INTEGRATION_EDITION: ${{ matrix.edition }}
         run: |
@@ -121,9 +438,10 @@ jobs:
           sudo cp -R "$bundle" /root/guangyue-ci-bundle/release
           sudo chown -R root:root /root/guangyue-ci-bundle/release
           sudo --preserve-env=GITHUB_ACTIONS,GY_INTEGRATION_EDITION python3 deploy/tests/integration.py /root/guangyue-ci-bundle/release
+
   docker-build:
     name: docker image archive (linux/amd64)
-    needs: check
+    needs: package
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
@@ -141,10 +459,11 @@ jobs:
             build/docker-releases/*.tar.gz
             build/docker-releases/DOCKER_IMAGES.json
             build/docker-releases/SHA256SUMS
-          retention-days: 7
+          retention-days: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && 60 || 7 }}
+
   docker-installation:
     name: docker installation (${{ matrix.edition }})
-    needs: [check, docker-build]
+    needs: [package, docker-build]
     strategy:
       fail-fast: false
       matrix:
@@ -153,9 +472,9 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
-          go-version: '1.26.10'
+          go-version-file: backend/go.mod
           cache-dependency-path: backend/go.sum
       - name: Record the exact Go executable for isolated CI versions
         run: printf 'GY_GO=%s\n' "$(command -v go)" >> "$GITHUB_ENV"
@@ -178,9 +497,10 @@ jobs:
         env:
           GY_DOCKER_INTEGRATION_EDITION: ${{ matrix.edition }}
         run: sudo --preserve-env=GITHUB_ACTIONS,GY_DOCKER_INTEGRATION_EDITION,GY_GO python3 deploy/tests/docker_integration.py /root/guangyue-docker-ci/releases /root/guangyue-docker-ci/docker-releases
+
   native-oneclick:
     name: native one-click (${{ matrix.os }}, ${{ matrix.edition }})
-    needs: check
+    needs: package
     strategy:
       fail-fast: false
       matrix:
@@ -193,9 +513,9 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
-          go-version: '1.26.10'
+          go-version-file: backend/go.mod
           cache-dependency-path: backend/go.sum
       - name: Download this commit's exact native installation artifact
         env:
