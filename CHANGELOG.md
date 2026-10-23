@@ -1,5 +1,41 @@
 # 变更记录
 
+## 0.42.0 — 安全加固、退款修正与运行稳定性
+
+**安全（建议尽快升级）**
+- 会员代理流量不再能访问服务器本机、内网、链路本地（含云厂商元数据地址）和组播地址：Xray 在用户路由前按需解析域名并拦截这些目标，HY2 新增等效 ACL，并修正节点路由补丁使每个节点出口都执行该 ACL。旧版本中，付费会员可经隧道连接本机服务（包括核心管理接口与面板）。升级后首次同步会自动重启 Xray 与 HY2 一次。
+- 下载完整备份需重新输入管理员当前密码（备份含主密钥与热钱包种子的密封数据），与查看助记词一致。
+- 会员不再能看到支付 / 邮件回调地址；用户自行修改密码最少 8 个字节（管理员设置的密码不受影响）。
+- 登录限速表满时改为淘汰最久未活动的来源，不再拒绝所有人；IPv6 按 /64 聚合；登录请求先读取请求体再占用密码校验名额。
+
+**资金**
+- 修复 Stripe 按比例退款实际原路退回全额、随后对账失败并持续重试的问题：现在按退款记录金额退款，超过原支付金额的请求会转人工核对，可退金额为 0 时直接结清、不调用 Stripe。建议升级后在后台核对历史 Stripe 部分退款记录。
+- 按比例退款计算改用 128 位乘除，大流量套餐（例如 100 TB）不再溢出产生错误金额。
+- 订单超时与其支付单改为同一事务更新，避免支付单已过期而订单仍显示待支付。
+
+**稳定性与性能**
+- 订阅下载不再等待控制循环，核心同步或重启期间也能立即返回。
+- 每 5 秒的流量读取移出全局锁；读取期间核心重启的样本会被丢弃，不会重复计费。
+- HY2 连接认证改用经逐次复核的凭据表，HY2 重启后大量客户端同时重连不再超时重试。
+- 每月配额重置合并为一次同步：同时到期的用户不再逐个触发核心同步和 HY2 重启（40 个用户由 40 次降为 1 次）。
+- 流量计量不再每轮重写未变化的计数器与节点计量策略；付款处理在无待办时不再占用全局锁；备份快照不再占用全局锁；仪表盘复用控制循环的服务状态；过期会话改为每 5 分钟带索引清理。
+- 后台任务出现异常时记录日志并继续运行，不再导致面板进程退出；任务失败会在管理员状态中显示。修复畸形链上日志可导致进程反复崩溃的问题。
+
+**界面**
+- 修复离开“配对令牌”页面后其余页面全部空白、需刷新才能恢复的问题，并新增测试确保每个页面只有一个根元素。
+- 加密收款页脚本由 135 kB 降至 44 kB、样式由 76 kB 降至 19 kB；设置页由 73 kB 降至 14 kB，各分区按需加载；全局样式由 92 kB 降至 79 kB。
+- 切换页面时 15 秒内不重复下载完整状态，定时刷新只更新变化字段；邮件设置页仅在有待发送邮件且页面可见时轮询。
+- 统一错误提示：服务器错误按当前语言显示，网络中断显示明确提示；补齐 31 条英文文案并扩大文案检查范围。
+- 主界面拆分为登录、外壳、命令面板与移动端工具组件，对话框统一焦点管理。
+
+**运维**
+- 升级成功后自动清理 `/root/guangyue-backups` 中的旧快照，默认保留最新 5 个；当前版本、上一版本及未完成操作引用的快照始终保留。可用配置 `backup_retention` 或 `upgrade.py --keep-backups N` 调整，`backup_retention.py` 可手动预览 / 清理。
+- Docker 面板与网关容器新增健康检查；旧安装在下次更新时自动补齐，不影响重启策略。
+- 文档：架构说明新增组件总览图；运维指南新增“监控与告警”；过期版本文档移至 `docs/archive/`；六种语言 README 与中文版结构、安装命令和链接对齐。
+- 构建：Go / Node / 代理核心版本集中管理并由发布检查校验；CI 按变更范围并行执行，仅改文档的变更跳过测试与打包。
+
+English: Security release. Member proxy traffic can no longer reach the server's loopback, private, link-local (cloud metadata) or multicast addresses through Xray or HY2 (both cores restart once after upgrading); backup downloads require the owner password again. Stripe prorated refunds now return the recorded amount instead of the full payment, and refund maths no longer overflows on very large quotas. Subscriptions, HY2 authentication and monthly quota resets no longer stall behind the control loop; background workers survive panics and report failures. Lighter crypto and settings pages, unified error messages, automatic pruning of upgrade backups, Docker health checks and refreshed documentation.
+
 ## 0.41.2 — Go 安全更新与前端首屏提速
 
 - 升级 Go 工具链到 1.26.10，修复标准库 `crypto/x509` 漏洞 GO-2026-6809（未拒绝已泄露的中间证书），该路径经 443 入口 TLS 握手可达。CI、源码构建与发布包统一使用新版本，漏洞扫描恢复通过。
