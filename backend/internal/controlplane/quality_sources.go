@@ -18,7 +18,7 @@ import (
 	"golang.org/x/text/language/display"
 )
 
-const qualitySchemaVersion = 4
+const qualitySchemaVersion = 5
 
 type QualityRiskScore struct {
 	Name  string   `json:"name"`
@@ -44,8 +44,12 @@ type QualitySource struct {
 	Signals           map[string]*bool   `json:"signals,omitempty"`
 	RiskScores        []QualityRiskScore `json:"risk_scores,omitempty"`
 	Error             string             `json:"error,omitempty"`
-	At                int64              `json:"at"`
-	Cached            bool               `json:"cached"`
+	// MatchScope is "prefix" when a provider answered with another address from a
+	// narrow prefix that contains the queried IP; MatchedIP is that provider record.
+	MatchScope string `json:"match_scope,omitempty"`
+	MatchedIP  string `json:"matched_ip,omitempty"`
+	At         int64  `json:"at"`
+	Cached     bool   `json:"cached"`
 }
 type QualityGeo struct {
 	SchemaVersion int             `json:"schema_version"`
@@ -125,11 +129,35 @@ func addScaledProviderScore(v *QualitySource, name string, value any, maximum fl
 	}
 	v.RiskScores = append(v.RiskScores, s)
 }
+
+// netCoffeePrefixMatch accepts a Net.Coffee record for another address only when
+// its prefix is narrow (IPv4 /24 or longer, IPv6 /48 or longer) and contains both
+// the record address and the queried address. Net.Coffee answers most queries with
+// one representative address per /24, so exact matching made it unusable.
+func netCoffeePrefixMatch(cidr string, record, target net.IP) bool {
+	_, network, err := net.ParseCIDR(strings.TrimSpace(cidr))
+	if err != nil || record == nil || target == nil {
+		return false
+	}
+	if (record.To4() == nil) != (target.To4() == nil) || !network.Contains(record) || !network.Contains(target) {
+		return false
+	}
+	ones, bits := network.Mask.Size()
+	return (bits == 32 && ones >= 24) || (bits == 128 && ones >= 48)
+}
+
+// Per-address observations that must not be borrowed from another address in the prefix.
+var qualityAddressSignals = map[string]bool{"proxy": true, "vpn": true, "tor": true, "abuse": true, "crawler": true}
+
 func parseQualitySource(name, ip string, p qualityPage) QualitySource {
 	unknown, _, _, _ := classifyIP(object{}, "", "")
 	v := QualitySource{Name: name, Status: "unavailable", At: time.Now().Unix(), Network: unknown}
 	if p.err != nil {
 		v.Error = "请求失败或超时"
+		return v
+	}
+	if p.code == http.StatusTooManyRequests {
+		v.Error = "提供方限流，稍后自动重试"
 		return v
 	}
 	if p.code != 200 {
@@ -182,11 +210,18 @@ func parseQualitySource(name, ip string, p qualityPage) QualitySource {
 		ipField = "ipAddress"
 	}
 	parsed, target := net.ParseIP(str(m[ipField])), net.ParseIP(ip)
+	prefixMatch := false
 	if parsed == nil || target == nil || !parsed.Equal(target) {
-		v.Error = "返回地址与查询地址不符"
-		return v
+		if name != "Net.Coffee" || !netCoffeePrefixMatch(str(m["cidr"]), parsed, target) {
+			v.Error = "返回地址与查询地址不符"
+			return v
+		}
+		prefixMatch = true
 	}
-	v.IP = parsed.String()
+	v.IP = target.String()
+	if prefixMatch {
+		v.MatchScope, v.MatchedIP = "prefix", parsed.String()
+	}
 	normalized := object{}
 	switch name {
 	case "ipapi.is":
@@ -294,6 +329,9 @@ func parseQualitySource(name, ip string, p qualityPage) QualitySource {
 		}
 		normalized = object{"is_datacenter": m["is_datacenter"], "is_mobile": m["is_mobile"], "asn": object{"asn": m["asn"], "org": m["asOrganization"], "type": m["asn_kind"]}, "company": object{"name": m["company_name"], "type": m["company_type"]}}
 		for key, field := range map[string]string{"hosting": "is_datacenter", "proxy": "is_proxy", "vpn": "is_vpn", "tor": "is_tor", "abuse": "is_abuser", "crawler": "is_crawler", "residential": "isResidential", "broadcast": "isBroadcast", "mobile": "is_mobile"} {
+			if prefixMatch && qualityAddressSignals[key] {
+				continue
+			}
 			setQualitySignal(&v, key, m[field])
 		}
 		switch status := strings.ToLower(strings.TrimSpace(str(m["rpki_status"]))); status {
@@ -301,7 +339,11 @@ func parseQualitySource(name, ip string, p qualityPage) QualitySource {
 			v.RPKIStatus = status
 		}
 		addScaledProviderScore(&v, "Net.Coffee trust score", m["trust_score"], 100, "0–100 · Net.Coffee")
-		addScaledProviderScore(&v, "Net.Coffee abuse score", m["abuser_score"], 1, "0–1 · Net.Coffee")
+		abuseScale := "0–1 · Net.Coffee"
+		if prefixMatch {
+			abuseScale += " · " + v.NetworkCIDR
+		}
+		addScaledProviderScore(&v, "Net.Coffee abuse score", m["abuser_score"], 1, abuseScale)
 
 	default:
 		v.Error = "未知数据来源"

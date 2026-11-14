@@ -176,21 +176,52 @@ func TestQualityDetailsKeepCountryAndCityFromCompatibleEvidence(t *testing.T) {
 	}
 }
 
-func TestQualityNetCoffeeRejectsAnotherIPDespiteMatchingPrefix(t *testing.T) {
+func TestQualityNetCoffeePrefixRecordKeepsOnlyNetworkLevelData(t *testing.T) {
 	body := `{"ip":"9.9.9.120","cidr":"9.9.9.0/24","is_datacenter":true,"isResidential":false,"isBroadcast":null,"is_vpn":false,"is_proxy":false,"is_tor":false,"is_crawler":false,"is_abuser":false,"is_mobile":false,"company_type":"hosting","company_name":"6 COLLYER QUAY","abuser_score":"0.0565 (High)","asn":132203,"asOrganization":"Shenzhen Tencent Computer Systems Company Limited","country":"Singapore","countryCode":"sg","region":"","city":"Singapore","timezone":"Asia/Singapore","rpki_status":"invalid","trust_score":73}`
-	rejected := parseQualitySource("Net.Coffee", "9.9.9.9", qualityPage{code: 200, body: body})
-	if rejected.Status != "unavailable" || rejected.Error != "返回地址与查询地址不符" || rejected.IP != "" || rejected.NetworkCIDR != "" || rejected.Country != "" || rejected.RPKIStatus != "" || len(rejected.Signals) != 0 || len(rejected.RiskScores) != 0 || rejected.Network.Status != "unknown" {
-		t.Fatalf("another address borrowed from prefix: %+v", rejected)
+	prefix := parseQualitySource("Net.Coffee", "9.9.9.9", qualityPage{code: 200, body: body})
+	if prefix.Status != "ok" || prefix.IP != "9.9.9.9" || prefix.MatchScope != "prefix" || prefix.MatchedIP != "9.9.9.120" || prefix.CountryCode != "SG" || prefix.NetworkCIDR != "9.9.9.0/24" || prefix.ASN != "AS132203" || prefix.RPKIStatus != "invalid" || prefix.Network.Label != "数据中心 IP" {
+		t.Fatalf("prefix record not usable: %+v", prefix)
+	}
+	for key := range qualityAddressSignals {
+		if prefix.Signals[key] != nil {
+			t.Fatalf("per-address signal %q borrowed from another address: %+v", key, prefix.Signals)
+		}
+	}
+	if prefix.Signals["hosting"] == nil || !*prefix.Signals["hosting"] || prefix.Signals["residential"] == nil || *prefix.Signals["residential"] {
+		t.Fatalf("network-level signals lost: %+v", prefix.Signals)
+	}
+	if len(prefix.RiskScores) != 2 || prefix.RiskScores[1].Scale != "0–1 · Net.Coffee · 9.9.9.0/24" {
+		t.Fatalf("prefix abuse score not labelled: %+v", prefix.RiskScores)
+	}
+	for _, item := range []struct{ query, cidr string }{{"9.9.9.9", "9.9.0.0/16"}, {"9.9.8.1", "9.9.9.0/24"}, {"9.9.9.9", "garbage"}, {"9.9.9.9", "2001:db8::/48"}} {
+		b := strings.Replace(body, `"cidr":"9.9.9.0/24"`, `"cidr":"`+item.cidr+`"`, 1)
+		rejected := parseQualitySource("Net.Coffee", item.query, qualityPage{code: 200, body: b})
+		if rejected.Status != "unavailable" || rejected.Error != "返回地址与查询地址不符" || rejected.IP != "" || len(rejected.Signals) != 0 || len(rejected.RiskScores) != 0 {
+			t.Fatalf("broad or foreign prefix accepted for %s in %s: %+v", item.query, item.cidr, rejected)
+		}
+	}
+	if other := parseQualitySource("ipwho.is", "9.9.9.9", qualityPage{code: 200, body: `{"ip":"9.9.9.120","success":true,"country_code":"SG"}`}); other.Status != "unavailable" || other.Error != "返回地址与查询地址不符" {
+		t.Fatal("prefix tolerance leaked to other providers")
 	}
 	matched := parseQualitySource("Net.Coffee", "9.9.9.120", qualityPage{code: 200, body: body})
-	if matched.Status != "ok" || matched.CountryCode != "SG" || matched.NetworkCIDR != "9.9.9.0/24" || matched.ASN != "AS132203" || matched.RPKIStatus != "invalid" || matched.Network.Label != "数据中心 IP" {
+	if matched.Status != "ok" || matched.MatchScope != "" || matched.MatchedIP != "" || matched.CountryCode != "SG" || matched.NetworkCIDR != "9.9.9.0/24" || matched.ASN != "AS132203" || matched.RPKIStatus != "invalid" || matched.Network.Label != "数据中心 IP" {
 		t.Fatalf("exact address not parsed: %+v", matched)
+	}
+	if matched.Signals["vpn"] == nil || matched.Signals["abuse"] == nil {
+		t.Fatal("exact record lost per-address signals")
 	}
 	if matched.Signals["residential"] == nil || *matched.Signals["residential"] || matched.Signals["broadcast"] != nil || matched.Signals["mobile"] == nil || *matched.Signals["mobile"] {
 		t.Fatal("explicit null or false converted to inferred identity")
 	}
 	if len(matched.RiskScores) != 2 || matched.RiskScores[0].Name != "Net.Coffee trust score" || *matched.RiskScores[0].Value != 73 || matched.RiskScores[0].Scale != "0–100 · Net.Coffee" || *matched.RiskScores[1].Value != 0.0565 || matched.RiskScores[1].Label != "High" || matched.RiskScores[1].Scale != "0–1 · Net.Coffee" {
 		t.Fatalf("provider score altered: %+v", matched.RiskScores)
+	}
+}
+
+func TestQualityRateLimitedProviderIsLabelled(t *testing.T) {
+	q := parseQualitySource("ipapi.co", "9.9.9.9", qualityPage{code: 429, body: `{"error":true,"reason":"RateLimited"}`})
+	if q.Status != "unavailable" || q.Error != "提供方限流，稍后自动重试" {
+		t.Fatalf("rate limit not labelled: %+v", q)
 	}
 }
 func TestQualityNetCoffeeIdentityNullsAndSafeScoreBounds(t *testing.T) {
