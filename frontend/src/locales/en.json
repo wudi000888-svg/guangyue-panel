@@ -3961,5 +3961,8 @@
   "请选择费用档位": "Choose a fee option",
   "Gas 单价必须大于零": "Gas price must be greater than zero",
   "归集与 Gas 规则": "Collection and Gas rules",
-  "费用说明": "Fee details"
+  "费用说明": "Fee details",
+  "网段级匹配": "Prefix-level match",
+  "该来源按网段返回代表地址的数据；逐地址的代理、VPN、Tor、滥用与爬虫标记不计入结论": "This source answered with a representative address from the same prefix; per-address proxy, VPN, Tor, abuse and crawler flags are not counted",
+  "提供方限流，稍后自动重试": "Provider rate-limited; will retry automatically"
 }
