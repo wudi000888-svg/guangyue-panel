@@ -1,0 +1,100 @@
+/* Refined Night: visual polish layer loaded after the Pearl River theme.
+   Colour values live in pearl-river-theme.css (covered by contrast.test.ts);
+   this file only shapes surfaces, type, spacing and interaction states. */
+
+:root { --radius-card: 16px; --radius-control: 10px; --radius-dialog: 20px; --gy-radius: var(--radius-card); --ease: cubic-bezier(.2, .7, .2, 1); }
+html { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; }
+body { font-feature-settings: "tnum" 1, "cv11" 1; }
+
+/* Atmosphere: a faint moon glow behind the workspace. */
+.app-shell::before {
+  content: ""; position: fixed; inset: -20vh -10vw auto auto; width: 70vw; height: 70vh; z-index: -1; pointer-events: none;
+  background: radial-gradient(closest-side, rgba(228, 198, 138, 0.10), rgba(228, 198, 138, 0) 70%);
+}
+:root:not([data-theme="dark"]) .app-shell::before { background: radial-gradient(closest-side, rgba(40, 95, 169, 0.08), rgba(40, 95, 169, 0) 70%); }
+
+/* ---------- Shell ---------- */
+.app-shell .sidebar { background: linear-gradient(180deg, rgba(9, 14, 26, 0.97), rgba(7, 11, 21, 0.93)); box-shadow: 1px 0 0 var(--nav-border), 18px 0 40px rgba(0, 0, 0, 0.18); }
+.app-shell .brand-name { font-family: var(--font-display); letter-spacing: 0.04em; }
+.app-shell .nav-caption { font-size: 11px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; color: var(--nav-muted); opacity: 0.85; margin-top: 14px; }
+.app-shell .nav-group button, .app-shell .nav-group .nav-entry { border-radius: 10px; transition: background-color .15s var(--ease), color .15s var(--ease); }
+.app-shell .nav-group button.selected, .app-shell .nav-group .nav-entry.selected {
+  color: var(--nav-selected);
+  background: linear-gradient(90deg, rgba(228, 198, 138, 0.16), rgba(228, 198, 138, 0.04));
+  box-shadow: inset 2px 0 var(--gy-moon), inset 0 0 0 1px rgba(228, 198, 138, 0.10);
+}
+.app-shell .nav-group button.selected svg, .app-shell .nav-group .nav-entry.selected svg { color: var(--gy-moon); }
+/* The draggable row wraps a selected route button; highlight only the button. */
+.app-shell .nav-group .nav-entry.selected { background: none; box-shadow: none; }
+.app-shell .workspace { border-radius: 12px; background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.015)); }
+.app-shell .navigation-search { border-radius: 10px; }
+.app-shell .topbar { backdrop-filter: blur(16px) saturate(1.2); box-shadow: 0 1px 0 var(--nav-border); }
+.app-shell .header-balance, .app-shell .edition-badge { border-radius: 999px; }
+
+/* ---------- Page headings ---------- */
+.ui-page-heading h1, .courtyard-masthead h1, .content > header h1 { font-family: var(--font-display); font-weight: 600; letter-spacing: 0.02em; }
+.ui-eyebrow, .eyebrow, .courtyard-kicker { font-size: 11px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; color: var(--gy-moon); }
+
+/* ---------- Cards ---------- */
+.app-shell :is(.panel, .chart-card, .network-card, .settings-card, .node-card, .plan-card, .site-card, .dash-card, .import-report, .resource-membership-notice),
+.app-shell .metrics > div, .app-shell .dash-metrics > article {
+  border-radius: var(--radius-card);
+  border: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0) 120px), var(--surface);
+  box-shadow: var(--shadow-card);
+  backdrop-filter: blur(10px);
+}
+:root:not([data-theme="dark"]) .app-shell :is(.panel, .chart-card, .network-card, .settings-card, .node-card, .plan-card, .site-card, .dash-card, .import-report, .resource-membership-notice),
+:root:not([data-theme="dark"]) .app-shell .metrics > div, :root:not([data-theme="dark"]) .app-shell .dash-metrics > article {
+  background: linear-gradient(180deg, #fff, rgba(255, 255, 255, 0.86));
+}
+.app-shell :is(.node-card, .plan-card, .site-card) { transition: transform .18s var(--ease), border-color .18s var(--ease), box-shadow .18s var(--ease); }
+.app-shell :is(.node-card, .plan-card, .site-card):hover { transform: translateY(-1px); border-color: color-mix(in srgb, var(--accent) 35%, var(--border)); }
+
+/* Dashboard metrics: let the numbers lead. */
+.app-shell .dash-metrics > article > strong, .app-shell .metrics > div > strong { color: var(--text); font-variant-numeric: tabular-nums; }
+.app-shell .dash-metrics > article > strong em { font-size: 16px; font-style: normal; font-weight: 500; color: var(--muted); margin-left: 4px; }
+.app-shell .dash-metrics > article > div > span:first-child { font-size: 13px; color: var(--secondary); }
+.app-shell .dash-metrics > article > small { color: var(--muted); }
+.app-shell .dash-icon, .app-shell .metric-icon { border-radius: 10px; }
+.app-shell .dash-resource-stats strong, .app-shell .dash-chart-summary > strong { font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+.app-shell .dash-card header h3 { font-weight: 600; letter-spacing: 0.01em; }
+.app-shell .dash-action-grid button { border-radius: 12px; transition: border-color .15s var(--ease), background-color .15s var(--ease), transform .15s var(--ease); }
+.app-shell .dash-action-grid button:hover { transform: translateY(-1px); border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+
+/* ---------- Controls ---------- */
+button, .button { border-radius: var(--radius-control); transition: background-color .15s var(--ease), border-color .15s var(--ease), color .15s var(--ease), box-shadow .15s var(--ease); }
+button.primary, .primary { font-weight: 600; letter-spacing: 0.01em; }
+:root[data-theme="dark"] button.primary, :root[data-theme="dark"] .primary {
+  background: linear-gradient(180deg, #f0dbab, #dcbc7d); border-color: #e4c68a; color: #1b1407;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.35) inset, 0 8px 22px rgba(228, 198, 138, 0.18);
+}
+:root[data-theme="dark"] button.primary:hover, :root[data-theme="dark"] .primary:hover { background: linear-gradient(180deg, #f5e3ba, #e4c68a); color: #1b1407; }
+:root:not([data-theme="dark"]) button.primary, :root:not([data-theme="dark"]) .primary { box-shadow: 0 1px 0 rgba(255, 255, 255, 0.18) inset, 0 8px 20px rgba(40, 95, 169, 0.2); }
+input, select, textarea { border-radius: var(--radius-control); transition: border-color .15s var(--ease), box-shadow .15s var(--ease); }
+.badge, .tag, .count, .ui-status-success, .ui-status-warning, .ui-status-danger, .ui-status-info { border-radius: 999px; }
+
+/* ---------- Tables ---------- */
+.app-shell :is(.table-scroll, .table-wrap) { border-radius: 14px; overflow: auto; }
+.app-shell th { background: transparent; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: var(--muted); border-bottom: 1px solid var(--border); }
+.app-shell tbody tr { transition: background-color .12s var(--ease); }
+.app-shell td strong { font-weight: 600; }
+
+/* ---------- Dialogs & overlays ---------- */
+.modal, .compose-card, .navigation-palette, .version-popover, .message-list, .message-detail { border-radius: var(--radius-dialog); backdrop-filter: blur(18px) saturate(1.15); }
+.modal-shade, .message-overlay, .navigation-shade, .nav-shade, .mobile-tools-shade { backdrop-filter: blur(8px); }
+.toast { border-radius: 12px; }
+
+/* ---------- Login ---------- */
+.login-entry { backdrop-filter: blur(20px) saturate(1.1); }
+.login-form h1 { font-family: var(--font-display); letter-spacing: 0.03em; }
+.login-form input { height: 44px; }
+.login-form button.primary, .login-form .primary { height: 46px; }
+
+/* Thin, quiet scrollbars. */
+* { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) transparent; }
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell :is(.node-card, .plan-card, .site-card):hover, .app-shell .dash-action-grid button:hover { transform: none; }
+  * { transition-duration: 0s !important; }
+}
